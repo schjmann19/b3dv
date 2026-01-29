@@ -161,3 +161,9 @@ save default
 /loadworld default
 /loadworld asd
 /loadworld test2
+/save tes2
+/loadworld test2
+/save test2
+/loadworld default
+/loadworld tes2
+/loadworld test2

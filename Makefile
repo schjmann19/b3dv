@@ -41,8 +41,8 @@ WIN_RAYLIB_PATH = ./external/raylib
 WIN_CFLAGS = -Wall -Wextra -O2 -march=x86-64 -mtune=generic -I$(WIN_RAYLIB_PATH)/src
 WIN_LDFLAGS = -L$(WIN_RAYLIB_PATH)/src -l:libraylib.a -lopengl32 -lgdi32 -lwinmm -lpsapi -lm -static-libgcc
 
-SOURCES = src/main.c src/world_generation.c src/vec_math.c src/rendering.c src/utils.c
-HEADERS = src/world.h src/vec_math.h src/rendering.h src/utils.h
+SOURCES = src/main.c src/world_generation.c src/player.c src/vec_math.c src/rendering.c src/utils.c
+HEADERS = src/world.h src/player.h src/vec_math.h src/rendering.h src/utils.h
 
 # Default target
 all: b3dv

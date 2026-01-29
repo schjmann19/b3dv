@@ -1,5 +1,6 @@
 #include "raylib.h"
 #include "world.h"
+#include "player.h"
 #include "vec_math.h"
 #include "rendering.h"
 #include "utils.h"

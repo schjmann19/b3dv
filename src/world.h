@@ -46,21 +46,6 @@ typedef struct {
     char world_name[256];  // Current world name for proper chunk loading
 } World;
 
-// Player physics constants
-#define PLAYER_HEIGHT 1.9f
-#define PLAYER_RADIUS 0.35f
-#define PLAYER_SPEED 5.5f     // blocks per second
-#define GRAVITY 35.0f         // blocks per second squared
-#define JUMP_FORCE 9.0f      // blocks per second
-
-// Player structure
-typedef struct {
-    Vector3 position;    // Head position
-    Vector3 velocity;    // Current velocity
-    bool on_ground;      // Is player touching ground
-    bool jump_used;      // Has jump been used in this key press
-} Player;
-
 // Function declarations
 World* world_create(void);
 void world_free(World* world);
@@ -71,18 +56,11 @@ void world_generate_prism(World* world);
 void world_system_init(void);
 bool world_save(World* world, const char* world_name);
 bool world_load(World* world, const char* world_name);
-void world_update_chunks(World* world, Vector3 player_pos);  // Load/unload chunks based on player position
+void world_update_chunks(World* world, Vector3 player_pos);
 Chunk* world_get_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 void world_chunk_set_block(Chunk* chunk, int x, int y, int z, BlockType type);
 BlockType world_chunk_get_block(Chunk* chunk, int x, int y, int z);
-void world_generate_chunk(Chunk* chunk);  // Generate a chunk procedurally
-Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);  // Load or create chunk with proper world name
-
-// Physics functions
-Player* player_create(float x, float y, float z);
-void player_free(Player* player);
-bool world_check_collision_sphere(World* world, Vector3 pos, float radius);
-void player_update(Player* player, World* world, float dt);
-void player_move_input(Player* player, Vector3 forward, Vector3 right, float dt);
+void world_generate_chunk(Chunk* chunk);
+Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 
 #endif

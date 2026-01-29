@@ -1,3 +1,6 @@
+0.0.5b:
+    tidy up
+
 0.0.5:
     FEATURES:
     added infinte worlds (chunks system)
