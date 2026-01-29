@@ -5,19 +5,48 @@
 #include "utils.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 // graphics and player constants
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
-#define TARGET_FPS 165
+#define TARGET_FPS 260
 #define RENDER_DISTANCE 50.0f
 #define FOG_START 30.0f
 #define CULLING_FOV 110.0f
 #define ASPECT_RATIO ((float)WINDOW_WIDTH / (float)WINDOW_HEIGHT)
 
+// Load chat history from file
+void load_chat_history(char chat_history[50][256], int* history_count)
+{
+    FILE* file = fopen("./chathistory", "r");
+    if (!file) return;  // File doesn't exist yet, that's fine
+
+    *history_count = 0;
+    char line[256];
+
+    while (fgets(line, sizeof(line), file) != NULL && *history_count < 50) {
+        // Remove trailing newline
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
+
+        // Copy line to history
+        strncpy(chat_history[*history_count], line, 255);
+        chat_history[*history_count][255] = '\0';
+        (*history_count)++;
+    }
+
+    fclose(file);
+}
+
 int main(void)
 {
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.3");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.4");
+
+    // Disable default ESC key behavior (we handle it manually for pause menu)
+    SetExitKey(KEY_NULL);
 
     // load custom font at larger size for better quality (with fallback)
     Font custom_font = {0};
@@ -35,7 +64,7 @@ int main(void)
 
     for (int i = 0; font_paths[i] != NULL; i++) {
         if (FileExists(font_paths[i])) {
-            custom_font = LoadFontEx(font_paths[i], 32, NULL, 0);
+            custom_font = LoadFontEx(font_paths[i], 64, NULL, 0);
             break;
         }
     }
@@ -54,8 +83,14 @@ int main(void)
     };
 
     // create and generate world
+    world_system_init();  // Initialize world save system
     World* world = world_create();
-    world_generate_prism(world);
+
+    // Try to load default world, or generate new one
+    if (!world_load(world, "default")) {
+        world_generate_prism(world);
+        world_save(world, "default");  // Save the generated world
+    }
 
     // create player at spawn position (high above the blocks)
     Player* player = player_create(8.0f, 15.0f, 8.0f);
@@ -64,19 +99,256 @@ int main(void)
     bool mouse_captured = true;
     DisableCursor();
 
-    // HUD mode (0 = default, 1 = performance metrics 2 = player)
+    // HUD mode (0 = default, 1 = performance metrics 2 = player, 3 = system info)
     int hud_mode = 0;
+    int prev_hud_mode = -1;  // Track previous mode to detect changes
+    char cached_cpu[128] = {0};
+    char cached_gpu[128] = {0};
+    char cached_kernel[128] = {0};
 
     // Pause state
     bool paused = false;
+    bool should_quit = false;
+
+    // Chat system
+    bool chat_active = false;
+    char chat_input[256] = {0};
+    int chat_input_len = 0;
+    int chat_cursor_pos = 0;  // cursor position in input string
+
+    // Command history
+    #define HISTORY_SIZE 50
+    char chat_history[HISTORY_SIZE][256] = {0};
+    int history_count = 0;
+    int history_index = -1;  // -1 means not browsing history
+
+    // Load chat history from file
+    load_chat_history(chat_history, &history_count);
 
     SetTargetFPS(TARGET_FPS);
 
-    while (!WindowShouldClose())
+    while (!WindowShouldClose() && !should_quit)
     {
         float dt = GetFrameTime();
 
-        // HUD mode toggle with F2/F3/F4
+        // Chat system - handle first to consume all input when active
+        if (chat_active) {
+            // Handle text input
+            int key = GetCharPressed();
+            while (key > 0) {
+                if ((key >= 32 && key <= 125) && chat_input_len < 255) {
+                    // Insert character at cursor position
+                    for (int i = chat_input_len; i > chat_cursor_pos; i--) {
+                        chat_input[i] = chat_input[i - 1];
+                    }
+                    chat_input[chat_cursor_pos] = (char)key;
+                    chat_input_len++;
+                    chat_cursor_pos++;
+                    chat_input[chat_input_len] = '\0';
+                }
+                key = GetCharPressed();
+            }
+
+            // Handle backspace
+            if (IsKeyPressed(KEY_BACKSPACE) && chat_cursor_pos > 0) {
+                for (int i = chat_cursor_pos - 1; i < chat_input_len; i++) {
+                    chat_input[i] = chat_input[i + 1];
+                }
+                chat_input_len--;
+                chat_cursor_pos--;
+                chat_input[chat_input_len] = '\0';
+            }
+
+            // Handle left arrow
+            if (IsKeyPressed(KEY_LEFT) && chat_cursor_pos > 0) {
+                chat_cursor_pos--;
+            }
+
+            // Handle right arrow
+            if (IsKeyPressed(KEY_RIGHT) && chat_cursor_pos < chat_input_len) {
+                chat_cursor_pos++;
+            }
+
+            // Handle up arrow (previous command)
+            if (IsKeyPressed(KEY_UP)) {
+                if (history_index < history_count - 1) {
+                    history_index++;
+                    strncpy(chat_input, chat_history[history_count - 1 - history_index], sizeof(chat_input) - 1);
+                    chat_input[255] = '\0';
+                    chat_input_len = strlen(chat_input);
+                    chat_cursor_pos = chat_input_len;
+                }
+            }
+
+            // Handle down arrow (next command)
+            if (IsKeyPressed(KEY_DOWN)) {
+                if (history_index > 0) {
+                    history_index--;
+                    strncpy(chat_input, chat_history[history_count - 1 - history_index], sizeof(chat_input) - 1);
+                    chat_input[255] = '\0';
+                    chat_input_len = strlen(chat_input);
+                    chat_cursor_pos = chat_input_len;
+                } else if (history_index == 0) {
+                    history_index = -1;
+                    chat_input[0] = '\0';
+                    chat_input_len = 0;
+                    chat_cursor_pos = 0;
+                }
+            }
+
+            // Handle enter (submit command)
+            if (IsKeyPressed(KEY_ENTER)) {
+                // Save to history (only if not empty)
+                if (chat_input_len > 0) {
+                    if (history_count < HISTORY_SIZE) {
+                        strncpy(chat_history[history_count], chat_input, 255);
+                        chat_history[history_count][255] = '\0';
+                        history_count++;
+                    } else {
+                        // Shift history down and add new command
+                        for (int i = 0; i < HISTORY_SIZE - 1; i++) {
+                            strncpy(chat_history[i], chat_history[i + 1], 255);
+                            chat_history[i][255] = '\0';
+                        }
+                        strncpy(chat_history[HISTORY_SIZE - 1], chat_input, 255);
+                        chat_history[HISTORY_SIZE - 1][255] = '\0';
+                    }
+
+                    // Log to chathistory file
+                    FILE* log_file = fopen("./chathistory", "a");
+                    if (log_file) {
+                        fprintf(log_file, "%s\n", chat_input);
+                        fclose(log_file);
+                    }
+                }
+
+                chat_active = false;
+                history_index = -1;
+                chat_cursor_pos = 0;
+
+                // Process commands
+                if (chat_input[0] == '/') {
+                    // Parse command
+                    if (strncmp(chat_input, "/quit", 5) == 0) {
+                        should_quit = true;
+                    } else if (strncmp(chat_input, "/tp ", 4) == 0) {
+                        // Parse teleport coordinates
+                        float x, y, z;
+                        if (sscanf(chat_input, "/tp %f %f %f", &x, &y, &z) == 3) {
+                            player->position = (Vector3){ x, y, z };
+                            player->velocity = (Vector3){ 0, 0, 0 };
+                        }
+                    } else if (strncmp(chat_input, "/save ", 6) == 0) {
+                        // Save world: /save worldname
+                        const char* world_name = chat_input + 6;
+                        if (world_save(world, world_name)) {
+                            printf("World '%s' saved successfully.\n", world_name);
+                        } else {
+                            printf("Failed to save world '%s'.\n", world_name);
+                        }
+                    } else if (strncmp(chat_input, "/load ", 6) == 0) {
+                        // Load world: /load worldname
+                        const char* world_name = chat_input + 6;
+                        if (world_load(world, world_name)) {
+                            printf("World '%s' loaded successfully.\n", world_name);
+                        } else {
+                            printf("Failed to load world '%s'.\n", world_name);
+                        }
+                    } else if (strncmp(chat_input, "/createworld ", 13) == 0) {
+                        // Create new world: /createworld worldname
+                        const char* world_name = chat_input + 13;
+
+                        // Free current world and create new one
+                        world_free(world);
+                        world = world_create();
+                        world_generate_prism(world);
+
+                        // Save the newly created world
+                        if (world_save(world, world_name)) {
+                            printf("World '%s' created and saved successfully.\n", world_name);
+                            // Reset player position
+                            player->position = (Vector3){ WORLD_OFFSET_X + WORLD_WIDTH / 2.0f, 20, WORLD_OFFSET_Z + WORLD_DEPTH / 2.0f };
+                            player->velocity = (Vector3){ 0, 0, 0 };
+                        } else {
+                            printf("Failed to create world '%s'.\n", world_name);
+                        }
+                    } else if (strncmp(chat_input, "/loadworld ", 11) == 0) {
+                        // Load existing world: /loadworld worldname
+                        const char* world_name = chat_input + 11;
+
+                        // Free current world and load the saved one
+                        world_free(world);
+                        world = world_create();
+
+                        if (world_load(world, world_name)) {
+                            printf("World '%s' loaded successfully.\n", world_name);
+                            // Reset player position
+                            player->position = (Vector3){ WORLD_OFFSET_X + WORLD_WIDTH / 2.0f, 20, WORLD_OFFSET_Z + WORLD_DEPTH / 2.0f };
+                            player->velocity = (Vector3){ 0, 0, 0 };
+                        } else {
+                            printf("Failed to load world '%s'.\n", world_name);
+                            world_generate_prism(world);  // Fall back to default world
+                        }
+                    } else if (strncmp(chat_input, "/setblock ", 10) == 0) {
+                        // Set block: /setblock x y z <block>
+                        // All coordinates treated as world-space (centered at player spawn ~0,0,0)
+                        float fx, fy, fz;
+                        char block_name[32] = {0};
+
+                        if (sscanf(chat_input, "/setblock %f %f %f %31s", &fx, &fy, &fz, block_name) == 4) {
+                            // Convert world-space to block indices
+                            // World origin is at (WORLD_OFFSET_X, 0, WORLD_OFFSET_Z) in world coords
+                            // Block (0,0,0) is at world position (WORLD_OFFSET_X, 0, WORLD_OFFSET_Z)
+                            int ix = (int)floorf(fx - WORLD_OFFSET_X);
+                            int iy = (int)floorf(fy);
+                            int iz = (int)floorf(fz - WORLD_OFFSET_Z);
+
+                            BlockType block_type = BLOCK_AIR;
+                            const char* type_str = "air";
+
+                            if (strcmp(block_name, "stone") == 0) {
+                                block_type = BLOCK_STONE;
+                                type_str = "stone";
+                            } else if (strcmp(block_name, "air") == 0) {
+                                block_type = BLOCK_AIR;
+                                type_str = "air";
+                            } else {
+                                printf("Unknown block type: %s. Available: air, stone\n", block_name);
+                                ix = -1;  // Skip application
+                            }
+
+                            // Apply if indices valid
+                            if (ix >= 0 && ix < WORLD_WIDTH && iy >= 0 && iy < WORLD_HEIGHT && iz >= 0 && iz < WORLD_DEPTH) {
+                                world_set_block(world, ix, iy, iz, block_type);
+                                printf("Set block at world (%.1f, %.1f, %.1f) → index (%d, %d, %d) to %s.\n", fx, fy, fz, ix, iy, iz, type_str);
+                            } else if (ix != -1) {
+                                printf("Out of bounds: world (%.1f, %.1f, %.1f) → index (%d, %d, %d)\n", fx, fy, fz, ix, iy, iz);
+                                printf("Valid range: x,z in [%.1f, %.1f], y in [0, %d]\n", (float)WORLD_OFFSET_X, (float)WORLD_OFFSET_X + WORLD_WIDTH, WORLD_HEIGHT);
+                            }
+                        } else {
+                            printf("Usage: /setblock x y z <block>\n");
+                            printf("Coordinates are world-space (player spawn is ~0, 0, 0)\n");
+                            printf("Available blocks: air, stone\n");
+                        }
+                    }
+                }
+
+                // Recapture mouse if it was captured before chat
+                mouse_captured = true;
+                DisableCursor();
+            }
+
+            // Handle escape to cancel chat
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                chat_active = false;
+                history_index = -1;
+                chat_cursor_pos = 0;
+                mouse_captured = true;
+                DisableCursor();
+            }
+        } else {
+            // Only process game keys when chat is not active
+            // HUD mode toggle with F2/F3/F4/F5
         if (IsKeyPressed(KEY_F2)) {
             hud_mode = 0;  // default HUD
         }
@@ -86,10 +358,27 @@ int main(void)
         if (IsKeyPressed(KEY_F4)) {
             hud_mode = 2;  // player
         }
+        if (IsKeyPressed(KEY_F5)) {
+            hud_mode = 3;  // system info
+            // Fetch system info only when entering this mode
+            if (prev_hud_mode != 3) {
+                get_cpu_model(cached_cpu, sizeof(cached_cpu));
+                get_gpu_model(cached_gpu, sizeof(cached_gpu));
+                get_kernel_info(cached_kernel, sizeof(cached_kernel));
+            }
+        }
+        prev_hud_mode = hud_mode;
 
-        // toggle pause with P key
-        if (IsKeyPressed(KEY_P)) {
+        // toggle pause with P key or ESC
+        if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
             paused = !paused;
+            // Automatically uncapture mouse when pausing, recapture when resuming
+            if (paused) {
+                mouse_captured = false;
+                EnableCursor();
+            } else if (mouse_captured) {
+                DisableCursor();
+            }
         }
 
         // toggle mouse capture with F7
@@ -100,6 +389,11 @@ int main(void)
             } else {
                 EnableCursor();
             }
+        }
+
+        // toggle fullscreen with F11
+        if (IsKeyPressed(KEY_F11)) {
+            ToggleFullscreen();
         }
 
         // take screenshot with F12
@@ -115,13 +409,24 @@ int main(void)
             player->velocity = (Vector3){ 0, 0, 0 };
         }
 
+        // Chat system - open with T key
+        if (IsKeyPressed(KEY_T) && !paused) {
+            chat_active = true;
+            chat_input_len = 0;
+            chat_input[0] = '\0';
+            history_index = -1;
+            mouse_captured = false;
+            EnableCursor();
+        }
+        }  // End of else block for non-chat input
+
         // get camera forward and right vectors
         Vector3 forward = vec3_normalize(vec3_sub(camera.target, camera.position));
         Vector3 right = vec3_cross(forward, camera.up);
         right = vec3_normalize(right);
 
-        // handle player movement and update physics (only if not paused)
-        if (!paused) {
+        // handle player movement and update physics (only if not paused or in chat)
+        if (!paused && !chat_active) {
             player_move_input(player, forward, right, dt);
             player_update(player, world, dt);
         }
@@ -246,7 +551,7 @@ int main(void)
                                 }
 
                                 // draw only visible faces
-                                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color);
+                                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, x, y, z);
                                 blocks_rendered++;
                             }
                         }
@@ -263,17 +568,18 @@ int main(void)
             DrawTextEx(custom_font, "F3 for performance metrics, F2 for this", (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, "F7 to toggle mouse capture", (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, "Mouse to look around", (Vector2){10, 130}, 32, 1, BLACK);
+            DrawTextEx(custom_font, "ESC or P to pause", (Vector2){10, 170}, 32, 1, BLACK);
 
             char coord_text[64];
             snprintf(coord_text, sizeof(coord_text), "Pos: (%.1f, %.1f, %.1f)",
                      player->position.x, player->position.y, player->position.z);
-            DrawTextEx(custom_font, coord_text, (Vector2){10, 170}, 32, 1, BLACK);
+            DrawTextEx(custom_font, coord_text, (Vector2){10, 210}, 32, 1, BLACK);
 
             char fps_text[32];
             snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
-            DrawTextEx(custom_font, fps_text, (Vector2){10, 210}, 32, 1, BLACK);
+            DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.3 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.4 - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
         } else if (hud_mode == 1) {
             // performance metrics HUD
             DrawTextEx(custom_font, "=== PERFORMANCE METRICS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -300,7 +606,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.3 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.4 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -328,26 +634,120 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.3 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.4 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+        } else if (hud_mode == 3) {
+            // system info HUD (using cached values)
+            DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
+            DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
+            DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
+            DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
+            DrawTextEx(custom_font, "b3dv 0.0.4 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
-        // display pause message if paused
+        // display pause menu with buttons if paused
         if (paused) {
             // get screen dimensions dynamically
             int screen_width = GetScreenWidth();
             int screen_height = GetScreenHeight();
 
+            // draw semi-transparent overlay
+            DrawRectangle(0, 0, screen_width, screen_height, (Color){0, 0, 0, 150});
+
             // measure text to center it
             Vector2 paused_size = MeasureTextEx(custom_font, "PAUSED", 64, 2);
-            Vector2 resume_size = MeasureTextEx(custom_font, "Press P to resume", 32, 1);
 
-            // draw centered on screen
+            // draw title
             DrawTextEx(custom_font, "PAUSED",
-                       (Vector2){(screen_width - paused_size.x) / 2, (screen_height - paused_size.y) / 2 - 40},
+                       (Vector2){(screen_width - paused_size.x) / 2, screen_height / 2 - 120},
                        64, 2, RED);
-            DrawTextEx(custom_font, "Press P to resume",
-                       (Vector2){(screen_width - resume_size.x) / 2, (screen_height - resume_size.y) / 2 + 40},
-                       32, 1, RED);
+
+            // button dimensions
+            int button_width = 200;
+            int button_height = 60;
+            int button_spacing = 20;
+            int center_x = screen_width / 2;
+            int center_y = screen_height / 2 - 20;
+
+            // resume button
+            Rectangle resume_button = {
+                center_x - button_width / 2,
+                center_y,
+                button_width,
+                button_height
+            };
+
+            // quit button
+            Rectangle quit_button = {
+                center_x - button_width / 2,
+                center_y + button_height + button_spacing,
+                button_width,
+                button_height
+            };
+
+            // get mouse position
+            Vector2 mouse_pos = GetMousePosition();
+            bool resume_hover = CheckCollisionPointRec(mouse_pos, resume_button);
+            bool quit_hover = CheckCollisionPointRec(mouse_pos, quit_button);
+
+            // draw resume button
+            DrawRectangleRec(resume_button, resume_hover ? LIGHTGRAY : GRAY);
+            DrawRectangleLinesEx(resume_button, 2, WHITE);
+            Vector2 resume_text_size = MeasureTextEx(custom_font, "Resume", 32, 1);
+            DrawTextEx(custom_font, "Resume",
+                       (Vector2){center_x - resume_text_size.x / 2, center_y + 12},
+                       32, 1, BLACK);
+
+            // draw quit button
+            DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : GRAY);
+            DrawRectangleLinesEx(quit_button, 2, WHITE);
+            Vector2 quit_text_size = MeasureTextEx(custom_font, "Quit", 32, 1);
+            DrawTextEx(custom_font, "Quit",
+                       (Vector2){center_x - quit_text_size.x / 2, center_y + button_height + button_spacing + 12},
+                       32, 1, BLACK);
+
+            // handle button clicks
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                if (resume_hover) {
+                    paused = false;
+                    // Recapture mouse if it was captured before pause
+                    mouse_captured = true;
+                    DisableCursor();
+                } else if (quit_hover) {
+                    should_quit = true;
+                }
+            }
+        }
+
+        // display chat input if active
+        if (chat_active) {
+            int screen_width = GetScreenWidth();
+            int screen_height = GetScreenHeight();
+
+            // chat box at bottom
+            int chat_box_height = 50;
+            int chat_box_y = screen_height - chat_box_height - 10;
+
+            DrawRectangle(10, chat_box_y, screen_width - 20, chat_box_height, (Color){30, 30, 30, 200});
+            DrawRectangleLinesEx((Rectangle){10, chat_box_y, screen_width - 20, chat_box_height}, 2, WHITE);
+
+            // draw chat input text with prompt
+            char chat_display[512];
+            snprintf(chat_display, sizeof(chat_display), "> %s", chat_input);
+            DrawTextEx(custom_font, chat_display, (Vector2){20, chat_box_y + 8}, 28, 1, WHITE);
+
+            // draw blinking cursor at cursor position
+            if ((int)(GetTime() * 2) % 2 == 0) {
+                // measure text up to cursor position (accounting for "> " prefix)
+                char text_before_cursor[256];
+                strncpy(text_before_cursor, chat_input, chat_cursor_pos);
+                text_before_cursor[chat_cursor_pos] = '\0';
+                char display_before[512];
+                snprintf(display_before, sizeof(display_before), "> %s", text_before_cursor);
+
+                Vector2 cursor_pos = MeasureTextEx(custom_font, display_before, 28, 1);
+                DrawLineEx((Vector2){20 + cursor_pos.x, chat_box_y + 8},
+                          (Vector2){20 + cursor_pos.x, chat_box_y + 38}, 2, WHITE);
+            }
         }
 
         EndDrawing();

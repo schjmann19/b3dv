@@ -1,0 +1,62 @@
+./tp 0 20 0
+/tp 0 20 0
+/tp 0 11 0
+/tp 20 20 20
+/tp 20 20 20
+/tp 20 20 21
+/createworld test1
+/loadworld default
+/loadworld test1
+/tp 22 20 20
+/setblock 23 22 21 stone
+/setblock 20 17 17 air
+/tp 8 20 8
+/tp 20 20 20
+/setblock 20 25 20 stone
+/tp -29 40 -29
+/setblock -49 18 -49 air
+/setblock -49 17 -49 air
+/setblock -49 5 -49 air
+/setblock -49 4 -49 air
+/tp -29 40 -29
+/tp -29 40 -29
+/setblock 20 26 20 stone
+/setblock 20 26 21 stone
+/setblock 20 26 22 stone
+/save test1
+/loadworld default
+/tp -27 40 -22
+/loadworld test1
+/save test1
+/createworld test2
+/loadworld test2
+/setblock 0 20 0 stone
+/setblock 0 22 0 stone
+/setblock 0 19 0 stone
+/loadworld test2
+/loadworld test1
+/loadworld test2
+/setblock 0 19 0 stone
+/setblock 0 19 0 stone
+/setblock 0 19 0 stone
+/setblock 0 19 0 stone
+/setblock 0 19 0 stone
+/setblock 0 19 0 air
+/tp 0 20 0
+/tp 20 20 20
+/loadworld test1
+/setblock 23 22 21 air
+/setblock 23 22 21 stone
+/setblock 23 23 21 stone
+/tp 20 20 20
+/setblock 20 21 20 stone
+/setblock 20 21 21 stone
+/createworld test3
+/setblock 20 21 20 stone
+/setblock 20 21 20 stone
+/setblock 20 21 21 stone
+/setblock 20 21 19 stone
+/save test3
+/loadworld default
+/loadworld test1
+/loadworld test3

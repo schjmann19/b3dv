@@ -3,6 +3,8 @@
 #include "raylib.h"
 #include <stdlib.h>
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 // Create and allocate a new world
 World* world_create(void)
@@ -65,11 +67,24 @@ Color world_get_block_color(BlockType type)
 // Generate a simple prism world (hollow rectangular prism filled with stone)
 void world_generate_prism(World* world)
 {
-    // Create a filled rectangular prism of stone
-    for (int y = 0; y < WORLD_HEIGHT; y++) {
+    // Create two slabs of stone with air in between
+    int slab_height = 5;  // Height of each slab
+    int slab_spacing = 8; // Height of air gap between slabs
+
+    // First slab (bottom)
+    for (int y = 0; y < slab_height; y++) {
         for (int z = 0; z < WORLD_DEPTH; z++) {
             for (int x = 0; x < WORLD_WIDTH; x++) {
-                // Fill the entire prism with stone
+                world_set_block(world, x, y, z, BLOCK_STONE);
+            }
+        }
+    }
+
+    // Second slab (on top with gap)
+    int second_slab_start = slab_height + slab_spacing;
+    for (int y = second_slab_start; y < second_slab_start + slab_height; y++) {
+        for (int z = 0; z < WORLD_DEPTH; z++) {
+            for (int x = 0; x < WORLD_WIDTH; x++) {
                 world_set_block(world, x, y, z, BLOCK_STONE);
             }
         }
@@ -250,4 +265,106 @@ void player_update(Player* player, World* world, float dt)
             player->jump_used = false;  // Reset jump when on ground
         }
     }
+}
+
+// Initialize worlds folder if it doesn't exist
+void world_system_init(void)
+{
+    // Create ./worlds directory if it doesn't exist
+    #ifdef _WIN32
+        system("if not exist worlds mkdir worlds");
+    #else
+        system("mkdir -p ./worlds");
+    #endif
+}
+
+// Save world to file
+bool world_save(World* world, const char* world_name)
+{
+    if (!world || !world_name) return false;
+
+    // Create worlds folder if needed
+    world_system_init();
+
+    // Build file path
+    char filepath[256];
+    snprintf(filepath, sizeof(filepath), "./worlds/%s.world", world_name);
+
+    // Open file for writing
+    FILE* file = fopen(filepath, "wb");
+    if (!file) return false;
+
+    // Write world dimensions as header (for validation)
+    uint32_t width = WORLD_WIDTH;
+    uint32_t height = WORLD_HEIGHT;
+    uint32_t depth = WORLD_DEPTH;
+
+    if (fwrite(&width, sizeof(uint32_t), 1, file) != 1 ||
+        fwrite(&height, sizeof(uint32_t), 1, file) != 1 ||
+        fwrite(&depth, sizeof(uint32_t), 1, file) != 1) {
+        fclose(file);
+        return false;
+    }
+
+    // Write block data
+    for (int y = 0; y < WORLD_HEIGHT; y++) {
+        for (int z = 0; z < WORLD_DEPTH; z++) {
+            for (int x = 0; x < WORLD_WIDTH; x++) {
+                BlockType block_type = world->blocks[y][z][x].type;
+                if (fwrite(&block_type, sizeof(BlockType), 1, file) != 1) {
+                    fclose(file);
+                    return false;
+                }
+            }
+        }
+    }
+
+    fclose(file);
+    return true;
+}
+
+// Load world from file
+bool world_load(World* world, const char* world_name)
+{
+    if (!world || !world_name) return false;
+
+    // Build file path
+    char filepath[256];
+    snprintf(filepath, sizeof(filepath), "./worlds/%s.world", world_name);
+
+    // Open file for reading
+    FILE* file = fopen(filepath, "rb");
+    if (!file) return false;
+
+    // Read and validate dimensions
+    uint32_t width, height, depth;
+    if (fread(&width, sizeof(uint32_t), 1, file) != 1 ||
+        fread(&height, sizeof(uint32_t), 1, file) != 1 ||
+        fread(&depth, sizeof(uint32_t), 1, file) != 1) {
+        fclose(file);
+        return false;
+    }
+
+    // Verify dimensions match
+    if (width != WORLD_WIDTH || height != WORLD_HEIGHT || depth != WORLD_DEPTH) {
+        fclose(file);
+        return false;
+    }
+
+    // Read block data
+    for (int y = 0; y < WORLD_HEIGHT; y++) {
+        for (int z = 0; z < WORLD_DEPTH; z++) {
+            for (int x = 0; x < WORLD_WIDTH; x++) {
+                BlockType block_type;
+                if (fread(&block_type, sizeof(BlockType), 1, file) != 1) {
+                    fclose(file);
+                    return false;
+                }
+                world->blocks[y][z][x].type = block_type;
+            }
+        }
+    }
+
+    fclose(file);
+    return true;
 }

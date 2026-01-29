@@ -12,7 +12,7 @@ typedef enum {
 
 // World dimensions
 #define WORLD_WIDTH 100
-#define WORLD_HEIGHT 10
+#define WORLD_HEIGHT 50
 #define WORLD_DEPTH 100
 
 // World offsets (center the world at 0, y, 0)
@@ -51,6 +51,9 @@ void world_set_block(World* world, int x, int y, int z, BlockType type);
 BlockType world_get_block(World* world, int x, int y, int z);
 Color world_get_block_color(BlockType type);
 void world_generate_prism(World* world);
+void world_system_init(void);
+bool world_save(World* world, const char* world_name);
+bool world_load(World* world, const char* world_name);
 
 // Physics functions
 Player* player_create(float x, float y, float z);

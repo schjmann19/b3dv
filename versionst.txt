@@ -1,0 +1,30 @@
+0.0.4:
+    OPTIMIZATION:
+    (fixed) Face Culling & Occlusion
+
+    FEATURES:
+    added commands:
+        /tp <x y z> - teleports to coords
+        /setblock <x y z> <stone|air> - sets a block in coords
+        /loadworld <name> - join world
+        /createworld <name> - create new world
+        /save <name>- save changes to world
+    chat where you type the commands
+    added worlds system: each world is a .world file in ./worlds/
+
+    OTHERS:
+    moves binaries to ./bin
+    added --install, -i (or /i) to build scripts
+
+
+0.0.3:
+    OPTIMIZATION:
+    FOV-based Frustum Culling
+    Distance-based LOD
+    Face Culling & Occlusion
+    Spatial Hashing with Block Indices
+    Fog Effect for Distance Fading
+    Player Physics Sliding
+
+    FEATURES:
+    simple slab world you can walk on
