@@ -60,3 +60,104 @@
 /loadworld default
 /loadworld test1
 /loadworld test3
+/tp 20 20 20
+/setblock 20 20 20 stone
+/tp 20 20 20
+/tp 20 20 20
+/setblock 21 18 21 air
+/setblock 21 19 21 air
+/setblock 21 19 21 air
+/tp 21 21 21
+/setblock 21 21 21 stone
+/setblock 21 17 21 air
+/setblock 21 16 21 air
+/setblock 21 15 21 air
+/setblock 21 16 21 air
+/setblock 21 14 21 air
+/setblock 21 13 21 air
+/tp 10 50 10
+/save
+/tp 23123 100 12313
+/createworld test1
+/save
+/loadworld test1
+/tp 20 20 20
+/tp 12312 52 10000
+/save test1
+/save default
+/save default
+/save default
+/tp 0 100 0
+/createworld camtest
+/tp 100 10 100
+/tp 100 10 100
+/tp 100 10 100
+/tp 100 10 100
+/tp 100 10 100
+/tp 100 10 100
+/save default
+/createworld asd
+/loadworld asd
+/save asd
+/loadworld default
+/save default
+/loadworld asd
+/load asd
+/loadworld asd 
+/loadworld asd 
+/loadworld asd\
+/loadworld asd
+/loadworld default
+/createworld asd
+/loadworld asd
+/save asd
+/saveworld asd
+/loadworld default
+/createworld test
+/saveworld test
+/save test
+/loadworld asd
+/loadworld test
+/loadworld test
+/loadworld asd
+/createworld as
+/save as
+/save default
+/createworld test
+/save test
+/loadworld default
+/loadworld test
+/loadworld test_chunks
+/loadworld default
+/loadworld test
+/save test
+/loadworld default
+/loadworld test
+/createworld test2
+/loadworld test2
+/save test2
+/loadworld test
+/loadworld test2
+/loadworld default
+/save default
+/createwordl test1
+/loadworld test1
+/save test1
+/loadworld default
+save default
+/save default
+/createworld asd
+/save asd
+/loadworld default
+/loadworld asd
+/loadworld default
+/save default
+/loadworld asd
+/loadworld default
+/loadworld asd
+/createworld test2
+/loadworld test2
+/save test2
+/loadworld default
+/loadworld asd
+/loadworld test2

@@ -1,3 +1,12 @@
+0.0.5:
+    FEATURES:
+    added infinte worlds (chunks system)
+    added block placing/breaking
+    fixed camera up/down angles
+    fixed movement
+    made player 2 blocks tall and better hitbox
+    fixed worlds system
+
 0.0.4:
     OPTIMIZATION:
     (fixed) Face Culling & Occlusion
@@ -14,8 +23,6 @@
 
     OTHERS:
     moves binaries to ./bin
-    added --install, -i (or /i) to build scripts
-
 
 0.0.3:
     OPTIMIZATION:
@@ -28,3 +35,5 @@
 
     FEATURES:
     simple slab world you can walk on
+
+0.0.2:

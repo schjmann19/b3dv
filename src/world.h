@@ -10,30 +10,47 @@ typedef enum {
     BLOCK_STONE = 1
 } BlockType;
 
-// World dimensions
-#define WORLD_WIDTH 100
-#define WORLD_HEIGHT 50
-#define WORLD_DEPTH 100
-
-// World offsets (center the world at 0, y, 0)
-#define WORLD_OFFSET_X (-(WORLD_WIDTH / 2))
-#define WORLD_OFFSET_Z (-(WORLD_DEPTH / 2))
+// Chunk system for infinite worlds
+#define CHUNK_WIDTH 32
+#define CHUNK_HEIGHT 64
+#define CHUNK_DEPTH 32
+#define CHUNK_LOAD_DISTANCE 1  // Load chunks this many chunks away from player
 
 // Block structure
 typedef struct {
     BlockType type;
 } Block;
 
-// World structure
+// Chunk structure - a 32x64x32 section of the world
 typedef struct {
-    Block blocks[WORLD_HEIGHT][WORLD_DEPTH][WORLD_WIDTH];
+    Block blocks[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];
+    int32_t chunk_x;  // Chunk coordinates
+    int32_t chunk_y;
+    int32_t chunk_z;
+    bool loaded;      // Whether this chunk is currently in memory
+} Chunk;
+
+// Chunk cache - stores loaded chunks
+typedef struct {
+    Chunk* chunks;
+    int chunk_count;
+    int chunk_capacity;
+} ChunkCache;
+
+// World structure - infinite world with chunk-based loading
+typedef struct {
+    ChunkCache chunk_cache;
+    int32_t last_loaded_chunk_x;  // For tracking what needs to be loaded
+    int32_t last_loaded_chunk_y;
+    int32_t last_loaded_chunk_z;
+    char world_name[256];  // Current world name for proper chunk loading
 } World;
 
 // Player physics constants
-#define PLAYER_HEIGHT 2.0f
-#define PLAYER_RADIUS 0.4f
-#define PLAYER_SPEED 10.0f    // blocks per second
-#define GRAVITY 25.0f         // blocks per second squared
+#define PLAYER_HEIGHT 1.9f
+#define PLAYER_RADIUS 0.35f
+#define PLAYER_SPEED 5.5f     // blocks per second
+#define GRAVITY 35.0f         // blocks per second squared
 #define JUMP_FORCE 9.0f      // blocks per second
 
 // Player structure
@@ -54,6 +71,12 @@ void world_generate_prism(World* world);
 void world_system_init(void);
 bool world_save(World* world, const char* world_name);
 bool world_load(World* world, const char* world_name);
+void world_update_chunks(World* world, Vector3 player_pos);  // Load/unload chunks based on player position
+Chunk* world_get_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
+void world_chunk_set_block(Chunk* chunk, int x, int y, int z, BlockType type);
+BlockType world_chunk_get_block(Chunk* chunk, int x, int y, int z);
+void world_generate_chunk(Chunk* chunk);  // Generate a chunk procedurally
+Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);  // Load or create chunk with proper world name
 
 // Physics functions
 Player* player_create(float x, float y, float z);
