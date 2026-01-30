@@ -431,14 +431,13 @@ int main(void)
                                 ix = -1;  // Skip application
                             }
 
-                            // Apply if indices valid
-                            // Check if coordinates are within valid bounds and place block
-                            if (ix >= 0 && ix < 256 && iy >= 0 && iy < 256 && iz >= 0 && iz < 256) {
+                            // Apply if y is within valid bounds (x and z can be infinite)
+                            if (iy >= 0 && iy < 256) {
                                 world_set_block(world, ix, iy, iz, block_type);
                                 printf("Set block at world (%.1f, %.1f, %.1f) → index (%d, %d, %d) to %s.\n", fx, fy, fz, ix, iy, iz, type_str);
                             } else if (ix != -1) {
                                 printf("Out of bounds: world (%.1f, %.1f, %.1f) → index (%d, %d, %d)\n", fx, fy, fz, ix, iy, iz);
-                                printf("Valid range: x,z in [%.1f, %.1f], y in [0, %d]\n", -1000.0f, 1000.0f, 256);
+                                printf("Valid range: x,z unlimited, y in [0, %d]\n", 256);
                             }
                         } else {
                             printf("Usage: /setblock x y z <block>\n");
@@ -683,6 +682,8 @@ int main(void)
             int blocks_rendered = 0;
 
             // draw all chunks and their blocks with frustum culling and face culling
+            int chunks_checked = 0;
+            int chunks_visible = 0;
             for (int c = 0; c < world->chunk_cache.chunk_count; c++) {
                 Chunk* chunk = &world->chunk_cache.chunks[c];
 
@@ -692,9 +693,11 @@ int main(void)
                 // Skip chunks that haven't been generated yet
                 if (!chunk->generated) continue;
 
-                float chunk_center_x = chunk->chunk_x * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f;
-                float chunk_center_y = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f;
-                float chunk_center_z = chunk->chunk_z * CHUNK_DEPTH + CHUNK_DEPTH / 2.0f;
+                chunks_checked++;
+
+                float chunk_center_x = chunk->chunk_x * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f - camera_offset.x;
+                float chunk_center_y = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f - camera_offset.y;
+                float chunk_center_z = chunk->chunk_z * CHUNK_DEPTH + CHUNK_DEPTH / 2.0f - camera_offset.z;
 
                 float dx = chunk_center_x - camera.position.x;
                 float dy = chunk_center_y - camera.position.y;
@@ -706,6 +709,10 @@ int main(void)
                 if (chunk_dist_sq > max_dist * max_dist) {
                     continue;
                 }
+
+                chunks_visible++;
+                printf("[render] Rendering chunk (%d, %d, %d) at distance %.1f\n",
+                       chunk->chunk_x, chunk->chunk_y, chunk->chunk_z, sqrtf(chunk_dist_sq));
 
                 // Render blocks in this chunk
                 for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -780,9 +787,9 @@ int main(void)
             // Draw highlighting box around the block being looked at
             if (has_highlighted_block) {
                 Vector3 block_pos = (Vector3){
-                    highlighted_block_x + 0.5f,
-                    highlighted_block_y + 0.5f,
-                    highlighted_block_z + 0.5f
+                    highlighted_block_x + 0.5f - camera_offset.x,
+                    highlighted_block_y + 0.5f - camera_offset.y,
+                    highlighted_block_z + 0.5f - camera_offset.z
                 };
                 DrawCubeWires(block_pos, 1.02f, 1.02f, 1.02f, YELLOW);
             }

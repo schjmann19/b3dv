@@ -256,6 +256,9 @@ void world_update_chunks(World* world, Vector3 player_pos)
         return;
     }
 
+    printf("[chunk_update] Player at (%.1f, %.1f, %.1f) → chunk (%d, %d, %d)\n",
+           player_pos.x, player_pos.y, player_pos.z, player_chunk_x, player_chunk_y, player_chunk_z);
+
     world->last_loaded_chunk_x = player_chunk_x;
     world->last_loaded_chunk_y = player_chunk_y;
     world->last_loaded_chunk_z = player_chunk_z;
@@ -271,6 +274,7 @@ void world_update_chunks(World* world, Vector3 player_pos)
                     world_generate_chunk(chunk);
                     chunk->loaded = true;
                     chunk->generated = true;
+                    printf("[chunk_update] Generated chunk (%d, %d, %d)\n", cx, cy, cz);
                 }
             }
         }
