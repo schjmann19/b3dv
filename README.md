@@ -11,14 +11,15 @@ uses Raylib
 ## directory structure:
 
 ```
-./Screenshots/     - Screenshots
-./src/             - source code
-./Makefile         - build configuration
-./build.sh         - Unix-like build script
+./external/         - raylib (submodule)
+./Screenshots/      - Screenshots
+./src/              - source code
+./Makefile          - build configuration
+./build.sh          - Unix-like build script
 ./build-windows.bat - Windows batch build script
-./world            - Linux/macOS executable
-./world.exe        - Windows executable
-./LICENSE          - license text
+./world             - executable (linux)
+./world.exe         - Windows executable
+./LICENSE           - license text
 ```
 
 ## Building and Running
@@ -27,7 +28,7 @@ uses Raylib
 ```bash
 $ ./build.sh         # Build only
 $ ./build.sh --run   # Build and run (useful when updating)
-$ ./world            # Run existing executable
+$ ./b3dv            # Run existing executable
 ```
 
 ### Windows (native):

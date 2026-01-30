@@ -11,28 +11,28 @@ LOCAL_RAYLIB_DIR = external/raylib
 LOCAL_RAYLIB_LIB = $(LOCAL_RAYLIB_DIR)/src/libraylib.a
 
 # Check if using local raylib (set by build script)
-ifdef RAYLIB_CFLAGS
-    CFLAGS += $(RAYLIB_CFLAGS)
-    LDFLAGS = -lm
+ifneq ($(RAYLIB_CFLAGS),)
+CFLAGS += $(RAYLIB_CFLAGS)
+LDFLAGS = -lm
 endif
 
 # Platform detection
-UNAME_S := $(shell uname -s)
+UNAME_S != uname -s
 ifeq ($(UNAME_S),Linux)
-    PLATFORM_LIBS = -lGL -lpthread -ldl -lrt -lX11
-    PLATFORM = PLATFORM_DESKTOP
+PLATFORM_LIBS = -lGL -lpthread -ldl -lrt -lX11
+PLATFORM = PLATFORM_DESKTOP
 endif
 ifeq ($(UNAME_S),Darwin)
-    PLATFORM_LIBS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
-    PLATFORM = PLATFORM_DESKTOP
+PLATFORM_LIBS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
+PLATFORM = PLATFORM_DESKTOP
 endif
 ifeq ($(UNAME_S),FreeBSD)
-    PLATFORM_LIBS = -lGL -lpthread -lrt -lX11
-    PLATFORM = PLATFORM_DESKTOP
+PLATFORM_LIBS = -lGL -lpthread -lrt -lX11
+PLATFORM = PLATFORM_DESKTOP
 endif
 ifeq ($(UNAME_S),OpenBSD)
-    PLATFORM_LIBS = -lGL -lpthread -lrt -lX11
-    PLATFORM = PLATFORM_DESKTOP
+PLATFORM_LIBS = -lGL -lpthread -lrt -lX11
+PLATFORM = PLATFORM_DESKTOP
 endif
 
 # Windows cross-compilation
@@ -65,7 +65,7 @@ check-local-raylib:
 		echo "Building local raylib..."; \
 		mkdir -p external; \
 		if [ ! -d $(LOCAL_RAYLIB_DIR) ]; then \
-			if command -v git >/dev/null 2>&1; then \
+			if command -v git >/dev/null 2>&1 || which git >/dev/null 2>&1; then \
 				git clone --depth 1 --branch 5.0 https://github.com/raysan5/raylib.git $(LOCAL_RAYLIB_DIR); \
 			else \
 				echo "Error: git required to download raylib"; \
@@ -80,7 +80,7 @@ check-local-raylib-windows:
 	@echo "Building local raylib for Windows..."; \
 	mkdir -p external; \
 	if [ ! -d $(LOCAL_RAYLIB_DIR) ]; then \
-		if command -v git >/dev/null 2>&1; then \
+		if command -v git >/dev/null 2>&1 || which git >/dev/null 2>&1; then \
 			git clone --depth 1 --branch 5.0 https://github.com/raysan5/raylib.git $(LOCAL_RAYLIB_DIR); \
 		else \
 			echo "Error: git required to download raylib"; \
