@@ -1,8 +1,8 @@
-#include "utils.h"
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -15,6 +15,8 @@
     #endif
     #define PATH_SEPARATOR "/"
 #endif
+
+#include "utils.h"
 
 // Get current process memory usage in MB
 int get_process_memory_mb(void)
@@ -196,3 +198,79 @@ void get_kernel_info(char* buffer, size_t size)
     snprintf(buffer, size, "Kernel: Unknown");
 #endif
 }
+
+// Get the Nth-from-last line from chathistory file (1 = last line, 2 = second-to-last, etc.)
+// Returns false if there are fewer than N lines in the file
+bool get_chat_history_line(int lines_back, char* out_line, size_t max_len)
+{
+    out_line[0] = '\0';
+
+    if (lines_back < 1) return false;
+
+    FILE* file = fopen("./chathistory", "r");
+    if (!file) return false;
+
+    // Read all lines into a dynamic array
+    char** lines = NULL;
+    int line_count = 0;
+    int capacity = 0;
+    char line[256];
+
+    while (fgets(line, sizeof(line), file) != NULL) {
+        // Remove trailing newline
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
+
+        // Skip empty lines
+        if (line[0] == '\0') continue;
+
+        // Resize array if needed
+        if (line_count >= capacity) {
+            capacity = (capacity == 0) ? 10 : capacity * 2;
+            char** new_lines = (char**)realloc(lines, capacity * sizeof(char*));
+            if (!new_lines) {
+                // Error - free and return
+                for (int i = 0; i < line_count; i++) free(lines[i]);
+                free(lines);
+                fclose(file);
+                return false;
+            }
+            lines = new_lines;
+        }
+
+        // Add line
+        lines[line_count] = (char*)malloc(strlen(line) + 1);
+        if (!lines[line_count]) {
+            for (int i = 0; i < line_count; i++) free(lines[i]);
+            free(lines);
+            fclose(file);
+            return false;
+        }
+        strcpy(lines[line_count], line);
+        line_count++;
+    }
+
+    fclose(file);
+
+    // Get the Nth-from-last line
+    if (lines_back > line_count) {
+        // Not enough lines
+        for (int i = 0; i < line_count; i++) free(lines[i]);
+        free(lines);
+        return false;
+    }
+
+    int index = line_count - lines_back;
+    strncpy(out_line, lines[index], max_len - 1);
+    out_line[max_len - 1] = '\0';
+
+    // Free memory
+    for (int i = 0; i < line_count; i++) free(lines[i]);
+    free(lines);
+
+    return true;
+}
+
+

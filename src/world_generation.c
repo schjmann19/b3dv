@@ -1,10 +1,11 @@
-#include "world.h"
-#include "vec_math.h"
-#include "raylib.h"
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "world.h"
+#include "vec_math.h"
+#include "raylib.h"
 
 // Simple fast terrain height - no expensive noise, just sinusoidal waves
 static float terrain_height(float x, float z)

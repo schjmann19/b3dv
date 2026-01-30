@@ -1,12 +1,14 @@
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
 #include "raylib.h"
 #include "world.h"
 #include "player.h"
 #include "vec_math.h"
 #include "rendering.h"
 #include "utils.h"
-#include <math.h>
-#include <stdio.h>
-#include <string.h>
 
 // graphics and player constants
 #define WINDOW_WIDTH 800
@@ -17,86 +19,10 @@
 #define CULLING_FOV 110.0f
 #define ASPECT_RATIO ((float)WINDOW_WIDTH / (float)WINDOW_HEIGHT)
 
-// Load chat history from file
-void load_chat_history(char chat_history[50][256], int* history_count)
-{
-    FILE* file = fopen("./chathistory", "r");
-    if (!file) return;  // File doesn't exist yet, that's fine
-
-    *history_count = 0;
-    char line[256];
-
-    while (fgets(line, sizeof(line), file) != NULL && *history_count < 50) {
-        // Remove trailing newline
-        size_t len = strlen(line);
-        if (len > 0 && line[len - 1] == '\n') {
-            line[len - 1] = '\0';
-        }
-
-        // Copy line to history
-        strncpy(chat_history[*history_count], line, 255);
-        chat_history[*history_count][255] = '\0';
-        (*history_count)++;
-    }
-
-    fclose(file);
-}
-
-// Raycast from camera to find the block being looked at
-// Returns true if a block was hit, false otherwise
-// out_block_x/y/z: the coordinates of the block hit
-// out_adjacent_x/y/z: the coordinates where a new block would be placed (adjacent to hit block)
-bool raycast_block(World* world, Camera3D camera, float max_distance,
-                   int* out_block_x, int* out_block_y, int* out_block_z,
-                   int* out_adjacent_x, int* out_adjacent_y, int* out_adjacent_z)
-{
-    Vector3 ray_origin = camera.position;
-    Vector3 ray_dir = vec3_normalize(vec3_sub(camera.target, camera.position));
-
-    float step = 0.05f;  // Smaller step size for accuracy
-    float distance = 0.0f;
-
-    Vector3 prev_pos = ray_origin;
-    Vector3 prev_block_pos = (Vector3){floorf(ray_origin.x), floorf(ray_origin.y), floorf(ray_origin.z)};
-
-    while (distance < max_distance) {
-        Vector3 current_pos = vec3_add(ray_origin, vec3_scale(ray_dir, distance));
-
-        // Use proper floor for negative coordinates
-        int block_x = (int)floorf(current_pos.x);
-        int block_y = (int)floorf(current_pos.y);
-        int block_z = (int)floorf(current_pos.z);
-
-        // Check if we're in a block
-        BlockType block = world_get_block(world, block_x, block_y, block_z);
-        if (block != BLOCK_AIR) {
-            // We hit a block - the hit block is the current one
-            *out_block_x = block_x;
-            *out_block_y = block_y;
-            *out_block_z = block_z;
-
-            // Adjacent block is where we came from (previous block)
-            int prev_block_x = (int)floorf(prev_pos.x);
-            int prev_block_y = (int)floorf(prev_pos.y);
-            int prev_block_z = (int)floorf(prev_pos.z);
-
-            *out_adjacent_x = prev_block_x;
-            *out_adjacent_y = prev_block_y;
-            *out_adjacent_z = prev_block_z;
-
-            return true;
-        }
-
-        prev_pos = current_pos;
-        distance += step;
-    }
-
-    return false;  // No block hit
-}
 
 int main(void)
 {
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.5");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.6b");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -168,12 +94,7 @@ int main(void)
     char chat_input[256] = {0};
     int chat_input_len = 0;
     int chat_cursor_pos = 0;  // cursor position in input string
-
-    // Command history
-    #define HISTORY_SIZE 50
-    char chat_history[HISTORY_SIZE][256] = {0};
-    int history_count = 0;
-    int history_index = -1;  // -1 means not browsing history
+    int history_index = 0;    // 0 means no history entry selected, 1+ means Nth-from-last
 
     // Block highlighting for raycast
     int highlighted_block_x = 0;
@@ -195,9 +116,6 @@ int main(void)
     Vector3 initial_forward = vec3_normalize(vec3_sub(camera.target, camera.position));
     camera_yaw = atan2f(initial_forward.x, initial_forward.z);
     camera_pitch = asinf(initial_forward.y);
-
-    // Load chat history from file
-    load_chat_history(chat_history, &history_count);
 
     SetTargetFPS(TARGET_FPS);
 
@@ -243,52 +161,45 @@ int main(void)
                 chat_cursor_pos++;
             }
 
-            // Handle up arrow (previous command)
+            // Handle up arrow (go back one command in history)
             if (IsKeyPressed(KEY_UP)) {
-                if (history_index < history_count - 1) {
-                    history_index++;
-                    strncpy(chat_input, chat_history[history_count - 1 - history_index], sizeof(chat_input) - 1);
+                history_index++;
+                char history_line[256] = {0};
+                if (get_chat_history_line(history_index, history_line, sizeof(history_line))) {
+                    strncpy(chat_input, history_line, sizeof(chat_input) - 1);
                     chat_input[255] = '\0';
                     chat_input_len = strlen(chat_input);
                     chat_cursor_pos = chat_input_len;
+                } else {
+                    // No more history, revert to previous index
+                    history_index--;
                 }
             }
 
-            // Handle down arrow (next command)
+            // Handle down arrow (go forward one command in history, or clear)
             if (IsKeyPressed(KEY_DOWN)) {
-                if (history_index > 0) {
-                    history_index--;
-                    strncpy(chat_input, chat_history[history_count - 1 - history_index], sizeof(chat_input) - 1);
-                    chat_input[255] = '\0';
-                    chat_input_len = strlen(chat_input);
-                    chat_cursor_pos = chat_input_len;
-                } else if (history_index == 0) {
-                    history_index = -1;
+                history_index--;
+                if (history_index <= 0) {
+                    // Clear input if we go past the beginning
+                    history_index = 0;
                     chat_input[0] = '\0';
                     chat_input_len = 0;
                     chat_cursor_pos = 0;
+                } else {
+                    char history_line[256] = {0};
+                    if (get_chat_history_line(history_index, history_line, sizeof(history_line))) {
+                        strncpy(chat_input, history_line, sizeof(chat_input) - 1);
+                        chat_input[255] = '\0';
+                        chat_input_len = strlen(chat_input);
+                        chat_cursor_pos = chat_input_len;
+                    }
                 }
             }
 
             // Handle enter (submit command)
             if (IsKeyPressed(KEY_ENTER)) {
-                // Save to history (only if not empty)
+                // Save to history file (only if not empty)
                 if (chat_input_len > 0) {
-                    if (history_count < HISTORY_SIZE) {
-                        strncpy(chat_history[history_count], chat_input, 255);
-                        chat_history[history_count][255] = '\0';
-                        history_count++;
-                    } else {
-                        // Shift history down and add new command
-                        for (int i = 0; i < HISTORY_SIZE - 1; i++) {
-                            strncpy(chat_history[i], chat_history[i + 1], 255);
-                            chat_history[i][255] = '\0';
-                        }
-                        strncpy(chat_history[HISTORY_SIZE - 1], chat_input, 255);
-                        chat_history[HISTORY_SIZE - 1][255] = '\0';
-                    }
-
-                    // Log to chathistory file
                     FILE* log_file = fopen("./chathistory", "a");
                     if (log_file) {
                         fprintf(log_file, "%s\n", chat_input);
@@ -297,8 +208,8 @@ int main(void)
                 }
 
                 chat_active = false;
-                history_index = -1;
                 chat_cursor_pos = 0;
+                history_index = 0;
 
                 // Process commands
                 if (chat_input[0] == '/') {
@@ -455,8 +366,8 @@ int main(void)
             // Handle escape to cancel chat
             if (IsKeyPressed(KEY_ESCAPE)) {
                 chat_active = false;
-                history_index = -1;
                 chat_cursor_pos = 0;
+                history_index = 0;
                 mouse_captured = true;
                 DisableCursor();
             }
@@ -528,7 +439,7 @@ int main(void)
             chat_active = true;
             chat_input_len = 0;
             chat_input[0] = '\0';
-            history_index = -1;
+            history_index = 0;
             mouse_captured = false;
             EnableCursor();
         }
@@ -834,7 +745,7 @@ int main(void)
             snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
             DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.5 - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.6b - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
         } else if (hud_mode == 1) {
             // performance metrics HUD
             DrawTextEx(custom_font, "=== PERFORMANCE METRICS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -861,7 +772,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.5 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.6b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -889,14 +800,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.5 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.6b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.5 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.6b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused

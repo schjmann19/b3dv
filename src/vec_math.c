@@ -1,5 +1,6 @@
-#include "vec_math.h"
 #include <math.h>
+
+#include "vec_math.h"
 
 Vector3 vec3_normalize(Vector3 v)
 {

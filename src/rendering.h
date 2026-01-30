@@ -15,4 +15,9 @@ bool is_block_visible(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
 float get_block_light_level(World* world, int x, int y, int z);
 Color apply_face_lighting(Color base_color, int face_index, float light_level, World* world, int neighbor_x, int neighbor_y, int neighbor_z);
 
+// Raycasting
+bool raycast_block(World* world, Camera3D camera, float max_distance,
+                   int* out_block_x, int* out_block_y, int* out_block_z,
+                   int* out_adjacent_x, int* out_adjacent_y, int* out_adjacent_z);
+
 #endif

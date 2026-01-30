@@ -1,6 +1,7 @@
+#include <math.h>
+
 #include "rendering.h"
 #include "world.h"
-#include <math.h>
 #include "vec_math.h"
 
 // Calculate light level for a block - simplified for performance
@@ -257,5 +258,56 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
             }
         }
     }
+}
+
+// Raycast from camera to find the block being looked at
+// Returns true if a block was hit, false otherwise
+// out_block_x/y/z: the coordinates of the block hit
+// out_adjacent_x/y/z: the coordinates where a new block would be placed (adjacent to hit block)
+bool raycast_block(World* world, Camera3D camera, float max_distance,
+                   int* out_block_x, int* out_block_y, int* out_block_z,
+                   int* out_adjacent_x, int* out_adjacent_y, int* out_adjacent_z)
+{
+    Vector3 ray_origin = camera.position;
+    Vector3 ray_dir = vec3_normalize(vec3_sub(camera.target, camera.position));
+
+    float step = 0.05f;  // Smaller step size for accuracy
+    float distance = 0.0f;
+
+    Vector3 prev_pos = ray_origin;
+
+    while (distance < max_distance) {
+        Vector3 current_pos = vec3_add(ray_origin, vec3_scale(ray_dir, distance));
+
+        // Use proper floor for negative coordinates
+        int block_x = (int)floorf(current_pos.x);
+        int block_y = (int)floorf(current_pos.y);
+        int block_z = (int)floorf(current_pos.z);
+
+        // Check if we're in a block
+        BlockType block = world_get_block(world, block_x, block_y, block_z);
+        if (block != BLOCK_AIR) {
+            // We hit a block - the hit block is the current one
+            *out_block_x = block_x;
+            *out_block_y = block_y;
+            *out_block_z = block_z;
+
+            // Adjacent block is where we came from (previous block)
+            int prev_block_x = (int)floorf(prev_pos.x);
+            int prev_block_y = (int)floorf(prev_pos.y);
+            int prev_block_z = (int)floorf(prev_pos.z);
+
+            *out_adjacent_x = prev_block_x;
+            *out_adjacent_y = prev_block_y;
+            *out_adjacent_z = prev_block_z;
+
+            return true;
+        }
+
+        prev_pos = current_pos;
+        distance += step;
+    }
+
+    return false;  // No block hit
 }
 
