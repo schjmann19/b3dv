@@ -654,13 +654,13 @@ int main(void)
         BeginDrawing();
         ClearBackground(SKYBLUE);
 
-        // Camera-relative rendering: shift camera near origin for float precision
-        // Use a very large grid (131072 = 2^17) to minimize boundary crossings
+        // Camera-relative rendering: shift camera to block-aligned grid for float precision
+        // Align to the nearest block boundary to avoid jittering with negative coordinates
         Vector3 original_camera_pos = camera.position;
         Vector3 camera_offset = (Vector3){
-            floorf(camera.position.x / 131072.0f) * 131072.0f,
+            floorf(camera.position.x),
             0,
-            floorf(camera.position.z / 131072.0f) * 131072.0f
+            floorf(camera.position.z)
         };
 
         // Shift camera and target for rendering (only for graphics)
@@ -696,7 +696,7 @@ int main(void)
                 chunks_checked++;
 
                 float chunk_center_x = chunk->chunk_x * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f - camera_offset.x;
-                float chunk_center_y = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f - camera_offset.y;
+                float chunk_center_y = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f;
                 float chunk_center_z = chunk->chunk_z * CHUNK_DEPTH + CHUNK_DEPTH / 2.0f - camera_offset.z;
 
                 float dx = chunk_center_x - camera.position.x;
