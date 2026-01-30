@@ -655,6 +655,26 @@ int main(void)
         BeginDrawing();
         ClearBackground(SKYBLUE);
 
+        // Camera-relative rendering: shift camera near origin for float precision
+        // Use a very large grid (131072 = 2^17) to minimize boundary crossings
+        Vector3 original_camera_pos = camera.position;
+        Vector3 camera_offset = (Vector3){
+            floorf(camera.position.x / 131072.0f) * 131072.0f,
+            0,
+            floorf(camera.position.z / 131072.0f) * 131072.0f
+        };
+
+        // Shift camera and target for rendering (only for graphics)
+        camera.position.x -= camera_offset.x;
+        camera.position.y -= camera_offset.y;
+        camera.position.z -= camera_offset.z;
+        camera.target.x -= camera_offset.x;
+        camera.target.y -= camera_offset.y;
+        camera.target.z -= camera_offset.z;
+
+        // Use shifted camera position for visibility checks
+        Vector3 shifted_cam_pos = camera.position;
+
         BeginMode3D(camera);
             // Use the actual camera orientation for rendering/frustum culling
             Vector3 cam_forward = camera_forward;
@@ -669,7 +689,9 @@ int main(void)
                 // Skip unloaded chunks
                 if (!chunk->loaded) continue;
 
-                // Skip chunks that are too far away (chunk-level culling)
+                // Skip chunks that haven't been generated yet
+                if (!chunk->generated) continue;
+
                 float chunk_center_x = chunk->chunk_x * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f;
                 float chunk_center_y = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f;
                 float chunk_center_z = chunk->chunk_z * CHUNK_DEPTH + CHUNK_DEPTH / 2.0f;
@@ -696,59 +718,59 @@ int main(void)
                                 int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
                                 int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
 
+                                Vector3 world_pos = (Vector3){
+                                    world_x + 0.5f - camera_offset.x,
+                                    world_y + 0.5f - camera_offset.y,
+                                    world_z + 0.5f - camera_offset.z
+                                };
+                                // distance-based LOD: use squared distance to avoid sqrt
+                                Vector3 to_block = vec3_sub(world_pos, shifted_cam_pos);
+                                float dist_sq = to_block.x*to_block.x + to_block.y*to_block.y + to_block.z*to_block.z;
+                                float render_dist_sq = RENDER_DISTANCE * RENDER_DISTANCE;
+
+                                // hard render distance limit
+                                if (dist_sq > render_dist_sq) {
+                                    continue;
+                                }
+
+                                // Check occlusion after distance (also relatively cheap)
                                 if (is_block_occluded(world, world_x, world_y, world_z)) {
                                     continue;
                                 }
 
-                                Vector3 world_pos = (Vector3){
-                                    world_x + 0.5f,
-                                    world_y + 0.5f,
-                                    world_z + 0.5f
-                                };
-
-                                // skip blocks with no visible faces toward camera
-                                if (!has_visible_face(world, world_x, world_y, world_z, world_pos, camera.position)) {
-                                    continue;
-                                }
-
-                                // distance-based LOD: skip blocks at distance
-                                Vector3 to_block = vec3_sub(world_pos, camera.position);
-                                float dist = sqrtf(to_block.x*to_block.x + to_block.y*to_block.y + to_block.z*to_block.z);
-
-                                // hard render distance limit
-                                if (dist > RENDER_DISTANCE) {
-                                    continue;
-                                }
-
-                                if (is_block_visible(world_pos, camera.position, cam_forward, cam_right,
+                                // Only do expensive visibility checks after distance/occlusion pass
+                                if (!is_block_visible(world_pos, shifted_cam_pos, cam_forward, cam_right,
                                                    camera.up, RENDER_DISTANCE, CULLING_FOV, ASPECT_RATIO)) {
-                                    Color color = world_get_block_color(block);
-
-                                    // apply fog effect: fade color towards sky blue based on distance
-                                    float fog_factor = 0.0f;
-                                    if (dist > FOG_START) {
-                                        fog_factor = (dist - FOG_START) / (RENDER_DISTANCE - FOG_START);
-                                        fog_factor = fog_factor > 1.0f ? 1.0f : fog_factor;  // Clamp to 0-1
-
-                                        // blend color towards sky blue
-                                        color.r = (unsigned char)(color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
-                                        color.g = (unsigned char)(color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);
-                                        color.b = (unsigned char)(color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
-                                    }
-
-                                    // apply fog to wireframe too
-                                    Color wire_color = DARKGRAY;
-                                    if (fog_factor > 0.0f) {
-                                        wire_color.r = (unsigned char)(wire_color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
-                                        wire_color.g = (unsigned char)(wire_color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);
-                                        wire_color.b = (unsigned char)(wire_color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
-                                        wire_color.a = (unsigned char)(255 * (1.0f - fog_factor));  // Fade out alpha too
-                                    }
-
-                                    // draw only visible faces
-                                    draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z);
-                                    blocks_rendered++;
+                                    continue;
                                 }
+
+                                float dist = sqrtf(dist_sq);  // Only calc sqrt if we're actually rendering
+                                Color color = world_get_block_color(block);
+
+                                // apply fog effect: fade color towards sky blue based on distance
+                                float fog_factor = 0.0f;
+                                if (dist > FOG_START) {
+                                    fog_factor = (dist - FOG_START) / (RENDER_DISTANCE - FOG_START);
+                                    fog_factor = fog_factor > 1.0f ? 1.0f : fog_factor;  // Clamp to 0-1
+
+                                    // blend color towards sky blue
+                                    color.r = (unsigned char)(color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
+                                    color.g = (unsigned char)(color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);
+                                    color.b = (unsigned char)(color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
+                                }
+
+                                // apply fog to wireframe too
+                                Color wire_color = DARKGRAY;
+                                if (fog_factor > 0.0f) {
+                                    wire_color.r = (unsigned char)(wire_color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
+                                    wire_color.g = (unsigned char)(wire_color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);
+                                    wire_color.b = (unsigned char)(wire_color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
+                                    wire_color.a = (unsigned char)(255 * (1.0f - fog_factor));  // Fade out alpha too
+                                }
+
+                                // draw only visible faces
+                                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z);
+                                blocks_rendered++;
                             }
                         }
                     }
@@ -764,9 +786,14 @@ int main(void)
                 };
                 DrawCubeWires(block_pos, 1.02f, 1.02f, 1.02f, YELLOW);
             }
-
             DrawGrid(30, 1.0f);
         EndMode3D();
+
+        // Restore original camera position
+        camera.position = original_camera_pos;
+        camera.target.x += camera_offset.x;
+        camera.target.y += camera_offset.y;
+        camera.target.z += camera_offset.z;
 
         // Draw crosshair at center of screen
         int center_x = GetScreenWidth() / 2;

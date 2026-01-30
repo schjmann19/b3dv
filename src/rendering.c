@@ -3,6 +3,63 @@
 #include <math.h>
 #include "vec_math.h"
 
+// Calculate light level for a block - simplified for performance
+float get_block_light_level(World* world, int x, int y, int z)
+{
+    // Quick check: count only 4 blocks directly above (fast)
+    int blocks_above = 0;
+    for (int check_y = y + 1; check_y <= y + 4 && check_y < 256; check_y++) {
+        BlockType above = world_get_block(world, x, check_y, z);
+        if (above == BLOCK_AIR) {
+            blocks_above++;
+        } else {
+            break;
+        }
+    }
+
+    // If we have direct sky access from above (all 4 blocks clear)
+    if (blocks_above >= 4) {
+        return 1.0f;  // Fully lit
+    }
+
+    // Otherwise dim lighting
+    return 0.6f;
+}
+
+// Apply lighting to a face based on direction and light level
+// face_index: 0=+X, 1=-X, 2=+Y(top), 3=-Y(bottom), 4=+Z, 5=-Z
+Color apply_face_lighting(Color base_color, int face_index, float light_level, World* world, int neighbor_x, int neighbor_y, int neighbor_z)
+{
+    float brightness = 1.0f;
+
+    if (face_index == 2) {
+        // Top face - brightest
+        brightness = 1.0f;
+    } else if (face_index == 3) {
+        // Bottom face - darkest
+        brightness = 0.5f;
+    } else {
+        // Side faces - medium brightness
+        brightness = 0.75f;
+    }
+
+    // Apply brightness
+    float final_brightness = brightness;
+
+    // Clamp between 0.25 and 1.0 to ensure minimum visibility
+    if (final_brightness < 0.25f) final_brightness = 0.25f;
+    if (final_brightness > 1.0f) final_brightness = 1.0f;
+
+    // Apply brightness to color
+    Color lit_color;
+    lit_color.r = (unsigned char)(base_color.r * final_brightness);
+    lit_color.g = (unsigned char)(base_color.g * final_brightness);
+    lit_color.b = (unsigned char)(base_color.b * final_brightness);
+    lit_color.a = base_color.a;
+
+    return lit_color;
+}
+
 // check if a block has any face visible (exposed to air)
 bool has_visible_face(World* world, int x, int y, int z, Vector3 block_pos, Vector3 cam_pos)
 {
@@ -41,18 +98,19 @@ bool is_block_visible(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
 {
     Vector3 to_block = vec3_sub(block_pos, cam_pos);
     float dist_sq = to_block.x*to_block.x + to_block.y*to_block.y + to_block.z*to_block.z;
-    float dist = sqrtf(dist_sq);
+    float render_dist_sq = render_distance * render_distance;
 
-    if (dist > render_distance) {
+    if (dist_sq > render_dist_sq) {
         return false;
     }
 
     // always render blocks within 15 units of player (exempt from FOV culling)
-    if (dist < 15.0f) return true;
+    if (dist_sq < 225.0f) return true;  // 15^2 = 225
 
+    // normalize direction to block (need actual distance for normalized direction)
+    float dist = sqrtf(dist_sq);
     if (dist < 0.1f) return true;
 
-    // normalize direction to block
     float inv_dist = 1.0f / dist;
     to_block.x *= inv_dist;
     to_block.y *= inv_dist;
@@ -90,12 +148,16 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
 
+    // Get lighting for this block
+    float light_level = get_block_light_level(world, block_x, block_y, block_z);
+
     // face normals and vertices (in pairs: v1, v2, v3, v4)
     // also include neighbor coordinates for occlusion checking
     struct {
         Vector3 normal;
         Vector3 v[4];
         int neighbor_x, neighbor_y, neighbor_z;
+        int face_index;  // for lighting calculation
     } faces[6] = {
         // right (+X)
         {
@@ -106,7 +168,8 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x + h, pos.y + h, pos.z + h},
                 {pos.x + h, pos.y - h, pos.z + h}
             },
-            block_x + 1, block_y, block_z
+            block_x + 1, block_y, block_z,
+            0
         },
         // left (-X)
         {
@@ -117,7 +180,8 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x - h, pos.y + h, pos.z - h},
                 {pos.x - h, pos.y - h, pos.z - h}
             },
-            block_x - 1, block_y, block_z
+            block_x - 1, block_y, block_z,
+            1
         },
         // top (+Y)
         {
@@ -128,7 +192,8 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x + h, pos.y + h, pos.z - h},
                 {pos.x - h, pos.y + h, pos.z - h}
             },
-            block_x, block_y + 1, block_z
+            block_x, block_y + 1, block_z,
+            2
         },
         // bottom (-Y)
         {
@@ -139,7 +204,8 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x - h, pos.y - h, pos.z - h},
                 {pos.x + h, pos.y - h, pos.z - h}
             },
-            block_x, block_y - 1, block_z
+            block_x, block_y - 1, block_z,
+            3
         },
         // front (+Z)
         {
@@ -150,7 +216,8 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x + h, pos.y + h, pos.z + h},
                 {pos.x - h, pos.y + h, pos.z + h}
             },
-            block_x, block_y, block_z + 1
+            block_x, block_y, block_z + 1,
+            4
         },
         // back (-Z)
         {
@@ -161,7 +228,8 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x - h, pos.y + h, pos.z - h},
                 {pos.x + h, pos.y + h, pos.z - h}
             },
-            block_x, block_y, block_z - 1
+            block_x, block_y, block_z - 1,
+            5
         }
     };
 
@@ -174,9 +242,12 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
             // check if neighbor is air (face is exposed)
             BlockType neighbor = world_get_block(world, faces[i].neighbor_x, faces[i].neighbor_y, faces[i].neighbor_z);
             if (neighbor == BLOCK_AIR) {
-                // render the face
-                DrawTriangle3D(faces[i].v[0], faces[i].v[1], faces[i].v[2], color);
-                DrawTriangle3D(faces[i].v[0], faces[i].v[2], faces[i].v[3], color);
+                // Apply lighting to the base color, passing neighbor coordinates for side faces
+                Color lit_color = apply_face_lighting(color, faces[i].face_index, light_level, world, faces[i].neighbor_x, faces[i].neighbor_y, faces[i].neighbor_z);
+
+                // render the face with lit color
+                DrawTriangle3D(faces[i].v[0], faces[i].v[1], faces[i].v[2], lit_color);
+                DrawTriangle3D(faces[i].v[0], faces[i].v[2], faces[i].v[3], lit_color);
 
                 // draw wireframe
                 DrawLine3D(faces[i].v[0], faces[i].v[1], wire_color);

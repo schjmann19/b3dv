@@ -2,6 +2,7 @@
 #define WORLD_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "raylib.h"
 
 // Block types
@@ -28,6 +29,7 @@ typedef struct {
     int32_t chunk_y;
     int32_t chunk_z;
     bool loaded;      // Whether this chunk is currently in memory
+    bool generated;   // Whether terrain has been generated
 } Chunk;
 
 // Chunk cache - stores loaded chunks
@@ -49,8 +51,6 @@ typedef struct {
 // Function declarations
 World* world_create(void);
 void world_free(World* world);
-void world_set_block(World* world, int x, int y, int z, BlockType type);
-BlockType world_get_block(World* world, int x, int y, int z);
 Color world_get_block_color(BlockType type);
 void world_generate_prism(World* world);
 void world_system_init(void);
@@ -58,6 +58,8 @@ bool world_save(World* world, const char* world_name);
 bool world_load(World* world, const char* world_name);
 void world_update_chunks(World* world, Vector3 player_pos);
 Chunk* world_get_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
+void world_set_block(World* world, int x, int y, int z, BlockType type);
+BlockType world_get_block(World* world, int x, int y, int z);
 void world_chunk_set_block(Chunk* chunk, int x, int y, int z, BlockType type);
 BlockType world_chunk_get_block(Chunk* chunk, int x, int y, int z);
 void world_generate_chunk(Chunk* chunk);

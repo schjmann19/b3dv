@@ -6,6 +6,15 @@
 #include <stdio.h>
 #include <string.h>
 
+// Simple fast terrain height - no expensive noise, just sinusoidal waves
+static float terrain_height(float x, float z)
+{
+    // Use simple sin/cos for very fast terrain generation
+    float h1 = sinf(x * 0.1f) * cosf(z * 0.1f) * 8.0f;
+    float h2 = sinf(x * 0.05f) * cosf(z * 0.05f) * 6.0f;
+    return h1 + h2 + 10.0f;  // Base height of 10
+}
+
 // Create and allocate a new infinite world with chunk system
 World* world_create(void)
 {
@@ -26,9 +35,7 @@ World* world_create(void)
 void world_free(World* world)
 {
     if (world) {
-        if (world->chunk_cache.chunks) {
-            free(world->chunk_cache.chunks);
-        }
+
         free(world);
     }
 }
@@ -74,6 +81,7 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
     new_chunk->chunk_y = chunk_y;
     new_chunk->chunk_z = chunk_z;
     new_chunk->loaded = false;
+    new_chunk->generated = false;
 
     // Initialize blocks to air
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -104,6 +112,7 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
         }
         fclose(file);
         new_chunk->loaded = true;
+        new_chunk->generated = true;  // Loaded chunks are already complete
         printf("[chunk_load] Loaded chunk from %s\n", filepath);
     } else {
         // Chunk doesn't exist on disk - don't auto-generate, return empty chunk
@@ -119,14 +128,21 @@ void world_generate_chunk(Chunk* chunk)
 {
     if (!chunk) return;
 
-    // Simple flat terrain - just create ground at y=0-5
-    // This is much faster than complex procedural generation
+    // Generate terrain with mounds and valleys using noise
     for (int x = 0; x < CHUNK_WIDTH; x++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
+            // Calculate world position
+            int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+            int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+
+            // Get height at this position using noise function
+            float height = terrain_height((float)world_x, (float)world_z);
+            int terrain_height_blocks = (int)height + 5;  // Base offset of 5
+
             for (int y = 0; y < CHUNK_HEIGHT; y++) {
                 int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
-                // Create a flat ground plane at y=0-5
-                if (world_y >= 0 && world_y < 5) {
+                // Fill blocks below terrain height
+                if (world_y < terrain_height_blocks) {
                     chunk->blocks[y][z][x].type = BLOCK_STONE;
                 } else {
                     chunk->blocks[y][z][x].type = BLOCK_AIR;
@@ -216,9 +232,10 @@ void world_generate_prism(World* world)
 {
     // Generate only the chunk at origin for player spawn
     Chunk* chunk = world_load_or_create_chunk(world, 0, 0, 0);
-    if (chunk && !chunk->loaded) {
+    if (chunk && !chunk->generated) {
         world_generate_chunk(chunk);
         chunk->loaded = true;
+        chunk->generated = true;
     }
 }
 
@@ -250,9 +267,10 @@ void world_update_chunks(World* world, Vector3 player_pos)
             for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
                 Chunk* chunk = world_load_or_create_chunk(world, cx, cy, cz);
                 if (chunk && !chunk->loaded) {
-                    // Generate this chunk procedurally if it wasn't loaded from disk
+                    // Generate this chunk procedurally
                     world_generate_chunk(chunk);
                     chunk->loaded = true;
+                    chunk->generated = true;
                 }
             }
         }

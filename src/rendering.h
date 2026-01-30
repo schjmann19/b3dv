@@ -11,4 +11,8 @@ bool is_block_visible(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
                       Vector3 cam_right, Vector3 cam_up, float render_distance,
                       float fovy, float aspect);
 
+// Lighting functions
+float get_block_light_level(World* world, int x, int y, int z);
+Color apply_face_lighting(Color base_color, int face_index, float light_level, World* world, int neighbor_x, int neighbor_y, int neighbor_z);
+
 #endif

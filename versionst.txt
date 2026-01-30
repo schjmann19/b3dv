@@ -1,3 +1,9 @@
+0.0.6:
+    added terrain
+    camera-relative rendering so reality doesnt get messed up in far coords
+    (!) rendering still gets messed up at 131071 (x or z, negative or positive)
+    (!) rendering ceases to render in any negative coordinate
+
 0.0.5b:
     tidy up
 

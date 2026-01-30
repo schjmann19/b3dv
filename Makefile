@@ -4,7 +4,7 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
-LDFLAGS = -lraylib -lm
+LDFLAGS = -lraylib -lm -lpthread
 
 # Local raylib support
 LOCAL_RAYLIB_DIR = external/raylib
