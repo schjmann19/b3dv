@@ -9,11 +9,16 @@
 #define RENDER_WIREFRAMES false
 
 // Calculate light level for a block - check for unobstructed access to sunlight
+// Uses early termination and limited search to avoid expensive iteration
 float get_block_light_level(World* world, int x, int y, int z)
 {
-    // Check all blocks directly above up to the world ceiling
-    // If there's any solid block in the way, this block is shadowed
-    for (int check_y = y + 1; check_y < 256; check_y++) {
+    // Quick check: if we're at height 240 or above, assume fully lit
+    if (y >= 240) return 1.0f;
+
+    // Check only up to 30 blocks above (most light is blocked within this range)
+    int check_limit = (y + 30 < 256) ? y + 30 : 256;
+
+    for (int check_y = y + 1; check_y < check_limit; check_y++) {
         BlockType above = world_get_block(world, x, check_y, z);
         if (above != BLOCK_AIR) {
             // Hit a solid block - this position is shadowed
@@ -21,7 +26,7 @@ float get_block_light_level(World* world, int x, int y, int z)
         }
     }
 
-    // Made it all the way to the top with no obstruction
+    // Made it all the way up without hitting obstruction
     return 1.0f;  // Fully lit - direct sky access
 }
 
@@ -146,6 +151,49 @@ bool is_block_visible(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
     return true;
 }
 
+// Optimized version with pre-computed FOV values to avoid recalculating tan each block
+bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
+                           Vector3 cam_right, Vector3 cam_up, float render_distance,
+                           float half_vert_tan, float half_horiz_tan)
+{
+    Vector3 to_block = vec3_sub(block_pos, cam_pos);
+    float dist_sq = to_block.x*to_block.x + to_block.y*to_block.y + to_block.z*to_block.z;
+    float render_dist_sq = render_distance * render_distance;
+
+    if (dist_sq > render_dist_sq) {
+        return false;
+    }
+
+    // always render blocks within 15 units of player (exempt from FOV culling)
+    if (dist_sq < 225.0f) return true;  // 15^2 = 225
+
+    // normalize direction to block
+    float dist = sqrtf(dist_sq);
+    if (dist < 0.1f) return true;
+
+    float inv_dist = 1.0f / dist;
+    to_block.x *= inv_dist;
+    to_block.y *= inv_dist;
+    to_block.z *= inv_dist;
+
+    // check if block is in front of camera
+    float depth = to_block.x * cam_forward.x + to_block.y * cam_forward.y + to_block.z * cam_forward.z;
+    if (depth <= 0) return false;
+
+    // block angular size for margin
+    float block_angular_size = atanf(0.5f / (dist > 0.5f ? dist : 0.5f));
+
+    // project block direction onto right and up vectors
+    float right_proj = to_block.x * cam_right.x + to_block.y * cam_right.y + to_block.z * cam_right.z;
+    float up_proj = to_block.x * cam_up.x + to_block.y * cam_up.y + to_block.z * cam_up.z;
+
+    // check if angles are within FOV bounds using pre-computed tangent values
+    if (fabsf(right_proj / depth) > (half_horiz_tan + block_angular_size)) return false;
+    if (fabsf(up_proj / depth) > (half_vert_tan + block_angular_size)) return false;
+
+    return true;
+}
+
 // draw only the visible faces of a cube (faces pointing toward camera and not occluded by neighbors)
 void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type)
 {
@@ -246,6 +294,12 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     };
 
     // draw each face only if it points toward camera AND has no solid neighbor blocking it
+    bool texture_set = false;
+    if (has_texture) {
+        rlSetTexture(texture.id);
+        texture_set = true;
+    }
+
     for (int i = 0; i < 6; i++) {
         float dot = to_cam.x * faces[i].normal.x + to_cam.y * faces[i].normal.y + to_cam.z * faces[i].normal.z;
 
@@ -259,7 +313,6 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
 
                 if (has_texture) {
                     // Draw textured quad with rlgl - minimal overhead
-                    rlSetTexture(texture.id);
                     rlBegin(RL_QUADS);
                     rlColor4ub(lit_color.r, lit_color.g, lit_color.b, lit_color.a);
 
@@ -276,7 +329,6 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                     rlVertex3f(faces[i].v[3].x, faces[i].v[3].y, faces[i].v[3].z);
 
                     rlEnd();
-                    rlSetTexture(0);
                 } else {
                     // Fallback to colored triangles if texture not loaded
                     DrawTriangle3D(faces[i].v[0], faces[i].v[1], faces[i].v[2], lit_color);
@@ -292,6 +344,11 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 }
             }
         }
+    }
+
+    // Unset texture after drawing all faces
+    if (texture_set) {
+        rlSetTexture(0);
     }
 }
 

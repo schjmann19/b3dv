@@ -374,3 +374,10 @@ e
 /tp 100 1000 100
 /select grass
 /select grass
+/select grass
+/tp 100 1000 100
+/tp 0 20 0
+/tp 0 20 0
+/tp 0 20 0
+/tp 0 20 0
+/tp 0 20 0

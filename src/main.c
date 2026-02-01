@@ -22,7 +22,7 @@
 
 int main(void)
 {
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.6b");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.7c");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -117,8 +117,16 @@ int main(void)
     camera_yaw = atan2f(initial_forward.x, initial_forward.z);
     camera_pitch = asinf(initial_forward.y);
 
+    // Raycast caching - only update every 3 frames
+    int raycast_frame_counter = 0;
+
     // Load block textures
     world_load_textures(world);
+
+    // Pre-compute FOV values for visibility checks (avoid repeated tan calculations)
+    float fovy_rad = CULLING_FOV * 3.14159265f / 180.0f;
+    float fov_half_vert_tan = tanf(fovy_rad / 2.0f);
+    float fov_half_horiz_tan = fov_half_vert_tan * ASPECT_RATIO;
 
     SetTargetFPS(TARGET_FPS);
 
@@ -636,16 +644,20 @@ int main(void)
                 }
             }
 
-            // Update highlighted block for every frame (raycast continuously)
-            int hit_x, hit_y, hit_z;
-            int adj_x, adj_y, adj_z;
-            if (raycast_block(world, camera, 10.0f, &hit_x, &hit_y, &hit_z, &adj_x, &adj_y, &adj_z)) {
-                highlighted_block_x = hit_x;
-                highlighted_block_y = hit_y;
-                highlighted_block_z = hit_z;
-                has_highlighted_block = true;
-            } else {
-                has_highlighted_block = false;
+            // Update highlighted block (raycast every 3 frames for performance)
+            raycast_frame_counter++;
+            if (raycast_frame_counter >= 3) {
+                raycast_frame_counter = 0;
+                int hit_x, hit_y, hit_z;
+                int adj_x, adj_y, adj_z;
+                if (raycast_block(world, camera, 10.0f, &hit_x, &hit_y, &hit_z, &adj_x, &adj_y, &adj_z)) {
+                    highlighted_block_x = hit_x;
+                    highlighted_block_y = hit_y;
+                    highlighted_block_z = hit_z;
+                    has_highlighted_block = true;
+                } else {
+                    has_highlighted_block = false;
+                }
             }
         }
 
@@ -725,8 +737,6 @@ int main(void)
                 }
 
                 chunks_visible++;
-                printf("[render] Rendering chunk (%d, %d, %d) at distance %.1f\n",
-                       chunk->chunk_x, chunk->chunk_y, chunk->chunk_z, sqrtf(chunk_dist_sq));
 
                 // Render blocks in this chunk
                 for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -760,8 +770,8 @@ int main(void)
                                 }
 
                                 // Only do expensive visibility checks after distance/occlusion pass
-                                if (!is_block_visible(world_pos, shifted_cam_pos, cam_forward, cam_right,
-                                                   camera.up, RENDER_DISTANCE, CULLING_FOV, ASPECT_RATIO)) {
+                                if (!is_block_visible_fast(world_pos, shifted_cam_pos, cam_forward, cam_right,
+                                                        camera.up, RENDER_DISTANCE, fov_half_vert_tan, fov_half_horiz_tan)) {
                                     continue;
                                 }
 
@@ -848,7 +858,7 @@ int main(void)
             snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
             DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.6b - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.7c - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
         } else if (hud_mode == 1) {
             // performance metrics HUD
             DrawTextEx(custom_font, "=== PERFORMANCE METRICS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -875,7 +885,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.6b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.7c - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -903,14 +913,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.6b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.7c - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.6b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.7c - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused

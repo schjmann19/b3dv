@@ -10,6 +10,9 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
 bool is_block_visible(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
                       Vector3 cam_right, Vector3 cam_up, float render_distance,
                       float fovy, float aspect);
+bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
+                           Vector3 cam_right, Vector3 cam_up, float render_distance,
+                           float half_vert_tan, float half_horiz_tan);
 
 // Lighting functions
 float get_block_light_level(World* world, int x, int y, int z);
