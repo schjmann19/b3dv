@@ -3,7 +3,7 @@
 Copyright (c) 2026 Jimena Neumann
 SPDX-License-Identifier: BSD-3-Clause
 
-simple 3D visualizer of a small slab made of cubes
+simple 3D visualizer of a ~~small slab made of cubes~~
 heavily inspired in early iterations of Minecraft by Markus Persson
 uses Raylib
 
@@ -14,11 +14,12 @@ uses Raylib
 ./external/         - raylib (submodule)
 ./Screenshots/      - Screenshots
 ./src/              - source code
+./tools             - convenient tools
 ./Makefile          - build configuration
 ./build.sh          - Unix-like build script
 ./build-windows.bat - Windows batch build script
-./world             - executable (linux)
-./world.exe         - Windows executable
+./b3dv              - executable (linux)
+./b3dv.exe          - Windows executable
 ./LICENSE           - license text
 ```
 
@@ -28,7 +29,7 @@ uses Raylib
 ```bash
 $ ./build.sh         # Build only
 $ ./build.sh --run   # Build and run (useful when updating)
-$ ./b3dv            # Run existing executable
+$ ./b3dv             # Run existing executable
 ```
 
 ### Windows (native):
