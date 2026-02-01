@@ -12,7 +12,8 @@ typedef enum {
     BLOCK_DIRT = 2,
     BLOCK_GRASS = 3,
     BLOCK_SAND = 4,
-    BLOCK_WOOD = 5
+    BLOCK_WOOD = 5,
+    BLOCK_BEDROCK = 6
 } BlockType;
 
 // Chunk system for infinite worlds
@@ -33,6 +34,7 @@ typedef struct {
     Texture2D stone_texture;
     Texture2D sand_texture;
     Texture2D wood_texture;
+    Texture2D bedrock_texture;
     bool textures_loaded;
 } TextureCache;
 

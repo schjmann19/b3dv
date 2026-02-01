@@ -10,6 +10,10 @@ CFLAGS = -Wall -Wextra -O3 -ffast-math -march=native -mtune=native -flto -fno-si
          -funroll-loops
 LDFLAGS = -lraylib -lm -lpthread -flto
 
+# No optimization flags - default compilation for performance comparison
+NOOPT_CFLAGS = -Wall -Wextra
+NOOPT_LDFLAGS = -lraylib -lm -lpthread
+
 # Local raylib support
 LOCAL_RAYLIB_DIR = external/raylib
 LOCAL_RAYLIB_LIB = $(LOCAL_RAYLIB_DIR)/src/libraylib.a
@@ -59,6 +63,18 @@ b3dv: $(SOURCES) $(HEADERS)
 # Build with local raylib
 local: check-local-raylib
 	$(CC) $(SOURCES) -o b3dv $(CFLAGS) \
+		-I$(LOCAL_RAYLIB_DIR)/src \
+		-L$(LOCAL_RAYLIB_DIR)/src \
+		-l:libraylib.a \
+		-lm $(PLATFORM_LIBS)
+
+# Build with no optimization flags (system raylib)
+noopt: $(SOURCES) $(HEADERS)
+	$(CC) $(SOURCES) -o b3dv $(NOOPT_CFLAGS) $(NOOPT_LDFLAGS) $(PLATFORM_LIBS)
+
+# Build with no optimization flags (local raylib)
+noopt-local: check-local-raylib
+	$(CC) $(SOURCES) -o b3dv $(NOOPT_CFLAGS) \
 		-I$(LOCAL_RAYLIB_DIR)/src \
 		-L$(LOCAL_RAYLIB_DIR)/src \
 		-l:libraylib.a \
@@ -116,7 +132,7 @@ openbsd: all
 
 # Clean
 clean:
-	rm -f b3dv b3dv.exe *.o
+	rm -f b3dv b3dv-noopt b3dv.exe *.o
 
 # Deep clean (including local raylib)
 distclean: clean
@@ -127,12 +143,14 @@ help:
 	@echo "B3DV Build System"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all (default) - Build with system raylib"
-	@echo "  local         - Build with local raylib (auto-downloads if needed)"
+	@echo "  all (default) - Build with system raylib (optimized)"
+	@echo "  local         - Build with local raylib (optimized, auto-downloads if needed)"
+	@echo "  noopt         - Build with no optimization flags (system raylib)"
+	@echo "  noopt-local   - Build with no optimization flags (local raylib)"
 	@echo "  windows       - Cross-compile for Windows"
 	@echo "  clean         - Remove build artifacts"
 	@echo "  distclean     - Remove build artifacts and local raylib"
 	@echo ""
 	@echo "Platform targets: linux, macos, freebsd, openbsd"
 
-.PHONY: all clean distclean help check-local-raylib check-local-raylib-windows
+.PHONY: all noopt noopt-local clean distclean help check-local-raylib check-local-raylib-windows

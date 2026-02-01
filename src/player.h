@@ -9,7 +9,7 @@
 #define PLAYER_RADIUS 0.35f
 #define PLAYER_SPEED 5.5f     // blocks per second
 #define GRAVITY 35.0f         // blocks per second squared
-#define JUMP_FORCE 9.0f       // blocks per second
+#define JUMP_FORCE 11.9f      // blocks per second
 
 // Player structure
 typedef struct {

@@ -386,3 +386,21 @@ e
 /tp 0 100 0
 /tp 0 17 0
 /tp 0 17 0
+/createworld 99
+/createworld asd9
+/select dirt
+/select bedrock
+/loadworld asd9
+/loadworld asd9
+/loadworld asd9
+/save asd9
+/save default
+/setblock -37 -17 1 wood
+/setblock -37 -15 1 wood
+/select bedrock
+/save default
+/select sand
+/setblock -37 -18 1 sand
+/setblock -37 -20 1 sand
+/setblock -37 -19 1 sand
+/setblock -37 -19 1 air

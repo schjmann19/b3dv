@@ -73,6 +73,10 @@ void world_load_textures(World* world)
     world->textures.wood_texture = LoadTexture("./assets/textures/blocks/wood.png");
     printf("[textures] wood texture id: %d\n", world->textures.wood_texture.id);
 
+    // Try to load bedrock texture
+    world->textures.bedrock_texture = LoadTexture("./assets/textures/blocks/stone.png");  // Using stone texture as fallback
+    printf("[textures] bedrock texture id: %d\n", world->textures.bedrock_texture.id);
+
     world->textures.textures_loaded = true;
     printf("[textures] Block textures loaded\n");
 }
@@ -87,6 +91,7 @@ void world_unload_textures(World* world)
     UnloadTexture(world->textures.stone_texture);
     UnloadTexture(world->textures.sand_texture);
     UnloadTexture(world->textures.wood_texture);
+    UnloadTexture(world->textures.bedrock_texture);
 
     world->textures.textures_loaded = false;
 }
@@ -110,6 +115,8 @@ Texture2D world_get_block_texture(World* world, BlockType type)
             return world->textures.sand_texture;
         case BLOCK_WOOD:
             return world->textures.wood_texture;
+        case BLOCK_BEDROCK:
+            return world->textures.bedrock_texture;
         case BLOCK_AIR:
         default:
             return (Texture2D){0};
@@ -217,8 +224,16 @@ void world_generate_chunk(Chunk* chunk)
 
             for (int y = 0; y < CHUNK_HEIGHT; y++) {
                 int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
+                // Depth limit: bedrock layer at y=-20, no blocks below
+                if (world_y < -20) {
+                    chunk->blocks[y][z][x].type = BLOCK_AIR;
+                }
+                // Bedrock layer at y=-20
+                else if (world_y == -20) {
+                    chunk->blocks[y][z][x].type = BLOCK_BEDROCK;
+                }
                 // Fill blocks below terrain height with appropriate type
-                if (world_y < terrain_height_blocks) {
+                else if (world_y < terrain_height_blocks) {
                     // Top block is grass
                     if (world_y == terrain_height_blocks - 1) {
                         chunk->blocks[y][z][x].type = BLOCK_GRASS;
@@ -316,6 +331,8 @@ Color world_get_block_color(BlockType type)
             return (Color){238, 214, 175, 255};  // Sandy Brown
         case BLOCK_WOOD:
             return (Color){101, 67, 33, 255};  // Dark Brown
+        case BLOCK_BEDROCK:
+            return (Color){64, 64, 64, 255};  // Dark Grey (Bedrock)
         case BLOCK_AIR:
         default:
             return (Color){0, 0, 0, 0};  // Transparent
