@@ -6,48 +6,49 @@
 #include "world.h"
 #include "vec_math.h"
 
-// Calculate light level for a block - simplified for performance
+#define RENDER_WIREFRAMES false
+
+// Calculate light level for a block - check for unobstructed access to sunlight
 float get_block_light_level(World* world, int x, int y, int z)
 {
-    // Quick check: count only 4 blocks directly above (fast)
-    int blocks_above = 0;
-    for (int check_y = y + 1; check_y <= y + 4 && check_y < 256; check_y++) {
+    // Check all blocks directly above up to the world ceiling
+    // If there's any solid block in the way, this block is shadowed
+    for (int check_y = y + 1; check_y < 256; check_y++) {
         BlockType above = world_get_block(world, x, check_y, z);
-        if (above == BLOCK_AIR) {
-            blocks_above++;
-        } else {
-            break;
+        if (above != BLOCK_AIR) {
+            // Hit a solid block - this position is shadowed
+            return 0.6f;  // Dim lighting
         }
     }
 
-    // If we have direct sky access from above (all 4 blocks clear)
-    if (blocks_above >= 4) {
-        return 1.0f;  // Fully lit
-    }
-
-    // Otherwise dim lighting
-    return 0.6f;
+    // Made it all the way to the top with no obstruction
+    return 1.0f;  // Fully lit - direct sky access
 }
 
-// Apply lighting to a face based on direction and light level
+// Apply lighting to a face based on direction and adjacent air block's sky access
 // face_index: 0=+X, 1=-X, 2=+Y(top), 3=-Y(bottom), 4=+Z, 5=-Z
-Color apply_face_lighting(Color base_color, int face_index, float light_level, World* world, int neighbor_x, int neighbor_y, int neighbor_z)
+// neighbor_x/y/z: coordinates of the adjacent air block this face is exposed to
+Color apply_face_lighting(Color base_color, int face_index, World* world, int neighbor_x, int neighbor_y, int neighbor_z)
 {
-    float brightness = 1.0f;
+    float face_brightness = 1.0f;
 
     if (face_index == 2) {
         // Top face - brightest
-        brightness = 1.0f;
+        face_brightness = 1.0f;
     } else if (face_index == 3) {
         // Bottom face - darkest
-        brightness = 0.5f;
+        face_brightness = 0.8f;
     } else {
-        // Side faces - medium brightness
-        brightness = 0.75f;
+        // Side faces - nearly full brightness
+        face_brightness = 0.95f;
     }
 
-    // Apply brightness
-    float final_brightness = brightness;
+    // Check if the adjacent air block has direct sky access
+    // This determines if the face should be shadowed
+    float adjacent_light = get_block_light_level(world, neighbor_x, neighbor_y, neighbor_z);
+
+    // Apply both face brightness and adjacent block's light level
+    float final_brightness = face_brightness * adjacent_light;
 
     // Clamp between 0.25 and 1.0 to ensure minimum visibility
     if (final_brightness < 0.25f) final_brightness = 0.25f;
@@ -151,9 +152,6 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
 
-    // Get lighting for this block
-    float light_level = get_block_light_level(world, block_x, block_y, block_z);
-
     // Get texture for this block type
     Texture2D texture = world_get_block_texture(world, block_type);
     bool has_texture = texture.id > 0;
@@ -256,8 +254,8 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
             // check if neighbor is air (face is exposed)
             BlockType neighbor = world_get_block(world, faces[i].neighbor_x, faces[i].neighbor_y, faces[i].neighbor_z);
             if (neighbor == BLOCK_AIR) {
-                // Apply lighting to the base color, passing neighbor coordinates for side faces
-                Color lit_color = apply_face_lighting(color, faces[i].face_index, light_level, world, faces[i].neighbor_x, faces[i].neighbor_y, faces[i].neighbor_z);
+                // Apply lighting based on adjacent air block's sky access
+                Color lit_color = apply_face_lighting(color, faces[i].face_index, world, faces[i].neighbor_x, faces[i].neighbor_y, faces[i].neighbor_z);
 
                 if (has_texture) {
                     // Draw textured quad with rlgl - minimal overhead
@@ -285,11 +283,13 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                     DrawTriangle3D(faces[i].v[0], faces[i].v[2], faces[i].v[3], lit_color);
                 }
 
-                // draw wireframe
-                DrawLine3D(faces[i].v[0], faces[i].v[1], wire_color);
-                DrawLine3D(faces[i].v[1], faces[i].v[2], wire_color);
-                DrawLine3D(faces[i].v[2], faces[i].v[3], wire_color);
-                DrawLine3D(faces[i].v[3], faces[i].v[0], wire_color);
+                // draw wireframe if enabled
+                if (RENDER_WIREFRAMES) {
+                    DrawLine3D(faces[i].v[0], faces[i].v[1], wire_color);
+                    DrawLine3D(faces[i].v[1], faces[i].v[2], wire_color);
+                    DrawLine3D(faces[i].v[2], faces[i].v[3], wire_color);
+                    DrawLine3D(faces[i].v[3], faces[i].v[0], wire_color);
+                }
             }
         }
     }

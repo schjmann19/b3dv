@@ -356,3 +356,21 @@ e
 /tp 100 100 100
 /tp 100 100 100
 /tp 0 20 0
+/select grassss
+/select grass
+/selectdirt
+/select grass 
+/select dirt
+/select grass
+/select sand
+/select wood
+/select wood
+/select wood
+/select sand
+/select sand
+/tp 0 20 0
+/save asd6
+/loadworld asd6
+/tp 100 1000 100
+/select grass
+/select grass

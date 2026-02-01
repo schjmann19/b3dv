@@ -66,6 +66,14 @@ void world_load_textures(World* world)
     world->textures.stone_texture = LoadTexture("./assets/textures/blocks/stone.png");
     printf("[textures] stone texture id: %d\n", world->textures.stone_texture.id);
 
+    // Try to load sand texture
+    world->textures.sand_texture = LoadTexture("./assets/textures/blocks/sand.png");
+    printf("[textures] sand texture id: %d\n", world->textures.sand_texture.id);
+
+    // Try to load wood texture
+    world->textures.wood_texture = LoadTexture("./assets/textures/blocks/wood.png");
+    printf("[textures] wood texture id: %d\n", world->textures.wood_texture.id);
+
     world->textures.textures_loaded = true;
     printf("[textures] Block textures loaded\n");
 }
@@ -78,6 +86,8 @@ void world_unload_textures(World* world)
     UnloadTexture(world->textures.grass_texture);
     UnloadTexture(world->textures.dirt_texture);
     UnloadTexture(world->textures.stone_texture);
+    UnloadTexture(world->textures.sand_texture);
+    UnloadTexture(world->textures.wood_texture);
 
     world->textures.textures_loaded = false;
 }
@@ -97,6 +107,10 @@ Texture2D world_get_block_texture(World* world, BlockType type)
             return world->textures.dirt_texture;
         case BLOCK_STONE:
             return world->textures.stone_texture;
+        case BLOCK_SAND:
+            return world->textures.sand_texture;
+        case BLOCK_WOOD:
+            return world->textures.wood_texture;
         case BLOCK_AIR:
         default:
             return (Texture2D){0};
@@ -299,6 +313,10 @@ Color world_get_block_color(BlockType type)
             return (Color){139, 69, 19, 255};  // Saddle Brown
         case BLOCK_STONE:
             return (Color){128, 128, 128, 255};  // Grey
+        case BLOCK_SAND:
+            return (Color){238, 214, 175, 255};  // Sandy Brown
+        case BLOCK_WOOD:
+            return (Color){101, 67, 33, 255};  // Dark Brown
         case BLOCK_AIR:
         default:
             return (Color){0, 0, 0, 0};  // Transparent

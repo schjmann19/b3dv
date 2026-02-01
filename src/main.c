@@ -342,7 +342,7 @@ int main(void)
                             }
                         }
                     } else if (strncmp(chat_input, "/select ", 8) == 0) {
-                        // Select block type: /select <stone|grass|dirt>
+                        // Select block type: /select <stone|grass|dirt|sand|wood>
                         char block_name_buf[32];
                         strncpy(block_name_buf, chat_input + 8, sizeof(block_name_buf) - 1);
                         block_name_buf[31] = '\0';
@@ -358,8 +358,14 @@ int main(void)
                         } else if (strcmp(block_name, "grass") == 0) {
                             player->selected_block = BLOCK_GRASS;
                             printf("Selected block: grass\n");
+                        } else if (strcmp(block_name, "sand") == 0) {
+                            player->selected_block = BLOCK_SAND;
+                            printf("Selected block: sand\n");
+                        } else if (strcmp(block_name, "wood") == 0) {
+                            player->selected_block = BLOCK_WOOD;
+                            printf("Selected block: wood\n");
                         } else {
-                            printf("Unknown block type: %s. Available: stone, dirt, grass\n", block_name);
+                            printf("Unknown block type: %s. Available: stone, dirt, grass, sand, wood\n", block_name);
                         }
                     } else if (strncmp(chat_input, "/setblock ", 10) == 0) {
                         // Set block: /setblock x y z [block_type]
@@ -391,6 +397,8 @@ int main(void)
                                 if (block_type == BLOCK_STONE) type_str = "stone";
                                 else if (block_type == BLOCK_DIRT) type_str = "dirt";
                                 else if (block_type == BLOCK_GRASS) type_str = "grass";
+                                else if (block_type == BLOCK_SAND) type_str = "sand";
+                                else if (block_type == BLOCK_WOOD) type_str = "wood";
                                 else if (block_type == BLOCK_AIR) type_str = "air";
                             } else {
                                 // Parse explicit block name
@@ -400,6 +408,12 @@ int main(void)
                                 } else if (strcmp(block_name, "dirt") == 0) {
                                     block_type = BLOCK_DIRT;
                                     type_str = "dirt";
+                                } else if (strcmp(block_name, "sand") == 0) {
+                                    block_type = BLOCK_SAND;
+                                    type_str = "sand";
+                                } else if (strcmp(block_name, "wood") == 0) {
+                                    block_type = BLOCK_WOOD;
+                                    type_str = "wood";
                                 } else if (strcmp(block_name, "grass") == 0) {
                                     block_type = BLOCK_GRASS;
                                     type_str = "grass";
@@ -407,7 +421,7 @@ int main(void)
                                     block_type = BLOCK_AIR;
                                     type_str = "air";
                                 } else {
-                                    printf("Unknown block type: %s. Available: air, stone, dirt, grass\n", block_name);
+                                    printf("Unknown block type: %s. Available: air, stone, dirt, grass, sand, wood\n", block_name);
                                     ix = -1;  // Skip application
                                 }
                             }
@@ -423,7 +437,7 @@ int main(void)
                         } else {
                             printf("Usage: /setblock x y z [block_type]\n");
                             printf("Coordinates are world-space (player spawn is ~0, 0, 0)\n");
-                            printf("Available blocks: air, stone, dirt, grass\n");
+                            printf("Available blocks: air, stone, dirt, grass, sand, wood\n");
                             printf("If block_type is omitted, uses currently selected block (use /select to change)\n");
                         }
                     }
@@ -490,13 +504,6 @@ int main(void)
         // toggle fullscreen with F11
         if (IsKeyPressed(KEY_F11)) {
             ToggleFullscreen();
-        }
-
-        // take screenshot with F12
-        if (IsKeyPressed(KEY_F12)) {
-            char screenshot_file[64];
-            get_screenshot_filename(screenshot_file, sizeof(screenshot_file));
-            TakeScreenshot(screenshot_file);
         }
 
         // teleport with R key
@@ -599,7 +606,32 @@ int main(void)
                     // Place block in the adjacent empty space
                     BlockType adjacent_block = world_get_block(world, adj_x, adj_y, adj_z);
                     if (adjacent_block == BLOCK_AIR) {
-                        world_set_block(world, adj_x, adj_y, adj_z, BLOCK_STONE);
+                        // Check if placing the block would intersect with player hitbox
+                        Vector3 block_center = (Vector3){
+                            adj_x + 0.5f,
+                            adj_y + 0.5f,
+                            adj_z + 0.5f
+                        };
+
+                        // Simple AABB collision check: block (1x1x1) vs player (radius 0.35 cylinder with height 1.9)
+                        // Check if block center is within player's horizontal radius
+                        float dx = player->position.x - block_center.x;
+                        float dz = player->position.z - block_center.z;
+                        float horizontal_dist = sqrtf(dx*dx + dz*dz);
+
+                        // Check vertical overlap (player head at position.y, feet at position.y - PLAYER_HEIGHT)
+                        float player_bottom = player->position.y - PLAYER_HEIGHT;
+                        float player_top = player->position.y;
+                        float block_bottom = adj_y;
+                        float block_top = adj_y + 1.0f;
+
+                        bool vertical_overlap = (block_bottom < player_top && block_top > player_bottom);
+                        bool horizontal_overlap = (horizontal_dist < PLAYER_RADIUS + 0.5f);  // 0.5 is half block width
+
+                        // Only place if it doesn't intersect with player
+                        if (!(vertical_overlap && horizontal_overlap)) {
+                            world_set_block(world, adj_x, adj_y, adj_z, player->selected_block);
+                        }
                     }
                 }
             }
@@ -773,7 +805,7 @@ int main(void)
                     highlighted_block_y + 0.5f - camera_offset.y,
                     highlighted_block_z + 0.5f - camera_offset.z
                 };
-                DrawCubeWires(block_pos, 1.02f, 1.02f, 1.02f, YELLOW);
+                DrawCubeWires(block_pos, 1.0f, 1.0f, 1.0f, YELLOW);
             }
             DrawGrid(30, 1.0f);
         EndMode3D();

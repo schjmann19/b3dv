@@ -54,14 +54,6 @@ int get_process_memory_mb(void)
 #endif
 }
 
-// Generate timestamped screenshot filename
-void get_screenshot_filename(char* buffer, size_t size)
-{
-    time_t now = time(NULL);
-    struct tm* timeinfo = localtime(&now);
-    strftime(buffer, size, "screenshot_%Y-%m-%d_%H-%M-%S.png", timeinfo);
-}
-
 // Get CPU model name
 void get_cpu_model(char* buffer, size_t size)
 {
