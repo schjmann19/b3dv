@@ -1,10 +1,11 @@
 # B3DV - Basic 3D Visualizer
 
-Copyright (c) 2026 Jimena Neumann
+Copyright (c) 2026 Jimena Neumann,
 SPDX-License-Identifier: BSD-3-Clause
 
-simple 3D visualizer of a ~~small slab made of cubes~~
-heavily inspired in early iterations of Minecraft by Markus Persson
+simple 3D visualizer of a ~~small slab made of cubes~~ basic world featuring:
+simple terrain, multiple blocks, a worlds (with chunks) system, optimized rendering.
+heavily inspired in early iterations of Minecraft by Markus Persson.
 uses Raylib
 
 
