@@ -4,7 +4,6 @@
 #include <string.h>
 
 #include "world.h"
-#include "vec_math.h"
 #include "raylib.h"
 
 // Simple fast terrain height - no expensive noise, just sinusoidal waves
@@ -335,8 +334,8 @@ void world_generate_prism(World* world)
     }
 }
 
-// Update loaded chunks based on player position
-void world_update_chunks(World* world, Vector3 player_pos)
+// Update loaded chunks based on player position and camera direction
+void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forward)
 {
     if (!world) return;
 
@@ -352,32 +351,47 @@ void world_update_chunks(World* world, Vector3 player_pos)
         return;
     }
 
-    printf("[chunk_update] Player at (%.1f, %.1f, %.1f) → chunk (%d, %d, %d)\n",
-           player_pos.x, player_pos.y, player_pos.z, player_chunk_x, player_chunk_y, player_chunk_z);
-
     world->last_loaded_chunk_x = player_chunk_x;
     world->last_loaded_chunk_y = player_chunk_y;
     world->last_loaded_chunk_z = player_chunk_z;
 
-    // Load chunks within load distance
+    // Load chunks within load distance, prioritizing forward direction
     int load_dist = CHUNK_LOAD_DISTANCE;
     for (int cx = player_chunk_x - load_dist; cx <= player_chunk_x + load_dist; cx++) {
         for (int cy = player_chunk_y - 1; cy <= player_chunk_y + 1; cy++) {
             for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
+                // Calculate chunk center relative to player
+                float chunk_center_x = cx * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f;
+                float chunk_center_y = cy * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f;
+                float chunk_center_z = cz * CHUNK_DEPTH + CHUNK_DEPTH / 2.0f;
+
+                // Direction from player to chunk
+                float to_chunk_x = chunk_center_x - player_pos.x;
+                float to_chunk_y = chunk_center_y - player_pos.y;
+                float to_chunk_z = chunk_center_z - player_pos.z;
+
+                // Dot product with camera forward (if negative, chunk is behind player)
+                float dot = to_chunk_x * camera_forward.x + to_chunk_y * camera_forward.y + to_chunk_z * camera_forward.z;
+
+                // Skip chunks behind the player (with a small margin to avoid harsh cutoff)
+                // Allow a small cone behind (dot product threshold of -0.3)
+                if (dot < -0.3f * (load_dist + 1) * CHUNK_WIDTH) {
+                    continue;
+                }
+
                 Chunk* chunk = world_load_or_create_chunk(world, cx, cy, cz);
                 if (chunk && !chunk->loaded) {
                     // Generate this chunk procedurally
                     world_generate_chunk(chunk);
                     chunk->loaded = true;
                     chunk->generated = true;
-                    printf("[chunk_update] Generated chunk (%d, %d, %d)\n", cx, cy, cz);
                 }
             }
         }
     }
 
-    // Unload chunks that are too far away
-    int unload_dist = CHUNK_LOAD_DISTANCE * 2;
+    // Unload chunks that are too far away or behind the player
+    int unload_dist = CHUNK_LOAD_DISTANCE + 1;
     int i = 0;
     while (i < world->chunk_cache.chunk_count) {
         Chunk* chunk = &world->chunk_cache.chunks[i];
@@ -385,8 +399,20 @@ void world_update_chunks(World* world, Vector3 player_pos)
         int dy = chunk->chunk_y - player_chunk_y;
         int dz = chunk->chunk_z - player_chunk_z;
 
-        // Check if chunk is beyond unload distance
-        if (dx*dx + dz*dz > unload_dist*unload_dist || dy > unload_dist || dy < -unload_dist) {
+        // Check if chunk is beyond unload distance or behind player
+        float chunk_center_x = chunk->chunk_x * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f;
+        float chunk_center_y = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f;
+        float chunk_center_z = chunk->chunk_z * CHUNK_DEPTH + CHUNK_DEPTH / 2.0f;
+
+        float to_chunk_x = chunk_center_x - player_pos.x;
+        float to_chunk_y = chunk_center_y - player_pos.y;
+        float to_chunk_z = chunk_center_z - player_pos.z;
+
+        float dot = to_chunk_x * camera_forward.x + to_chunk_y * camera_forward.y + to_chunk_z * camera_forward.z;
+        bool behind_player = dot < -0.3f * (unload_dist + 1) * CHUNK_WIDTH;
+        bool too_far = dx*dx + dz*dz > unload_dist*unload_dist || dy > unload_dist || dy < -unload_dist;
+
+        if (too_far || behind_player) {
             // Remove chunk from cache (swap with last)
             if (i < world->chunk_cache.chunk_count - 1) {
                 world->chunk_cache.chunks[i] = world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
@@ -458,9 +484,6 @@ bool world_load(World* world, const char* world_name)
 {
     if (!world || !world_name) return false;
 
-    printf("[world_load] Loading world '%s'...\n", world_name);
-    printf("[world_load] Clearing chunk cache...\n");
-
     // Clear existing chunks first
     if (world->chunk_cache.chunks) {
         free(world->chunk_cache.chunks);
@@ -472,7 +495,6 @@ bool world_load(World* world, const char* world_name)
     // Set the world name so chunk loading uses the correct directory
     strncpy(world->world_name, world_name, sizeof(world->world_name) - 1);
     world->world_name[sizeof(world->world_name) - 1] = '\0';
-    printf("[world_load] World name set to: '%s'\n", world->world_name);
 
     // Reset chunk loading tracker
     world->last_loaded_chunk_x = INT32_MAX;
@@ -484,28 +506,20 @@ bool world_load(World* world, const char* world_name)
     int load_dist = CHUNK_LOAD_DISTANCE;
     bool any_chunk_loaded = false;
 
-    printf("[world_load] Attempting to load chunks around origin with distance %d...\n", load_dist);
-
     for (int cx = -load_dist; cx <= load_dist; cx++) {
         for (int cy = -1; cy <= 1; cy++) {
             for (int cz = -load_dist; cz <= load_dist; cz++) {
                 Chunk* chunk = world_load_or_create_chunk(world, cx, cy, cz);
                 if (chunk && chunk->loaded) {
                     any_chunk_loaded = true;
-                    printf("[world_load] Loaded chunk at (%d, %d, %d)\n", cx, cy, cz);
                 }
             }
         }
     }
 
-    printf("[world_load] Chunks loaded from disk: %s\n", any_chunk_loaded ? "yes" : "no");
-
     // If no chunks exist on disk, generate the starting area
     if (!any_chunk_loaded) {
-        printf("[world_load] No saved chunks found for world '%s'. Generating new world...\n", world_name);
         world_generate_prism(world);
-    } else {
-        printf("[world_load] Successfully loaded world '%s'. Total chunks: %d\n", world_name, world->chunk_cache.chunk_count);
     }
 
     return true;

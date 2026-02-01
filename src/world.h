@@ -74,7 +74,7 @@ void world_generate_prism(World* world);
 void world_system_init(void);
 bool world_save(World* world, const char* world_name);
 bool world_load(World* world, const char* world_name);
-void world_update_chunks(World* world, Vector3 player_pos);
+void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forward);
 Chunk* world_get_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 void world_set_block(World* world, int x, int y, int z, BlockType type);
 BlockType world_get_block(World* world, int x, int y, int z);

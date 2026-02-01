@@ -363,7 +363,7 @@ bool raycast_block(World* world, Camera3D camera, float max_distance,
     Vector3 ray_origin = camera.position;
     Vector3 ray_dir = vec3_normalize(vec3_sub(camera.target, camera.position));
 
-    float step = 0.05f;  // Smaller step size for accuracy
+    float step = 0.1f;  // Larger step size since raycast is only every 3 frames anyway
     float distance = 0.0f;
 
     Vector3 prev_pos = ray_origin;

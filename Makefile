@@ -2,9 +2,13 @@
 # Copyright (c) 2026 Jimena Neumann
 # SPDX-License-Identifier: BSD-3-Clause
 
-CC = gcc
-CFLAGS = -Wall -Wextra -O2
-LDFLAGS = -lraylib -lm -lpthread
+CC = clang
+# Aggressive optimization flags for maximum FPS performance (Clang-compatible)
+# Using -O3 + -ffast-math instead of deprecated -Ofast
+CFLAGS = -Wall -Wextra -O3 -ffast-math -march=native -mtune=native -flto -fno-signed-zeros \
+         -fno-trapping-math -faligned-new -fvectorize -fslp-vectorize \
+         -funroll-loops
+LDFLAGS = -lraylib -lm -lpthread -flto
 
 # Local raylib support
 LOCAL_RAYLIB_DIR = external/raylib
@@ -35,11 +39,12 @@ PLATFORM_LIBS = -lGL -lpthread -lrt -lX11
 PLATFORM = PLATFORM_DESKTOP
 endif
 
-# Windows cross-compilation
+# Windows cross-compilation with aggressive optimizations
 WIN_CC = x86_64-w64-mingw32-gcc
 WIN_RAYLIB_PATH = ./external/raylib
-WIN_CFLAGS = -Wall -Wextra -O2 -march=x86-64 -mtune=generic -I$(WIN_RAYLIB_PATH)/src
-WIN_LDFLAGS = -L$(WIN_RAYLIB_PATH)/src -l:libraylib.a -lopengl32 -lgdi32 -lwinmm -lpsapi -lm -static-libgcc
+WIN_CFLAGS = -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto -fno-signed-zeros \
+            -fno-trapping-math -faligned-new -funroll-loops -I$(WIN_RAYLIB_PATH)/src
+WIN_LDFLAGS = -L$(WIN_RAYLIB_PATH)/src -l:libraylib.a -lopengl32 -lgdi32 -lwinmm -lpsapi -lm -static-libgcc -flto
 
 SOURCES = src/main.c src/world_generation.c src/player.c src/vec_math.c src/rendering.c src/utils.c
 HEADERS = src/world.h src/player.h src/vec_math.h src/rendering.h src/utils.h

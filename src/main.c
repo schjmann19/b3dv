@@ -1,7 +1,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 #include "raylib.h"
 #include "world.h"
@@ -22,7 +21,7 @@
 
 int main(void)
 {
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.7c");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.7e");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -595,7 +594,7 @@ int main(void)
         if (!paused && !chat_active) {
             player_move_input(player, forward, right, dt);
             player_update(player, world, dt);
-            world_update_chunks(world, player->position);  // Load/unload chunks based on player position
+            world_update_chunks(world, player->position, camera_forward);  // Load/unload chunks based on player position and camera direction
 
             // Handle block breaking (left click)
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -708,8 +707,6 @@ int main(void)
             int blocks_rendered = 0;
 
             // draw all chunks and their blocks with frustum culling and face culling
-            int chunks_checked = 0;
-            int chunks_visible = 0;
             for (int c = 0; c < world->chunk_cache.chunk_count; c++) {
                 Chunk* chunk = &world->chunk_cache.chunks[c];
 
@@ -718,8 +715,6 @@ int main(void)
 
                 // Skip chunks that haven't been generated yet
                 if (!chunk->generated) continue;
-
-                chunks_checked++;
 
                 float chunk_center_x = chunk->chunk_x * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f - camera_offset.x;
                 float chunk_center_y = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f;
@@ -735,8 +730,6 @@ int main(void)
                 if (chunk_dist_sq > max_dist * max_dist) {
                     continue;
                 }
-
-                chunks_visible++;
 
                 // Render blocks in this chunk
                 for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -858,7 +851,7 @@ int main(void)
             snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
             DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.7c - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.7e - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
         } else if (hud_mode == 1) {
             // performance metrics HUD
             DrawTextEx(custom_font, "=== PERFORMANCE METRICS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -885,7 +878,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.7c - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.7e - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -913,14 +906,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.7c - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.7e - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.7c - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.7e - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused
