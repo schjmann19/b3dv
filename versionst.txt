@@ -1,3 +1,8 @@
+0.0.7:
+    added blocks textures
+    fixed worlds system again
+    (!) /select not yet fully working
+
 0.0.6b:
     fixed rendering
     tidy up
@@ -51,3 +56,6 @@
     simple slab world you can walk on
 
 0.0.2:
+    bad optimization
+    FEATURES:
+    simple and very small slab world you can walk on

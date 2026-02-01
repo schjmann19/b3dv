@@ -1,5 +1,7 @@
 #include <math.h>
 
+#include "raylib.h"
+#include "rlgl.h"
 #include "rendering.h"
 #include "world.h"
 #include "vec_math.h"
@@ -144,7 +146,7 @@ bool is_block_visible(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
 }
 
 // draw only the visible faces of a cube (faces pointing toward camera and not occluded by neighbors)
-void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z)
+void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type)
 {
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
@@ -152,11 +154,16 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     // Get lighting for this block
     float light_level = get_block_light_level(world, block_x, block_y, block_z);
 
-    // face normals and vertices (in pairs: v1, v2, v3, v4)
+    // Get texture for this block type
+    Texture2D texture = world_get_block_texture(world, block_type);
+    bool has_texture = texture.id > 0;
+
+    // face normals and vertices (in pairs: v1, v2, v3, v4) with texture coordinates
     // also include neighbor coordinates for occlusion checking
     struct {
         Vector3 normal;
         Vector3 v[4];
+        Vector2 uv[4];
         int neighbor_x, neighbor_y, neighbor_z;
         int face_index;  // for lighting calculation
     } faces[6] = {
@@ -169,6 +176,7 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x + h, pos.y + h, pos.z + h},
                 {pos.x + h, pos.y - h, pos.z + h}
             },
+            {{0, 1}, {0, 0}, {1, 0}, {1, 1}},
             block_x + 1, block_y, block_z,
             0
         },
@@ -181,6 +189,7 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x - h, pos.y + h, pos.z - h},
                 {pos.x - h, pos.y - h, pos.z - h}
             },
+            {{1, 1}, {1, 0}, {0, 0}, {0, 1}},
             block_x - 1, block_y, block_z,
             1
         },
@@ -193,6 +202,7 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x + h, pos.y + h, pos.z - h},
                 {pos.x - h, pos.y + h, pos.z - h}
             },
+            {{0, 0}, {1, 0}, {1, 1}, {0, 1}},
             block_x, block_y + 1, block_z,
             2
         },
@@ -205,6 +215,7 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x - h, pos.y - h, pos.z - h},
                 {pos.x + h, pos.y - h, pos.z - h}
             },
+            {{1, 0}, {0, 0}, {0, 1}, {1, 1}},
             block_x, block_y - 1, block_z,
             3
         },
@@ -217,6 +228,7 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x + h, pos.y + h, pos.z + h},
                 {pos.x - h, pos.y + h, pos.z + h}
             },
+            {{0, 1}, {1, 1}, {1, 0}, {0, 0}},
             block_x, block_y, block_z + 1,
             4
         },
@@ -229,6 +241,7 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 {pos.x - h, pos.y + h, pos.z - h},
                 {pos.x + h, pos.y + h, pos.z - h}
             },
+            {{1, 1}, {0, 1}, {0, 0}, {1, 0}},
             block_x, block_y, block_z - 1,
             5
         }
@@ -246,9 +259,31 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                 // Apply lighting to the base color, passing neighbor coordinates for side faces
                 Color lit_color = apply_face_lighting(color, faces[i].face_index, light_level, world, faces[i].neighbor_x, faces[i].neighbor_y, faces[i].neighbor_z);
 
-                // render the face with lit color
-                DrawTriangle3D(faces[i].v[0], faces[i].v[1], faces[i].v[2], lit_color);
-                DrawTriangle3D(faces[i].v[0], faces[i].v[2], faces[i].v[3], lit_color);
+                if (has_texture) {
+                    // Draw textured quad with rlgl - minimal overhead
+                    rlSetTexture(texture.id);
+                    rlBegin(RL_QUADS);
+                    rlColor4ub(lit_color.r, lit_color.g, lit_color.b, lit_color.a);
+
+                    rlTexCoord2f(faces[i].uv[0].x, faces[i].uv[0].y);
+                    rlVertex3f(faces[i].v[0].x, faces[i].v[0].y, faces[i].v[0].z);
+
+                    rlTexCoord2f(faces[i].uv[1].x, faces[i].uv[1].y);
+                    rlVertex3f(faces[i].v[1].x, faces[i].v[1].y, faces[i].v[1].z);
+
+                    rlTexCoord2f(faces[i].uv[2].x, faces[i].uv[2].y);
+                    rlVertex3f(faces[i].v[2].x, faces[i].v[2].y, faces[i].v[2].z);
+
+                    rlTexCoord2f(faces[i].uv[3].x, faces[i].uv[3].y);
+                    rlVertex3f(faces[i].v[3].x, faces[i].v[3].y, faces[i].v[3].z);
+
+                    rlEnd();
+                    rlSetTexture(0);
+                } else {
+                    // Fallback to colored triangles if texture not loaded
+                    DrawTriangle3D(faces[i].v[0], faces[i].v[1], faces[i].v[2], lit_color);
+                    DrawTriangle3D(faces[i].v[0], faces[i].v[2], faces[i].v[3], lit_color);
+                }
 
                 // draw wireframe
                 DrawLine3D(faces[i].v[0], faces[i].v[1], wire_color);

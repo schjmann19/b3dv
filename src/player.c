@@ -13,6 +13,7 @@ Player* player_create(float x, float y, float z)
     player->velocity = (Vector3){ 0, 0, 0 };
     player->on_ground = false;
     player->jump_used = false;
+    player->selected_block = BLOCK_STONE;  // Default to stone
     return player;
 }
 
@@ -85,15 +86,26 @@ void player_move_input(Player* player, Vector3 forward, Vector3 right, float dt)
     player->velocity.z = move.z;
 }
 
-// Check collision with a sphere
-bool world_check_collision_sphere(World* world, Vector3 pos, float radius)
+// Check collision for a rectangular prism (box) - AABB collision
+bool world_check_collision_box(World* world, Vector3 center_pos, float width, float height, float depth)
 {
-    int min_x = (int)floorf(pos.x - radius - 1.0f);
-    int max_x = (int)ceilf(pos.x + radius + 1.0f);
-    int min_y = (int)floorf(pos.y - radius - 1.0f);
-    int max_y = (int)ceilf(pos.y + radius + 1.0f);
-    int min_z = (int)floorf(pos.z - radius - 1.0f);
-    int max_z = (int)ceilf(pos.z + radius + 1.0f);
+    float half_width = width / 2.0f;
+    float half_height = height / 2.0f;
+    float half_depth = depth / 2.0f;
+
+    float box_min_x = center_pos.x - half_width;
+    float box_max_x = center_pos.x + half_width;
+    float box_min_y = center_pos.y - half_height;
+    float box_max_y = center_pos.y + half_height;
+    float box_min_z = center_pos.z - half_depth;
+    float box_max_z = center_pos.z + half_depth;
+
+    int min_x = (int)floorf(box_min_x - 1.0f);
+    int max_x = (int)ceilf(box_max_x + 1.0f);
+    int min_y = (int)floorf(box_min_y - 1.0f);
+    int max_y = (int)ceilf(box_max_y + 1.0f);
+    int min_z = (int)floorf(box_min_z - 1.0f);
+    int max_z = (int)ceilf(box_max_z + 1.0f);
 
     for (int y = min_y; y <= max_y; y++) {
         for (int z = min_z; z <= max_z; z++) {
@@ -107,42 +119,16 @@ bool world_check_collision_sphere(World* world, Vector3 pos, float radius)
                     float block_min_z = (float)z;
                     float block_max_z = (float)(z + 1);
 
-                    float closest_x = (pos.x < block_min_x) ? block_min_x : (pos.x > block_max_x) ? block_max_x : pos.x;
-                    float closest_y = (pos.y < block_min_y) ? block_min_y : (pos.y > block_max_y) ? block_max_y : pos.y;
-                    float closest_z = (pos.z < block_min_z) ? block_min_z : (pos.z > block_max_z) ? block_max_z : pos.z;
-
-                    float dx = pos.x - closest_x;
-                    float dy = pos.y - closest_y;
-                    float dz = pos.z - closest_z;
-                    float dist_sq = dx*dx + dy*dy + dz*dz;
-
-                    if (dist_sq < radius * radius) {
+                    // AABB to AABB collision check
+                    if (box_max_x > block_min_x && box_min_x < block_max_x &&
+                        box_max_y > block_min_y && box_min_y < block_max_y &&
+                        box_max_z > block_min_z && box_min_z < block_max_z) {
                         return true;
                     }
                 }
             }
         }
     }
-    return false;
-}
-
-// Check collision for a capsule (pill shape) - checks multiple points along vertical height
-bool world_check_collision_capsule(World* world, Vector3 center_pos, float height, float radius)
-{
-    // Sample collision at 5 points along the player's height
-    int num_samples = 5;
-    float sample_spacing = height / (float)(num_samples - 1);
-
-    for (int i = 0; i < num_samples; i++) {
-        float offset_y = -height / 2.0f + i * sample_spacing;
-        Vector3 sample_pos = center_pos;
-        sample_pos.y += offset_y;
-
-        if (world_check_collision_sphere(world, sample_pos, radius)) {
-            return true;
-        }
-    }
-
     return false;
 }
 
@@ -161,8 +147,8 @@ void player_update(Player* player, World* world, float dt)
         player->position.z + player->velocity.z * dt
     };
 
-    // Use capsule collision (0.7 blocks wide = 0.35 radius)
-    if (!world_check_collision_capsule(world, new_pos, PLAYER_HEIGHT, 0.35f)) {
+    // Use box collision (0.6 blocks wide and deep)
+    if (!world_check_collision_box(world, new_pos, 0.6f, PLAYER_HEIGHT, 0.6f)) {
         player->position = new_pos;
         player->on_ground = false;
     } else {
@@ -173,7 +159,7 @@ void player_update(Player* player, World* world, float dt)
             player->position.y,
             player->position.z
         };
-        if (!world_check_collision_capsule(world, test_x, PLAYER_HEIGHT, 0.35f)) {
+        if (!world_check_collision_box(world, test_x, 0.6f, PLAYER_HEIGHT, 0.6f)) {
             slide_pos.x = test_x.x;
         }
 
@@ -182,7 +168,7 @@ void player_update(Player* player, World* world, float dt)
             player->position.y + player->velocity.y * dt,
             player->position.z
         };
-        if (!world_check_collision_capsule(world, test_y, PLAYER_HEIGHT, 0.35f)) {
+        if (!world_check_collision_box(world, test_y, 0.6f, PLAYER_HEIGHT, 0.6f)) {
             slide_pos.y = test_y.y;
         } else {
             if (player->velocity.y < 0) {
@@ -197,14 +183,14 @@ void player_update(Player* player, World* world, float dt)
             slide_pos.y,
             player->position.z + player->velocity.z * dt
         };
-        if (!world_check_collision_capsule(world, test_z, PLAYER_HEIGHT, 0.35f)) {
+        if (!world_check_collision_box(world, test_z, 0.6f, PLAYER_HEIGHT, 0.6f)) {
             slide_pos.z = test_z.z;
         }
 
         player->position = slide_pos;
 
         Vector3 below = (Vector3){ player->position.x, player->position.y - 0.1f, player->position.z };
-        if (world_check_collision_capsule(world, below, PLAYER_HEIGHT, 0.35f)) {
+        if (world_check_collision_box(world, below, 0.6f, PLAYER_HEIGHT, 0.6f)) {
             player->on_ground = true;
             player->velocity.y = 0;
             player->jump_used = false;

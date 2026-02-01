@@ -117,6 +117,9 @@ int main(void)
     camera_yaw = atan2f(initial_forward.x, initial_forward.z);
     camera_pitch = asinf(initial_forward.y);
 
+    // Load block textures
+    world_load_textures(world);
+
     SetTargetFPS(TARGET_FPS);
 
     while (!WindowShouldClose() && !should_quit)
@@ -225,7 +228,11 @@ int main(void)
                         }
                     } else if (strncmp(chat_input, "/save ", 6) == 0) {
                         // Save world: /save worldname
-                        const char* world_name = chat_input + 6;
+                        char world_name_buf[256];
+                        strncpy(world_name_buf, chat_input + 6, sizeof(world_name_buf) - 1);
+                        world_name_buf[255] = '\0';
+                        trim_string(world_name_buf);
+                        const char* world_name = world_name_buf;
                         if (world_save(world, world_name)) {
                             printf("World '%s' saved successfully.\n", world_name);
                         } else {
@@ -233,7 +240,15 @@ int main(void)
                         }
                     } else if (strncmp(chat_input, "/load ", 6) == 0) {
                         // Load world: /load worldname
-                        const char* world_name = chat_input + 6;
+                        char world_name_buf[256];
+                        strncpy(world_name_buf, chat_input + 6, sizeof(world_name_buf) - 1);
+                        world_name_buf[255] = '\0';
+                        trim_string(world_name_buf);
+                        const char* world_name = world_name_buf;
+                        // Save current world first
+                        if (strlen(world->world_name) > 0) {
+                            world_save(world, world->world_name);
+                        }
                         if (world_load(world, world_name)) {
                             printf("World '%s' loaded successfully.\n", world_name);
                         } else {
@@ -241,7 +256,11 @@ int main(void)
                         }
                     } else if (strncmp(chat_input, "/createworld ", 13) == 0) {
                         // Create new world: /createworld worldname
-                        const char* world_name = chat_input + 13;
+                        char world_name_buf[256];
+                        strncpy(world_name_buf, chat_input + 13, sizeof(world_name_buf) - 1);
+                        world_name_buf[255] = '\0';
+                        trim_string(world_name_buf);
+                        const char* world_name = world_name_buf;
 
                         // Validate world name (ASCII alphanumeric + underscore only)
                         bool valid_name = true;
@@ -264,6 +283,7 @@ int main(void)
                             // Free current world and create new one
                             world_free(world);
                             world = world_create();
+                            world_load_textures(world);  // Load textures for new world
                             // Set the world name before generating
                             strncpy(world->world_name, world_name, sizeof(world->world_name) - 1);
                             world->world_name[sizeof(world->world_name) - 1] = '\0';
@@ -281,7 +301,11 @@ int main(void)
                         }
                     } else if (strncmp(chat_input, "/loadworld ", 11) == 0) {
                         // Load existing world: /loadworld worldname
-                        const char* world_name = chat_input + 11;
+                        char world_name_buf[256];
+                        strncpy(world_name_buf, chat_input + 11, sizeof(world_name_buf) - 1);
+                        world_name_buf[255] = '\0';
+                        trim_string(world_name_buf);
+                        const char* world_name = world_name_buf;
 
                         // Validate world name (ASCII alphanumeric + underscore only)
                         bool valid_name = true;
@@ -304,6 +328,7 @@ int main(void)
                             // Free current world and player, then load the saved one
                             world_free(world);
                             world = world_create();
+                            world_load_textures(world);  // Reload textures for new world
                             // Recreate player at default position
                             player = player_create(8.0f, 15.0f, 8.0f);
 
@@ -316,13 +341,41 @@ int main(void)
                                 world_generate_prism(world);  // Fall back to default world
                             }
                         }
+                    } else if (strncmp(chat_input, "/select ", 8) == 0) {
+                        // Select block type: /select <stone|grass|dirt>
+                        char block_name_buf[32];
+                        strncpy(block_name_buf, chat_input + 8, sizeof(block_name_buf) - 1);
+                        block_name_buf[31] = '\0';
+                        trim_string(block_name_buf);
+                        const char* block_name = block_name_buf;
+
+                        if (strcmp(block_name, "stone") == 0) {
+                            player->selected_block = BLOCK_STONE;
+                            printf("Selected block: stone\n");
+                        } else if (strcmp(block_name, "dirt") == 0) {
+                            player->selected_block = BLOCK_DIRT;
+                            printf("Selected block: dirt\n");
+                        } else if (strcmp(block_name, "grass") == 0) {
+                            player->selected_block = BLOCK_GRASS;
+                            printf("Selected block: grass\n");
+                        } else {
+                            printf("Unknown block type: %s. Available: stone, dirt, grass\n", block_name);
+                        }
                     } else if (strncmp(chat_input, "/setblock ", 10) == 0) {
-                        // Set block: /setblock x y z <block>
+                        // Set block: /setblock x y z [block_type]
+                        // If block_type is omitted, uses player's selected block
                         // All coordinates treated as world-space (centered at 0,0,0)
                         float fx, fy, fz;
                         char block_name[32] = {0};
 
-                        if (sscanf(chat_input, "/setblock %f %f %f %31s", &fx, &fy, &fz, block_name) == 4) {
+                        int parsed = sscanf(chat_input, "/setblock %f %f %f %31s", &fx, &fy, &fz, block_name);
+
+                        if (parsed >= 3) {
+                            // Trim block name if provided
+                            if (parsed == 4) {
+                                trim_string(block_name);
+                            }
+
                             // Convert world-space to block indices (infinite world, no offset needed)
                             int ix = (int)floorf(fx);
                             int iy = (int)floorf(fy);
@@ -331,15 +384,32 @@ int main(void)
                             BlockType block_type = BLOCK_AIR;
                             const char* type_str = "air";
 
-                            if (strcmp(block_name, "stone") == 0) {
-                                block_type = BLOCK_STONE;
-                                type_str = "stone";
-                            } else if (strcmp(block_name, "air") == 0) {
-                                block_type = BLOCK_AIR;
-                                type_str = "air";
+                            // If no block name provided, use selected block
+                            if (parsed == 3) {
+                                block_type = player->selected_block;
+                                // Get string representation of selected block
+                                if (block_type == BLOCK_STONE) type_str = "stone";
+                                else if (block_type == BLOCK_DIRT) type_str = "dirt";
+                                else if (block_type == BLOCK_GRASS) type_str = "grass";
+                                else if (block_type == BLOCK_AIR) type_str = "air";
                             } else {
-                                printf("Unknown block type: %s. Available: air, stone\n", block_name);
-                                ix = -1;  // Skip application
+                                // Parse explicit block name
+                                if (strcmp(block_name, "stone") == 0) {
+                                    block_type = BLOCK_STONE;
+                                    type_str = "stone";
+                                } else if (strcmp(block_name, "dirt") == 0) {
+                                    block_type = BLOCK_DIRT;
+                                    type_str = "dirt";
+                                } else if (strcmp(block_name, "grass") == 0) {
+                                    block_type = BLOCK_GRASS;
+                                    type_str = "grass";
+                                } else if (strcmp(block_name, "air") == 0) {
+                                    block_type = BLOCK_AIR;
+                                    type_str = "air";
+                                } else {
+                                    printf("Unknown block type: %s. Available: air, stone, dirt, grass\n", block_name);
+                                    ix = -1;  // Skip application
+                                }
                             }
 
                             // Apply if y is within valid bounds (x and z can be infinite)
@@ -351,9 +421,10 @@ int main(void)
                                 printf("Valid range: x,z unlimited, y in [0, %d]\n", 256);
                             }
                         } else {
-                            printf("Usage: /setblock x y z <block>\n");
+                            printf("Usage: /setblock x y z [block_type]\n");
                             printf("Coordinates are world-space (player spawn is ~0, 0, 0)\n");
-                            printf("Available blocks: air, stone\n");
+                            printf("Available blocks: air, stone, dirt, grass\n");
+                            printf("If block_type is omitted, uses currently selected block (use /select to change)\n");
                         }
                     }
                 }
@@ -687,7 +758,7 @@ int main(void)
                                 }
 
                                 // draw only visible faces
-                                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z);
+                                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block);
                                 blocks_rendered++;
                             }
                         }
@@ -924,6 +995,7 @@ int main(void)
 
     UnloadFont(custom_font);
     player_free(player);
+    world_unload_textures(world);  // Unload textures before closing
     world_free(world);
     CloseWindow();
     return 0;

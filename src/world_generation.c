@@ -26,6 +26,13 @@ World* world_create(void)
     world->chunk_cache.chunk_capacity = 0;
     world->last_loaded_chunk_x = INT32_MAX;
     world->last_loaded_chunk_z = INT32_MAX;
+
+    // Initialize texture cache
+    world->textures.textures_loaded = false;
+    world->textures.grass_texture = (Texture2D){0};
+    world->textures.dirt_texture = (Texture2D){0};
+    world->textures.stone_texture = (Texture2D){0};
+
     strncpy(world->world_name, "default", sizeof(world->world_name) - 1);
     world->world_name[sizeof(world->world_name) - 1] = '\0';
 
@@ -36,8 +43,63 @@ World* world_create(void)
 void world_free(World* world)
 {
     if (world) {
-
+        // Don't unload textures - they're shared across all worlds
+        // and will be unloaded when the application closes
         free(world);
+    }
+}
+
+// Load textures for blocks from ./assets/textures/blocks/
+void world_load_textures(World* world)
+{
+    if (!world || world->textures.textures_loaded) return;
+
+    // Try to load grass texture
+    world->textures.grass_texture = LoadTexture("./assets/textures/blocks/grass.png");
+    printf("[textures] grass texture id: %d\n", world->textures.grass_texture.id);
+
+    // Try to load dirt texture
+    world->textures.dirt_texture = LoadTexture("./assets/textures/blocks/dirt.png");
+    printf("[textures] dirt texture id: %d\n", world->textures.dirt_texture.id);
+
+    // Try to load stone texture
+    world->textures.stone_texture = LoadTexture("./assets/textures/blocks/stone.png");
+    printf("[textures] stone texture id: %d\n", world->textures.stone_texture.id);
+
+    world->textures.textures_loaded = true;
+    printf("[textures] Block textures loaded\n");
+}
+
+// Unload block textures
+void world_unload_textures(World* world)
+{
+    if (!world || !world->textures.textures_loaded) return;
+
+    UnloadTexture(world->textures.grass_texture);
+    UnloadTexture(world->textures.dirt_texture);
+    UnloadTexture(world->textures.stone_texture);
+
+    world->textures.textures_loaded = false;
+}
+
+// Get texture for a block type
+Texture2D world_get_block_texture(World* world, BlockType type)
+{
+    if (!world || !world->textures.textures_loaded) {
+        // Return invalid texture if not loaded
+        return (Texture2D){0};
+    }
+
+    switch (type) {
+        case BLOCK_GRASS:
+            return world->textures.grass_texture;
+        case BLOCK_DIRT:
+            return world->textures.dirt_texture;
+        case BLOCK_STONE:
+            return world->textures.stone_texture;
+        case BLOCK_AIR:
+        default:
+            return (Texture2D){0};
     }
 }
 
@@ -142,9 +204,20 @@ void world_generate_chunk(Chunk* chunk)
 
             for (int y = 0; y < CHUNK_HEIGHT; y++) {
                 int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
-                // Fill blocks below terrain height
+                // Fill blocks below terrain height with appropriate type
                 if (world_y < terrain_height_blocks) {
-                    chunk->blocks[y][z][x].type = BLOCK_STONE;
+                    // Top block is grass
+                    if (world_y == terrain_height_blocks - 1) {
+                        chunk->blocks[y][z][x].type = BLOCK_GRASS;
+                    }
+                    // 3 blocks below grass are dirt
+                    else if (world_y > terrain_height_blocks - 5 && world_y < terrain_height_blocks - 1) {
+                        chunk->blocks[y][z][x].type = BLOCK_DIRT;
+                    }
+                    // Everything else is stone
+                    else {
+                        chunk->blocks[y][z][x].type = BLOCK_STONE;
+                    }
                 } else {
                     chunk->blocks[y][z][x].type = BLOCK_AIR;
                 }
@@ -220,6 +293,10 @@ BlockType world_chunk_get_block(Chunk* chunk, int x, int y, int z)
 Color world_get_block_color(BlockType type)
 {
     switch (type) {
+        case BLOCK_GRASS:
+            return (Color){34, 139, 34, 255};  // Forest Green
+        case BLOCK_DIRT:
+            return (Color){139, 69, 19, 255};  // Saddle Brown
         case BLOCK_STONE:
             return (Color){128, 128, 128, 255};  // Grey
         case BLOCK_AIR:

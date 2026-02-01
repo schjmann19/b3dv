@@ -298,3 +298,60 @@ e
 /tp 1 100 1
 /tp 1 100 1
 /tp 1 100 1
+/tp 1 100 1
+/tp 1 100 1
+/createworld test3
+/tp 1 100 1
+/tp 1 100 1
+/tp 1 100 1
+/tp 1 100 1
+/tp 1 100 1
+/tp 10000 100 10000
+/createworld test67
+/loadworld 67
+/save 67
+/loadworld 67
+/loadworld 67
+/loadworld 67
+/save 67
+/loadworld default
+/loadworld 67
+/loadworld asd
+/loadworld 67
+/save 67
+/loadworld default
+/save default
+/loadworld 67
+/loadworld asd
+/save asd
+/tp 1 100 1
+/tp 1 100 1
+/tp 1 100 1
+/createworld pene
+/save pene
+/loadworld default
+/save default
+/loadworld pene
+/loadworld defautl
+/loadworld default
+/loadworld pene
+/tp 1 100 1
+/select grass
+/select dirt
+/select stone
+/select dirt
+/tp 1 100 1
+/select dirt
+/
+/select dirt
+/select dirt
+/tp 1 100 1
+/tp 1 100 1
+/tp 1 100 1
+/tp 1000000 100 1000000
+/tp 12000000 100 12000000
+/tp 11000000 100 11000000
+/tp 11000000 100 110000000
+/tp 110000000 100 110000000
+/tp 100 100 100
+/tp 100 100 100

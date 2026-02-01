@@ -8,7 +8,9 @@
 // Block types
 typedef enum {
     BLOCK_AIR = 0,
-    BLOCK_STONE = 1
+    BLOCK_STONE = 1,
+    BLOCK_DIRT = 2,
+    BLOCK_GRASS = 3
 } BlockType;
 
 // Chunk system for infinite worlds
@@ -21,6 +23,14 @@ typedef enum {
 typedef struct {
     BlockType type;
 } Block;
+
+// Texture cache for block types
+typedef struct {
+    Texture2D grass_texture;
+    Texture2D dirt_texture;
+    Texture2D stone_texture;
+    bool textures_loaded;
+} TextureCache;
 
 // Chunk structure - a 32x64x32 section of the world
 typedef struct {
@@ -42,6 +52,7 @@ typedef struct {
 // World structure - infinite world with chunk-based loading
 typedef struct {
     ChunkCache chunk_cache;
+    TextureCache textures;
     int32_t last_loaded_chunk_x;  // For tracking what needs to be loaded
     int32_t last_loaded_chunk_y;
     int32_t last_loaded_chunk_z;
@@ -52,6 +63,9 @@ typedef struct {
 World* world_create(void);
 void world_free(World* world);
 Color world_get_block_color(BlockType type);
+Texture2D world_get_block_texture(World* world, BlockType type);
+void world_load_textures(World* world);
+void world_unload_textures(World* world);
 void world_generate_prism(World* world);
 void world_system_init(void);
 bool world_save(World* world, const char* world_name);

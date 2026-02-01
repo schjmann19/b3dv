@@ -273,4 +273,25 @@ bool get_chat_history_line(int lines_back, char* out_line, size_t max_len)
     return true;
 }
 
+// Trim whitespace from both ends of a string
+void trim_string(char* str)
+{
+    if (!str || str[0] == '\0') return;
 
+    // Trim trailing whitespace
+    int len = strlen(str);
+    while (len > 0 && (str[len - 1] == ' ' || str[len - 1] == '\t' ||
+                       str[len - 1] == '\n' || str[len - 1] == '\r')) {
+        str[--len] = '\0';
+    }
+
+    // Trim leading whitespace
+    int start = 0;
+    while (str[start] && (str[start] == ' ' || str[start] == '\t')) {
+        start++;
+    }
+
+    if (start > 0) {
+        memmove(str, str + start, strlen(str + start) + 1);
+    }
+}

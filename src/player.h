@@ -17,6 +17,7 @@ typedef struct {
     Vector3 velocity;    // Current velocity
     bool on_ground;      // Is player touching ground
     bool jump_used;      // Has jump been used in this key press
+    BlockType selected_block;  // Currently selected block type for placement
 } Player;
 
 // Function declarations
@@ -24,7 +25,6 @@ Player* player_create(float x, float y, float z);
 void player_free(Player* player);
 void player_move_input(Player* player, Vector3 forward, Vector3 right, float dt);
 void player_update(Player* player, World* world, float dt);
-bool world_check_collision_sphere(World* world, Vector3 pos, float radius);
-bool world_check_collision_capsule(World* world, Vector3 center_pos, float height, float radius);
+bool world_check_collision_box(World* world, Vector3 center_pos, float width, float height, float depth);
 
 #endif
