@@ -1,4 +1,3 @@
-
 0.0.7b:
     fixed /select (some idiot hardcoded it and denied doing so)
     tweaked lighting

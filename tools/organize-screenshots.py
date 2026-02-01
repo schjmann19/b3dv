@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Alina Kravetska
+# SPDX-License-Identifier: BSD-3-Clause
+
 """
 Move all files with 'screenshot' in the name to ./Screenshots/
 If a file would overwrite an existing one, add a timestamp to the name instead.

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Jimena Neumann
+# SPDX-License-Identifier: BSD-3-Clause
 
 from PIL import Image
 import random
