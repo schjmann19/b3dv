@@ -166,21 +166,24 @@ void player_update(Player* player, World* world, float dt)
         // Predict next foot position (center of feet, 0.1 below player)
         Vector3 foot_pos = new_pos;
         foot_pos.y -= PLAYER_HEIGHT - 0.1f;
-        // Check all 4 corners under the player's feet
-        float check_radius = 0.28f; // slightly less than half width
-        bool all_supported = true;
-        for (float dx = -check_radius; dx <= check_radius; dx += 2 * check_radius) {
-            for (float dz = -check_radius; dz <= check_radius; dz += 2 * check_radius) {
+        // Check a grid under the player's feet (collision box)
+        float half = 0.3f; // half width of collision box
+        float step = 0.08f; // grid step (smaller = smoother)
+        bool any_supported = false;
+        for (float dx = -half; dx <= half; dx += step) {
+            for (float dz = -half; dz <= half; dz += step) {
                 int bx = (int)floorf(foot_pos.x + dx);
                 int by = (int)floorf(foot_pos.y - 0.05f);
                 int bz = (int)floorf(foot_pos.z + dz);
-                if (world_get_block(world, bx, by, bz) == BLOCK_AIR) {
-                    all_supported = false;
+                if (world_get_block(world, bx, by, bz) != BLOCK_AIR) {
+                    any_supported = true;
+                    break;
                 }
             }
+            if (any_supported) break;
         }
-        if (!all_supported) {
-            // Don't allow movement if any corner is over air
+        if (!any_supported) {
+            // Don't allow movement if the entire area under the box is unsupported
             new_pos.x = player->position.x;
             new_pos.z = player->position.z;
         }
@@ -201,19 +204,10 @@ void player_update(Player* player, World* world, float dt)
         };
         bool allow_x = !world_check_collision_box(world, test_x, 0.6f, PLAYER_HEIGHT, 0.6f);
         if (allow_x && player->shifting && player->on_ground) {
-            // Edge safety for X
-            Vector3 foot_pos = test_x;
-            foot_pos.y -= PLAYER_HEIGHT - 0.1f;
-            float check_radius = 0.28f;
-            for (float dx = -check_radius; dx <= check_radius; dx += 2 * check_radius) {
-                for (float dz = -check_radius; dz <= check_radius; dz += 2 * check_radius) {
-                    int bx = (int)floorf(foot_pos.x + dx);
-                    int by = (int)floorf(foot_pos.y - 0.05f);
-                    int bz = (int)floorf(foot_pos.z + dz);
-                    if (world_get_block(world, bx, by, bz) == BLOCK_AIR) {
-                        allow_x = false;
-                    }
-                }
+            // Edge safety for X: only allow if player would still be supported after moving
+            Vector3 below_test = (Vector3){ test_x.x, test_x.y - 0.1f, test_x.z };
+            if (!world_check_collision_box(world, below_test, 0.6f, PLAYER_HEIGHT, 0.6f)) {
+                allow_x = false;  // Would fall, don't allow
             }
         }
         if (allow_x) {
@@ -244,19 +238,10 @@ void player_update(Player* player, World* world, float dt)
         };
         bool allow_z = !world_check_collision_box(world, test_z, 0.6f, PLAYER_HEIGHT, 0.6f);
         if (allow_z && player->shifting && player->on_ground) {
-            // Edge safety for Z
-            Vector3 foot_pos = test_z;
-            foot_pos.y -= PLAYER_HEIGHT - 0.1f;
-            float check_radius = 0.28f;
-            for (float dx = -check_radius; dx <= check_radius; dx += 2 * check_radius) {
-                for (float dz = -check_radius; dz <= check_radius; dz += 2 * check_radius) {
-                    int bx = (int)floorf(foot_pos.x + dx);
-                    int by = (int)floorf(foot_pos.y - 0.05f);
-                    int bz = (int)floorf(foot_pos.z + dz);
-                    if (world_get_block(world, bx, by, bz) == BLOCK_AIR) {
-                        allow_z = false;
-                    }
-                }
+            // Edge safety for Z: only allow if player would still be supported after moving
+            Vector3 below_test = (Vector3){ test_z.x, test_z.y - 0.1f, test_z.z };
+            if (!world_check_collision_box(world, below_test, 0.6f, PLAYER_HEIGHT, 0.6f)) {
+                allow_z = false;  // Would fall, don't allow
             }
         }
         if (allow_z) {

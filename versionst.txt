@@ -1,3 +1,6 @@
+0.0.8c:
+    shifting is now smoother
+
 0.0.8b:
     do not spawn the player inside blocks
     grow a bit taller
