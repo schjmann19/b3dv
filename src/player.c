@@ -10,6 +10,7 @@ Player* player_create(float x, float y, float z)
 {
     Player* player = (Player*)malloc(sizeof(Player));
     player->position = (Vector3){ x, y, z };
+    player->prev_position = player->position;
     player->velocity = (Vector3){ 0, 0, 0 };
     player->on_ground = false;
     player->jump_used = false;
@@ -49,25 +50,36 @@ void player_move_input(Player* player, Vector3 forward, Vector3 right, float dt)
     Vector3 forward_horiz = vec3_cross((Vector3){0, 1, 0}, right_horiz);
     forward_horiz = vec3_normalize(forward_horiz);
 
-    Vector3 move = { 0, 0, 0 };
 
+
+    // Shifting (sneak) and sprinting support
+    player->shifting = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    bool sprinting = IsKeyDown(KEY_LEFT_CONTROL);
+    float move_speed = PLAYER_SPEED;
+    if (player->shifting) {
+        move_speed *= 0.5f;
+    } else if (sprinting) {
+        move_speed *= 1.5f;
+    }
+
+    Vector3 move = { 0, 0, 0 };
     if (IsKeyDown(KEY_W)) {
-        move = vec3_add(move, vec3_scale(forward_horiz, PLAYER_SPEED));
+        move = vec3_add(move, vec3_scale(forward_horiz, move_speed));
     }
     if (IsKeyDown(KEY_S)) {
-        move = vec3_add(move, vec3_scale(forward_horiz, -PLAYER_SPEED));
+        move = vec3_add(move, vec3_scale(forward_horiz, -move_speed));
     }
     if (IsKeyDown(KEY_D)) {
-        move = vec3_add(move, vec3_scale(right_horiz, PLAYER_SPEED));
+        move = vec3_add(move, vec3_scale(right_horiz, move_speed));
     }
     if (IsKeyDown(KEY_A)) {
-        move = vec3_add(move, vec3_scale(right_horiz, -PLAYER_SPEED));
+        move = vec3_add(move, vec3_scale(right_horiz, -move_speed));
     }
 
     // Normalize movement to prevent diagonal speedup
     float move_len = sqrtf(move.x * move.x + move.z * move.z);
-    if (move_len > PLAYER_SPEED) {
-        float scale = PLAYER_SPEED / move_len;
+    if (move_len > move_speed) {
+        float scale = move_speed / move_len;
         move.x *= scale;
         move.z *= scale;
     }
@@ -135,6 +147,8 @@ bool world_check_collision_box(World* world, Vector3 center_pos, float width, fl
 // Update player physics
 void player_update(Player* player, World* world, float dt)
 {
+    // Store previous position for speedometer
+    player->prev_position = player->position;
     player->velocity.y -= GRAVITY * dt;
 
     if (player->velocity.y < -50.0f) {
@@ -147,6 +161,31 @@ void player_update(Player* player, World* world, float dt)
         player->position.z + player->velocity.z * dt
     };
 
+    // Edge safety: if shifting, prevent walking off ledges
+    if (player->shifting && player->on_ground) {
+        // Predict next foot position (center of feet, 0.1 below player)
+        Vector3 foot_pos = new_pos;
+        foot_pos.y -= PLAYER_HEIGHT - 0.1f;
+        // Check all 4 corners under the player's feet
+        float check_radius = 0.28f; // slightly less than half width
+        bool all_supported = true;
+        for (float dx = -check_radius; dx <= check_radius; dx += 2 * check_radius) {
+            for (float dz = -check_radius; dz <= check_radius; dz += 2 * check_radius) {
+                int bx = (int)floorf(foot_pos.x + dx);
+                int by = (int)floorf(foot_pos.y - 0.05f);
+                int bz = (int)floorf(foot_pos.z + dz);
+                if (world_get_block(world, bx, by, bz) == BLOCK_AIR) {
+                    all_supported = false;
+                }
+            }
+        }
+        if (!all_supported) {
+            // Don't allow movement if any corner is over air
+            new_pos.x = player->position.x;
+            new_pos.z = player->position.z;
+        }
+    }
+
     // Use box collision (0.6 blocks wide and deep)
     if (!world_check_collision_box(world, new_pos, 0.6f, PLAYER_HEIGHT, 0.6f)) {
         player->position = new_pos;
@@ -154,15 +193,34 @@ void player_update(Player* player, World* world, float dt)
     } else {
         Vector3 slide_pos = player->position;
 
+        // Slide X
         Vector3 test_x = (Vector3){
             player->position.x + player->velocity.x * dt,
             player->position.y,
             player->position.z
         };
-        if (!world_check_collision_box(world, test_x, 0.6f, PLAYER_HEIGHT, 0.6f)) {
+        bool allow_x = !world_check_collision_box(world, test_x, 0.6f, PLAYER_HEIGHT, 0.6f);
+        if (allow_x && player->shifting && player->on_ground) {
+            // Edge safety for X
+            Vector3 foot_pos = test_x;
+            foot_pos.y -= PLAYER_HEIGHT - 0.1f;
+            float check_radius = 0.28f;
+            for (float dx = -check_radius; dx <= check_radius; dx += 2 * check_radius) {
+                for (float dz = -check_radius; dz <= check_radius; dz += 2 * check_radius) {
+                    int bx = (int)floorf(foot_pos.x + dx);
+                    int by = (int)floorf(foot_pos.y - 0.05f);
+                    int bz = (int)floorf(foot_pos.z + dz);
+                    if (world_get_block(world, bx, by, bz) == BLOCK_AIR) {
+                        allow_x = false;
+                    }
+                }
+            }
+        }
+        if (allow_x) {
             slide_pos.x = test_x.x;
         }
 
+        // Slide Y
         Vector3 test_y = (Vector3){
             slide_pos.x,
             player->position.y + player->velocity.y * dt,
@@ -178,12 +236,30 @@ void player_update(Player* player, World* world, float dt)
             player->velocity.y = 0;
         }
 
+        // Slide Z
         Vector3 test_z = (Vector3){
             slide_pos.x,
             slide_pos.y,
             player->position.z + player->velocity.z * dt
         };
-        if (!world_check_collision_box(world, test_z, 0.6f, PLAYER_HEIGHT, 0.6f)) {
+        bool allow_z = !world_check_collision_box(world, test_z, 0.6f, PLAYER_HEIGHT, 0.6f);
+        if (allow_z && player->shifting && player->on_ground) {
+            // Edge safety for Z
+            Vector3 foot_pos = test_z;
+            foot_pos.y -= PLAYER_HEIGHT - 0.1f;
+            float check_radius = 0.28f;
+            for (float dx = -check_radius; dx <= check_radius; dx += 2 * check_radius) {
+                for (float dz = -check_radius; dz <= check_radius; dz += 2 * check_radius) {
+                    int bx = (int)floorf(foot_pos.x + dx);
+                    int by = (int)floorf(foot_pos.y - 0.05f);
+                    int bz = (int)floorf(foot_pos.z + dz);
+                    if (world_get_block(world, bx, by, bz) == BLOCK_AIR) {
+                        allow_z = false;
+                    }
+                }
+            }
+        }
+        if (allow_z) {
             slide_pos.z = test_z.z;
         }
 

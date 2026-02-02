@@ -12,7 +12,7 @@
 // graphics and player constants
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
-#define TARGET_FPS 260
+#define TARGET_FPS 144
 #define RENDER_DISTANCE 50.0f
 #define FOG_START 30.0f
 #define CULLING_FOV 110.0f
@@ -21,7 +21,7 @@
 
 int main(void)
 {
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.8");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.8b");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -70,8 +70,15 @@ int main(void)
         world_save(world, "default");  // Save the generated world
     }
 
-    // create player at spawn position (high above the blocks)
-    Player* player = player_create(8.0f, 15.0f, 8.0f);
+    // create player at spawn position (on the surface)
+    float spawn_x = 8.0f;
+    float spawn_z = 8.0f;
+    // Calculate terrain height at spawn position
+    float h1 = sinf(spawn_x * 0.1f) * cosf(spawn_z * 0.1f) * 8.0f;
+    float h2 = sinf(spawn_x * 0.05f) * cosf(spawn_z * 0.05f) * 6.0f;
+    float terrain_h = h1 + h2 + 10.0f + 5.0f;  // Same calculation as terrain_height() + offset
+    float spawn_y = terrain_h + 1.5f;  // Place player 1.5 blocks above terrain
+    Player* player = player_create(spawn_x, spawn_y, spawn_z);
 
     // enable mouse capture
     bool mouse_captured = true;
@@ -127,7 +134,8 @@ int main(void)
     float fov_half_vert_tan = tanf(fovy_rad / 2.0f);
     float fov_half_horiz_tan = fov_half_vert_tan * ASPECT_RATIO;
 
-    SetTargetFPS(TARGET_FPS);
+    //SetTargetFPS(TARGET_FPS);
+    SetTargetFPS(0);
 
     while (!WindowShouldClose() && !should_quit)
     {
@@ -336,8 +344,14 @@ int main(void)
                             world_free(world);
                             world = world_create();
                             world_load_textures(world);  // Reload textures for new world
-                            // Recreate player at default position
-                            player = player_create(8.0f, 15.0f, 8.0f);
+                            // Recreate player at spawn position calculated from terrain height
+                            float spawn_x = 8.0f;
+                            float spawn_z = 8.0f;
+                            float h1 = sinf(spawn_x * 0.1f) * cosf(spawn_z * 0.1f) * 8.0f;
+                            float h2 = sinf(spawn_x * 0.05f) * cosf(spawn_z * 0.05f) * 6.0f;
+                            float terrain_h = h1 + h2 + 10.0f + 5.0f;
+                            float spawn_y = terrain_h + 1.5f;
+                            player = player_create(spawn_x, spawn_y, spawn_z);
 
                             if (world_load(world, world_name)) {
                                 // Reset player position
@@ -663,7 +677,7 @@ int main(void)
         }
 
         // update camera to follow player (position it at eye level, slightly above center)
-        float eye_height = 0.1f;  // Slightly above the head center
+        float eye_height = 0.7f;
         camera.position = (Vector3){
             player->position.x,
             player->position.y + eye_height,
@@ -853,7 +867,7 @@ int main(void)
             snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
             DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8 - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.8b - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
         } else if (hud_mode == 1) {
             // performance metrics HUD
             DrawTextEx(custom_font, "=== PERFORMANCE METRICS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -880,7 +894,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.8b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -895,11 +909,13 @@ int main(void)
             DrawTextEx(custom_font, pos_text, (Vector2){10, 90}, 32, 1, BLACK);
 
             // calculate speed (magnitude of velocity)
-            float speed = sqrtf(player->velocity.x * player->velocity.x +
-                               player->velocity.y * player->velocity.y +
-                               player->velocity.z * player->velocity.z);
+            // Use actual movement for speedometer
+            float dx = player->position.x - player->prev_position.x;
+            float dy = player->position.y - player->prev_position.y;
+            float dz = player->position.z - player->prev_position.z;
+            float actual_speed = sqrtf(dx*dx + dy*dy + dz*dz) / dt;
             char speed_text[64];
-            snprintf(speed_text, sizeof(speed_text), "Speed: %.2f m/s", speed);
+            snprintf(speed_text, sizeof(speed_text), "Speed: %.2f m/s", actual_speed);
             DrawTextEx(custom_font, speed_text, (Vector2){10, 130}, 32, 1, BLACK);
 
             // momentum/velocity components
@@ -908,14 +924,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.8b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.8 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.8b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused

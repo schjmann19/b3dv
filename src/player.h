@@ -14,10 +14,12 @@
 // Player structure
 typedef struct {
     Vector3 position;    // Head position
+    Vector3 prev_position; // Previous position (for actual movement)
     Vector3 velocity;    // Current velocity
     bool on_ground;      // Is player touching ground
     bool jump_used;      // Has jump been used in this key press
     BlockType selected_block;  // Currently selected block type for placement
+    bool shifting;       // Is player holding shift (sneak)
 } Player;
 
 // Function declarations

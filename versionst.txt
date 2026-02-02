@@ -1,3 +1,10 @@
+0.0.8b:
+    do not spawn the player inside blocks
+    grow a bit taller
+    added shifting
+    added sprinting
+    fixed speedometer
+
 0.0.8:
     added depth limit -20; hindering the effects of The Great Decelerator; the eldritch creature that lives under the world and lags the game the lower you go. Frames sink into it's uncomprehensible sea of entropy like space dust into black holes.
 

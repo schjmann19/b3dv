@@ -404,3 +404,20 @@ e
 /setblock -37 -20 1 sand
 /setblock -37 -19 1 sand
 /setblock -37 -19 1 air
+/tp 20 20 20
+/select dirt
+/select stone
+/select grass
+/select sand
+/select wood
+/select bedrock
+/tp 20 20 20
+/save asd
+/save asd
+/save default
+/tp 10 1000 10
+/select graass
+/select gras
+/select grass
+/save default
+/select grass

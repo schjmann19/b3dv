@@ -14,12 +14,12 @@ os.makedirs(OUT_DIR, exist_ok=True)
 # ---- block definitions ----
 # name : (base_color, variation)
 BLOCKS = {
-    "dirt":   ((120, 100, 80),  25),
-    "grass":  ((95, 140, 70),   20),
-    "stone":  ((125, 125, 125), 18),
-    "sand":   ((200, 190, 140), 15),
-    "wood":   ((140, 110, 70),  22),
-    "bedrock":((21, 21, 21),    10),
+    "dirt":    ((120, 100, 80),  25),
+    "grass":   ((95, 140, 70),   20),
+    "stone":   ((125, 125, 125), 18),
+    "sand":    ((200, 190, 140), 15),
+    "wood":    ((140, 110, 70),  22),
+    "bedrock": ((21, 21, 21),    10),
 }
 
 def clamp(v):
