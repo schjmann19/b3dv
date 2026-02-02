@@ -50,8 +50,8 @@ WIN_CFLAGS = -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto -f
             -fno-trapping-math -faligned-new -funroll-loops -I$(WIN_RAYLIB_PATH)/src
 WIN_LDFLAGS = -L$(WIN_RAYLIB_PATH)/src -l:libraylib.a -lopengl32 -lgdi32 -lwinmm -lpsapi -lm -static-libgcc -flto
 
-SOURCES = src/main.c src/world_generation.c src/player.c src/vec_math.c src/rendering.c src/utils.c
-HEADERS = src/world.h src/player.h src/vec_math.h src/rendering.h src/utils.h
+SOURCES = src/main.c src/world_generation.c src/player.c src/vec_math.c src/rendering.c src/utils.c src/menu.c
+HEADERS = src/world.h src/player.h src/vec_math.h src/rendering.h src/utils.h src/menu.h
 
 # Default target
 all: b3dv

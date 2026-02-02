@@ -8,6 +8,7 @@
 #include "vec_math.h"
 #include "rendering.h"
 #include "utils.h"
+#include "menu.h"
 
 // graphics and player constants
 #define WINDOW_WIDTH 800
@@ -21,7 +22,7 @@
 
 int main(void)
 {
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.8b");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.8d");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -60,29 +61,18 @@ int main(void)
         .projection = CAMERA_PERSPECTIVE
     };
 
-    // create and generate world
-    world_system_init();  // Initialize world save system
-    World* world = world_create();
+    // Initialize world save system (needed for menu world scanning)
+    world_system_init();
 
-    // Try to load default world, or generate new one
-    if (!world_load(world, "default")) {
-        world_generate_prism(world);
-        world_save(world, "default");  // Save the generated world
-    }
+    // Create menu system
+    MenuSystem* menu = menu_system_create();
 
-    // create player at spawn position (on the surface)
-    float spawn_x = 8.0f;
-    float spawn_z = 8.0f;
-    // Calculate terrain height at spawn position
-    float h1 = sinf(spawn_x * 0.1f) * cosf(spawn_z * 0.1f) * 8.0f;
-    float h2 = sinf(spawn_x * 0.05f) * cosf(spawn_z * 0.05f) * 6.0f;
-    float terrain_h = h1 + h2 + 10.0f + 5.0f;  // Same calculation as terrain_height() + offset
-    float spawn_y = terrain_h + 1.5f;  // Place player 1.5 blocks above terrain
-    Player* player = player_create(spawn_x, spawn_y, spawn_z);
+    // World and player will be created after menu selection
+    World* world = NULL;
+    Player* player = NULL;
 
-    // enable mouse capture
-    bool mouse_captured = true;
-    DisableCursor();
+    // enable mouse capture (will be disabled in menu)
+    bool mouse_captured = false;
 
     // HUD mode (0 = default, 1 = performance metrics 2 = player, 3 = system info)
     int hud_mode = 0;
@@ -116,18 +106,14 @@ int main(void)
     Vector3 camera_right = {1, 0, 0};
     Vector3 camera_up = {0, 1, 0};
     // Persistent camera forward (actual look direction)
-    Vector3 camera_forward = vec3_normalize(vec3_sub(camera.target, camera.position));
+    Vector3 camera_forward = (Vector3){0, 0, 1};
 
     // Initialize camera angles from initial forward direction
-    Vector3 initial_forward = vec3_normalize(vec3_sub(camera.target, camera.position));
-    camera_yaw = atan2f(initial_forward.x, initial_forward.z);
-    camera_pitch = asinf(initial_forward.y);
+    camera_yaw = 0.0f;
+    camera_pitch = 0.0f;
 
     // Raycast caching - only update every 3 frames
     int raycast_frame_counter = 0;
-
-    // Load block textures
-    world_load_textures(world);
 
     // Pre-compute FOV values for visibility checks (avoid repeated tan calculations)
     float fovy_rad = CULLING_FOV * 3.14159265f / 180.0f;
@@ -140,6 +126,69 @@ int main(void)
     while (!WindowShouldClose() && !should_quit)
     {
         float dt = GetFrameTime();
+
+        // Handle menu state
+        if (menu->current_state == MENU_STATE_MAIN) {
+            BeginDrawing();
+            menu_draw_main(menu, custom_font);
+            EndDrawing();
+            menu_update_input(menu);
+            continue;
+        }
+        else if (menu->current_state == MENU_STATE_WORLD_SELECT) {
+            BeginDrawing();
+            menu_draw_world_select(menu, custom_font);
+            EndDrawing();
+            menu_update_input(menu);
+            continue;
+        }
+        else if (menu->current_state == MENU_STATE_CREATE_WORLD) {
+            BeginDrawing();
+            menu_draw_create_world(menu, custom_font);
+            EndDrawing();
+            menu_update_input(menu);
+            continue;
+        }
+        else if (menu->current_state == MENU_STATE_GAME && menu->should_start_game) {
+            // Initialize game with selected world
+            if (!world) {
+                world = world_create();
+                // Try to load the selected world, or generate new one
+                if (!world_load(world, menu->selected_world_name)) {
+                    world_generate_prism(world);
+                    world_save(world, menu->selected_world_name);
+                }
+
+                // Load block textures
+                world_load_textures(world);
+
+                // Create player at spawn position
+                float spawn_x = 8.0f;
+                float spawn_z = 8.0f;
+                // Calculate terrain height at spawn position
+                float h1 = sinf(spawn_x * 0.1f) * cosf(spawn_z * 0.1f) * 8.0f;
+                float h2 = sinf(spawn_x * 0.05f) * cosf(spawn_z * 0.05f) * 6.0f;
+                float terrain_h = h1 + h2 + 10.0f + 5.0f;
+                float spawn_y = terrain_h + 1.5f;
+                player = player_create(spawn_x, spawn_y, spawn_z);
+
+                // Enable mouse capture for gameplay
+                mouse_captured = true;
+                DisableCursor();
+
+                // Initialize camera forward
+                Vector3 initial_forward = vec3_normalize(vec3_sub(camera.target, camera.position));
+                camera_forward = initial_forward;
+                camera_yaw = atan2f(initial_forward.x, initial_forward.z);
+                camera_pitch = asinf(initial_forward.y);
+            }
+            menu->should_start_game = false;
+        }
+
+        // Game logic below (only runs when in GAME state and world is initialized)
+        if (!world || !player) {
+            continue;
+        }
 
         // Chat system - handle first to consume all input when active
         if (chat_active) {
@@ -867,7 +916,7 @@ int main(void)
             snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
             DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8b - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.8d - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
         } else if (hud_mode == 1) {
             // performance metrics HUD
             DrawTextEx(custom_font, "=== PERFORMANCE METRICS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -894,7 +943,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.8d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -924,14 +973,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.8d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.8b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.8d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused
@@ -952,7 +1001,7 @@ int main(void)
                        64, 2, RED);
 
             // button dimensions
-            int button_width = 200;
+            int button_width = 450;
             int button_height = 60;
             int button_spacing = 20;
             int center_x = screen_width / 2;
@@ -990,8 +1039,8 @@ int main(void)
             // draw quit button
             DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : GRAY);
             DrawRectangleLinesEx(quit_button, 2, WHITE);
-            Vector2 quit_text_size = MeasureTextEx(custom_font, "Quit", 32, 1);
-            DrawTextEx(custom_font, "Quit",
+            Vector2 quit_text_size = MeasureTextEx(custom_font, "Save & Quit to main menu", 32, 1);
+            DrawTextEx(custom_font, "Save & Quit to main menu",
                        (Vector2){center_x - quit_text_size.x / 2, center_y + button_height + button_spacing + 12},
                        32, 1, BLACK);
 
@@ -1003,7 +1052,21 @@ int main(void)
                     mouse_captured = true;
                     DisableCursor();
                 } else if (quit_hover) {
-                    should_quit = true;
+                    // Save world and return to main menu
+                    world_save(world, world->world_name);
+                    paused = false;
+                    should_quit = false;
+                    // Reset menu state to main
+                    menu->current_state = MENU_STATE_MAIN;
+                    // Free world and player
+                    world_unload_textures(world);
+                    world_free(world);
+                    player_free(player);
+                    world = NULL;
+                    player = NULL;
+                    // Release mouse
+                    mouse_captured = false;
+                    EnableCursor();
                 }
             }
         }
@@ -1043,13 +1106,20 @@ int main(void)
         EndDrawing();
     }
 
-    // Save world before closing
-    world_save(world, "default");
+    // Save world before closing (if one was loaded)
+    if (world) {
+        world_save(world, world->world_name);
+    }
+
+    // Clean up menu system
+    menu_system_free(menu);
 
     UnloadFont(custom_font);
-    player_free(player);
-    world_unload_textures(world);  // Unload textures before closing
-    world_free(world);
+    if (player) player_free(player);
+    if (world) {
+        world_unload_textures(world);  // Unload textures before closing
+        world_free(world);
+    }
     CloseWindow();
     return 0;
 }

@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "world.h"
 #include "raylib.h"
@@ -177,7 +178,7 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
 
     // Try to load from disk
     char filepath[512];
-    snprintf(filepath, sizeof(filepath), "./worlds/%s_chunks/chunk_%d_%d_%d.chunk",
+    snprintf(filepath, sizeof(filepath), "./worlds/%s/chunks/chunk_%d_%d_%d.chunk",
              world->world_name, chunk_x, chunk_y, chunk_z);
 
     FILE* file = fopen(filepath, "rb");
@@ -446,9 +447,8 @@ void world_system_init(void)
 {
     #ifdef _WIN32
         system("if not exist worlds mkdir worlds");
-        system("if not exist worlds\\default_chunks mkdir worlds\\default_chunks");
     #else
-        system("mkdir -p ./worlds/default_chunks");
+        system("mkdir -p ./worlds");
     #endif
 }
 
@@ -459,24 +459,46 @@ bool world_save(World* world, const char* world_name)
 
     world_system_init();
 
+    // Create world metadata file
+    char world_dir[512];
+    snprintf(world_dir, sizeof(world_dir), "./worlds/%s", world_name);
+
+    #ifdef _WIN32
+        char mkdir_cmd[512];
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "if not exist worlds\\%s mkdir worlds\\%s", world_name, world_name);
+        system(mkdir_cmd);
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "if not exist worlds\\%s\\chunks mkdir worlds\\%s\\chunks", world_name, world_name);
+        system(mkdir_cmd);
+    #else
+        char mkdir_cmd[512];
+        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p ./worlds/%s/chunks", world_name);
+        system(mkdir_cmd);
+    #endif
+
+    // Write world metadata file
+    char metadata_path[512];
+    snprintf(metadata_path, sizeof(metadata_path), "./worlds/%s/world.txt", world_name);
+
+    FILE* metadata_file = fopen(metadata_path, "w");
+    if (metadata_file) {
+        time_t now = time(NULL);
+        struct tm* timeinfo = localtime(&now);
+        char time_str[64];
+        strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", timeinfo);
+
+        fprintf(metadata_file, "name=%s\n", world_name);
+        fprintf(metadata_file, "last_saved=%s\n", time_str);
+        fprintf(metadata_file, "chunk_count=%d\n", world->chunk_cache.chunk_count);
+        fclose(metadata_file);
+    }
+
     // Save each loaded chunk
     for (int i = 0; i < world->chunk_cache.chunk_count; i++) {
         Chunk* chunk = &world->chunk_cache.chunks[i];
 
         char filepath[512];
-        snprintf(filepath, sizeof(filepath), "./worlds/%s_chunks/chunk_%d_%d_%d.chunk",
+        snprintf(filepath, sizeof(filepath), "./worlds/%s/chunks/chunk_%d_%d_%d.chunk",
                  world_name, chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
-
-        #ifdef _WIN32
-            // Create directory if needed
-            char mkdir_cmd[512];
-            snprintf(mkdir_cmd, sizeof(mkdir_cmd), "if not exist worlds\\%s_chunks mkdir worlds\\%s_chunks", world_name, world_name);
-            system(mkdir_cmd);
-        #else
-            char mkdir_cmd[512];
-            snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p ./worlds/%s_chunks", world_name);
-            system(mkdir_cmd);
-        #endif
 
         FILE* file = fopen(filepath, "wb");
         if (!file) continue;
