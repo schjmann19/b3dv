@@ -1,0 +1,28 @@
+Selecionar Mundo
+Criar Mundo
+Créditos e Informações
+Sair
+Voltar
+Nome do Mundo (alfanumérico + sublinhado):
+Criar
+Cancelar
+O nome do mundo não pode estar vazio
+O mundo já existe
+Nenhum mundo encontrado
+Criar Novo Mundo
+Selecionar Mundo
+Último: %s | Chunks: %d
+WASD para mover, Espaço para pular
+F3 para métricas de desempenho, F2 para esta tela, F4 para estatísticas do jogador
+F5 para informações do sistema, F7 para ativar/desativar a captura do mouse
+Mouse para olhar ao redor
+ESC ou P para pausar
+PAUSADO
+Retomar
+Voltar ao Menu
+Métricas de Desempenho
+Informações do Sistema
+Informações do Jogador
+FPS:
+Coordenadas:
+b3dv 0.0.9b

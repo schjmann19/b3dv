@@ -1,0 +1,13 @@
+B3DV - Visualizador 3D Básico
+Versión 0.0.9b
+
+Un explorador de mundos voxel en 3D
+construido con raylib
+
+Créditos:
+- Idea: Leandro Testa
+- Absolutamente todo lo demás: yo
+
+Raylib de Ramon Santamaria: https://www.raylib.com/
+
+(c) 2026 Jimena Neumann

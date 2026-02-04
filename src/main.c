@@ -22,33 +22,38 @@
 
 int main(void)
 {
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.8d");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9b");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
 
-    // load custom font at larger size for better quality (with fallback)
+    // Load JetBrainsMono font from assets directory with comprehensive Unicode support
     Font custom_font = {0};
-    const char* font_paths[] = {
-        // linux paths
-        "/usr/share/fonts/TTF/JetBrainsMonoNerdFontMono-Regular.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-        // windows paths (common locations)
-        "C:\\Windows\\Fonts\\JetBrainsMono-Regular.ttf",
-        "C:\\Windows\\Fonts\\consola.ttf",
-        "C:\\Windows\\Fonts\\cour.ttf",
-        NULL
-    };
 
-    for (int i = 0; font_paths[i] != NULL; i++) {
-        if (FileExists(font_paths[i])) {
-            custom_font = LoadFontEx(font_paths[i], 64, NULL, 0);
-            break;
-        }
+    // Build codepoint array with all ASCII and common extended characters
+    int codepoints[1024] = {0};
+    int codepoint_count = 0;
+
+    // Full ASCII range (0-127)
+    for (int i = 0; i < 128; i++) {
+        codepoints[codepoint_count++] = i;
+    }
+    // Latin-1 Supplement (128-255)
+    for (int i = 128; i < 256; i++) {
+        codepoints[codepoint_count++] = i;
+    }
+    // Latin Extended-A (256-383)
+    for (int i = 256; i < 384; i++) {
+        codepoints[codepoint_count++] = i;
+    }
+    // Cyrillic block (0x0400-0x04FF) for Russian, Ukrainian, Serbian, etc.
+    for (int i = 0x0400; i <= 0x04FF && codepoint_count < 1024; i++) {
+        codepoints[codepoint_count++] = i;
     }
 
-    // if no font found, use default raylib font
+    custom_font = LoadFontEx("./assets/fonts/JetBrainsMono/ttf/JetBrainsMono-Regular.ttf", 64, codepoints, codepoint_count);
+
+    // if font not loaded, use default raylib font
     if (custom_font.glyphCount == 0) {
         custom_font = GetFontDefault();
     }
@@ -145,6 +150,13 @@ int main(void)
         else if (menu->current_state == MENU_STATE_CREATE_WORLD) {
             BeginDrawing();
             menu_draw_create_world(menu, custom_font);
+            EndDrawing();
+            menu_update_input(menu);
+            continue;
+        }
+        else if (menu->current_state == MENU_STATE_CREDITS) {
+            BeginDrawing();
+            menu_draw_credits(menu, custom_font);
             EndDrawing();
             menu_update_input(menu);
             continue;
@@ -901,32 +913,32 @@ int main(void)
         // draw HUD based on mode
         if (hud_mode == 0) {
             // default HUD
-            DrawTextEx(custom_font, "WASD to move, Space to jump", (Vector2){10, 10}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "F3 for performance metrics, F2 for this", (Vector2){10, 50}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "F7 to toggle mouse capture", (Vector2){10, 90}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "Mouse to look around", (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "ESC or P to pause", (Vector2){10, 170}, 32, 1, BLACK);
+            DrawTextEx(custom_font, menu->game_text.move_controls, (Vector2){10, 10}, 32, 1, BLACK);
+            DrawTextEx(custom_font, menu->game_text.metrics_help, (Vector2){10, 50}, 32, 1, BLACK);
+            DrawTextEx(custom_font, menu->game_text.mouse_help, (Vector2){10, 90}, 32, 1, BLACK);
+            DrawTextEx(custom_font, menu->game_text.look_help, (Vector2){10, 130}, 32, 1, BLACK);
+            DrawTextEx(custom_font, menu->game_text.pause_help, (Vector2){10, 170}, 32, 1, BLACK);
 
-            char coord_text[64];
-            snprintf(coord_text, sizeof(coord_text), "Pos: (%.1f, %.1f, %.1f)",
-                     player->position.x, player->position.y, player->position.z);
+            char coord_text[128];
+            snprintf(coord_text, sizeof(coord_text), "%s (%.1f, %.1f, %.1f)",
+                     menu->game_text.coord_label, player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, coord_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            char fps_text[32];
-            snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
+            char fps_text[64];
+            snprintf(fps_text, sizeof(fps_text), "%s %d", menu->game_text.fps_label, GetFPS());
             DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8d - Jimena Neumann", (Vector2){10, 290}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, menu->game_text.version, (Vector2){10, 290}, 32, 1, DARKGRAY);
         } else if (hud_mode == 1) {
             // performance metrics HUD
-            DrawTextEx(custom_font, "=== PERFORMANCE METRICS ===", (Vector2){10, 10}, 32, 1, BLACK);
+            DrawTextEx(custom_font, menu->game_text.perf_metrics, (Vector2){10, 10}, 32, 1, BLACK);
 
             char frame_time[64];
             snprintf(frame_time, sizeof(frame_time), "Frame Time: %.2f ms", dt * 1000.0f);
             DrawTextEx(custom_font, frame_time, (Vector2){10, 50}, 32, 1, BLACK);
 
             char fps_text[32];
-            snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
+            snprintf(fps_text, sizeof(fps_text), "%s %d", menu->game_text.fps_label, GetFPS());
             DrawTextEx(custom_font, fps_text, (Vector2){10, 90}, 32, 1, BLACK);
 
             char blocks_text[64];
@@ -943,7 +955,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -973,14 +985,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.8d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.8d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9b - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused
@@ -993,10 +1005,10 @@ int main(void)
             DrawRectangle(0, 0, screen_width, screen_height, (Color){0, 0, 0, 150});
 
             // measure text to center it
-            Vector2 paused_size = MeasureTextEx(custom_font, "PAUSED", 64, 2);
+            Vector2 paused_size = MeasureTextEx(custom_font, menu->game_text.paused, 64, 2);
 
             // draw title
-            DrawTextEx(custom_font, "PAUSED",
+            DrawTextEx(custom_font, menu->game_text.paused,
                        (Vector2){(screen_width - paused_size.x) / 2, screen_height / 2 - 120},
                        64, 2, RED);
 
@@ -1031,16 +1043,16 @@ int main(void)
             // draw resume button
             DrawRectangleRec(resume_button, resume_hover ? LIGHTGRAY : GRAY);
             DrawRectangleLinesEx(resume_button, 2, WHITE);
-            Vector2 resume_text_size = MeasureTextEx(custom_font, "Resume", 32, 1);
-            DrawTextEx(custom_font, "Resume",
+            Vector2 resume_text_size = MeasureTextEx(custom_font, menu->game_text.resume, 32, 1);
+            DrawTextEx(custom_font, menu->game_text.resume,
                        (Vector2){center_x - resume_text_size.x / 2, center_y + 12},
                        32, 1, BLACK);
 
             // draw quit button
             DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : GRAY);
             DrawRectangleLinesEx(quit_button, 2, WHITE);
-            Vector2 quit_text_size = MeasureTextEx(custom_font, "Save & Quit to main menu", 32, 1);
-            DrawTextEx(custom_font, "Save & Quit to main menu",
+            Vector2 quit_text_size = MeasureTextEx(custom_font, menu->game_text.back_to_menu, 32, 1);
+            DrawTextEx(custom_font, menu->game_text.back_to_menu,
                        (Vector2){center_x - quit_text_size.x / 2, center_y + button_height + button_spacing + 12},
                        32, 1, BLACK);
 

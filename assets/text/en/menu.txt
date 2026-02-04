@@ -1,0 +1,28 @@
+Select World
+Create World
+Credits & Info
+Quit
+Back
+World Name (alphanumeric + underscore):
+Create
+Cancel
+World name cannot be empty
+World already exists
+No worlds found
+Create New World
+Select World
+Last: %s | Chunks: %d
+WASD to move, Space to jump
+F3 for performance metrics, F2 for this, f4 for player stats
+F5 for system info, F7 to toggle mouse capture
+Mouse to look around
+ESC or P to pause
+PAUSED
+Resume
+Back to Menu
+Performance Metrics
+System Info
+Player Info
+FPS:
+Coordinates:
+b3dv 0.0.9b

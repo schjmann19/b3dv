@@ -46,6 +46,7 @@ typedef struct {
     int32_t chunk_z;
     bool loaded;      // Whether this chunk is currently in memory
     bool generated;   // Whether terrain has been generated
+    bool modified;    // Whether this chunk has unsaved changes
 } Chunk;
 
 // Chunk cache - stores loaded chunks
@@ -76,6 +77,7 @@ void world_generate_prism(World* world);
 void world_system_init(void);
 bool world_save(World* world, const char* world_name);
 bool world_load(World* world, const char* world_name);
+bool world_save_chunk(Chunk* chunk, const char* world_name);  // Save a single chunk to disk
 void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forward);
 Chunk* world_get_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 void world_set_block(World* world, int x, int y, int z, BlockType type);

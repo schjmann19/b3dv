@@ -25,7 +25,6 @@ def get_latest_version(versions_file):
 
 def find_version_pattern(content):
     """Find all version patterns in content (e.g., 0.0.7, 0.0.7b)"""
-    # match version patterns like X.X.X or X.X.Xb, X.X.Xc, etc.
     pattern = r'\d+\.\d+\.\d+[a-z]?'
     return re.findall(pattern, content)
 
@@ -35,7 +34,6 @@ def update_file(filepath, old_version, new_version):
         with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
 
-        # replace all occurrences of the old version with the new version
         updated_content = content.replace(old_version, new_version)
 
         if content != updated_content:
@@ -48,28 +46,40 @@ def update_file(filepath, old_version, new_version):
         return False
 
 def update_version():
-    # get the script directory
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
     versions_file = project_root / "versionst.txt"
 
-    # get the latest version
     latest_version = get_latest_version(versions_file)
     print(f"Latest version from versionst.txt: {latest_version}")
 
-    # find all C/H source files
-    src_dir = project_root / "src"
-    files_to_update = list(src_dir.glob("*.c")) + list(src_dir.glob("*.h"))
+    files_to_update = []
 
-    # add LICENSE file
+    # src files
+    src_dir = project_root / "src"
+    files_to_update += list(src_dir.glob("*.c"))
+    files_to_update += list(src_dir.glob("*.h"))
+
+    # LICENSE
     license_file = project_root / "LICENSE"
     if license_file.exists():
         files_to_update.append(license_file)
 
-    # add README.md
+    # README
     readme_file = project_root / "README.md"
     if readme_file.exists():
         files_to_update.append(readme_file)
+
+    # assets/**/*.txt (recursive)
+    assets_dir = project_root / "assets"
+    if assets_dir.exists():
+        files_to_update += list(assets_dir.glob("**/*.txt"))
+
+    # NEVER modify the source-of-truth file
+    files_to_update = [
+        f for f in files_to_update
+        if f.resolve() != versions_file.resolve()
+    ]
 
     if not files_to_update:
         print("No source files found to update")
@@ -79,14 +89,12 @@ def update_version():
     for f in files_to_update:
         print(f"  - {f.relative_to(project_root)}")
 
-    # find current version(s) in files
     current_versions = set()
     for filepath in files_to_update:
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
-                versions = find_version_pattern(content)
-                current_versions.update(versions)
+                current_versions.update(find_version_pattern(content))
         except Exception:
             pass
 
@@ -101,7 +109,6 @@ def update_version():
         print(f"\n✓ Files already use version {latest_version}")
         sys.exit(0)
 
-    # update files - replace all found versions with the latest one
     versions_to_update = [v for v in current_versions if v != latest_version]
 
     updated_count = 0

@@ -9,6 +9,7 @@ typedef enum {
     MENU_STATE_MAIN,
     MENU_STATE_WORLD_SELECT,
     MENU_STATE_CREATE_WORLD,
+    MENU_STATE_CREDITS,
     MENU_STATE_GAME
 } MenuState;
 
@@ -18,6 +19,24 @@ typedef struct {
     char created[64];
     int chunk_count;
 } WorldInfo;
+
+// Game text localization (used in-game for HUD, pause menu, etc)
+typedef struct {
+    char move_controls[256];
+    char metrics_help[256];
+    char mouse_help[256];
+    char look_help[256];
+    char pause_help[256];
+    char paused[64];
+    char resume[64];
+    char back_to_menu[64];
+    char perf_metrics[256];
+    char system_info[256];
+    char player_info[256];
+    char fps_label[64];
+    char coord_label[64];
+    char version[256];
+} GameText;
 
 // Menu system state
 typedef struct {
@@ -33,6 +52,34 @@ typedef struct {
     int new_world_name_len;
     bool create_world_error;
     char create_world_error_msg[256];
+    // Background image
+    Texture2D background_texture;
+    bool background_loaded;
+    // Localization
+    char current_language[32];
+    char available_languages[16][32];  // Up to 16 language codes
+    int available_languages_count;
+    int current_language_index;
+    // Menu text
+    char text_select_world[256];
+    char text_create_world[256];
+    char text_credits_info[256];
+    char text_quit[256];
+    char text_back[256];
+    char text_world_name_label[512];
+    char text_create_btn[128];
+    char text_cancel_btn[128];
+    char text_error_empty_name[256];
+    char text_error_exists[256];
+    char text_no_worlds[256];
+    char text_title_create_world[256];
+    char text_title_select_world[256];
+    char text_last[128];
+    char text_chunks[128];
+    // Game text (in-game HUD, pause menu, etc)
+    GameText game_text;
+    // Credits & info text
+    char credits_text[4096];
 } MenuSystem;
 
 // Function declarations
@@ -42,6 +89,9 @@ void menu_scan_worlds(MenuSystem* menu);
 void menu_draw_main(MenuSystem* menu, Font font);
 void menu_draw_world_select(MenuSystem* menu, Font font);
 void menu_draw_create_world(MenuSystem* menu, Font font);
+void menu_draw_credits(MenuSystem* menu, Font font);
 void menu_update_input(MenuSystem* menu);
+void menu_load_language(MenuSystem* menu, const char* language);
+bool menu_load_text_file(const char* language, const char* filename, char* out_buffer, int buffer_size);
 
 #endif

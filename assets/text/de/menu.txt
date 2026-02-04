@@ -1,0 +1,28 @@
+Welt auswählen
+Welt erstellen
+Credits & Info
+Beenden
+Zurück
+Weltname (alphanumerisch + Unterstrich):
+Erstellen
+Abbrechen
+Der Weltname darf nicht leer sein
+Welt existiert bereits
+Keine Welten gefunden
+Neue Welt erstellen
+Welt auswählen
+Letzte Position: %s | Chunks: %d
+WASD zum Bewegen, Leertaste zum Springen
+F3 für Leistungsstatistiken, F2 für dieses Spiel, F4 für Spielerstatistiken
+F5 für Systeminformationen, F7 zum Aktivieren/Deaktivieren der Mauszeigeraufnahme
+Maus zum Umschauen
+ESC oder P zum Pausieren
+PAUSIERT
+Fortsetzen
+Zurück zum Menü
+Leistungsstatistiken
+Systeminformationen
+Spielerinformationen
+FPS:
+Koordinaten:
+b3dv 0.0.9b

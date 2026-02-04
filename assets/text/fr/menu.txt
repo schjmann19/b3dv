@@ -1,0 +1,28 @@
+Sélectionner un monde
+Créer un monde
+Crédits et infos
+Quitter
+Retour
+Nom du monde (alphanumérique + tiret bas) :
+Créer
+Annuler
+Le nom du monde ne peut pas être vide
+Ce monde existe déjà
+Aucun monde trouvé
+Créer un nouveau monde
+Sélectionner un monde
+Dernier : %s | Chunks : %d
+WASD pour se déplacer, Espace pour sauter
+F3 pour les statistiques de performance, F2 pour ceci, F4 pour les statistiques du joueur
+F5 pour les informations système, F7 pour activer/désactiver la capture de la souris
+Souris pour regarder autour
+ÉCHAP ou P pour mettre en pause
+PAUSE
+Reprendre
+Retour au menu
+Statistiques de performance
+Informations système
+Informations du joueur
+FPS:
+Coordonnées:
+b3dv 0.0.9b

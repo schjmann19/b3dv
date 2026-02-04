@@ -166,6 +166,7 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
     new_chunk->chunk_z = chunk_z;
     new_chunk->loaded = false;
     new_chunk->generated = false;
+    new_chunk->modified = false;  // Not modified when first created
 
     // Initialize blocks to air
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -197,6 +198,7 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
         fclose(file);
         new_chunk->loaded = true;
         new_chunk->generated = true;  // Loaded chunks are already complete
+        new_chunk->modified = false;  // Not modified when loaded from disk
         printf("[chunk_load] Loaded chunk from %s\n", filepath);
     } else {
         // Chunk doesn't exist on disk - don't auto-generate, return empty chunk
@@ -304,6 +306,7 @@ void world_chunk_set_block(Chunk* chunk, int x, int y, int z, BlockType type)
         y >= 0 && y < CHUNK_HEIGHT &&
         z >= 0 && z < CHUNK_DEPTH) {
         chunk->blocks[y][z][x].type = type;
+        chunk->modified = true;  // Mark chunk as modified when block changes
     }
 }
 
@@ -349,6 +352,7 @@ void world_generate_prism(World* world)
         world_generate_chunk(chunk);
         chunk->loaded = true;
         chunk->generated = true;
+        chunk->modified = false;  // Freshly generated chunk is not modified
     }
 }
 
@@ -403,6 +407,7 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
                     world_generate_chunk(chunk);
                     chunk->loaded = true;
                     chunk->generated = true;
+                    chunk->modified = false;  // Freshly generated chunk is not modified
                 }
             }
         }
@@ -431,6 +436,13 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
         bool too_far = dx*dx + dz*dz > unload_dist*unload_dist || dy > unload_dist || dy < -unload_dist;
 
         if (too_far || behind_player) {
+            // Save chunk to disk before unloading if it was modified
+            if (chunk->modified) {
+                world_save_chunk(chunk, world->world_name);
+                printf("[chunk_unload] Saved modified chunk %d,%d,%d\n", chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
+                chunk->modified = false;  // Mark as saved
+            }
+
             // Remove chunk from cache (swap with last)
             if (i < world->chunk_cache.chunk_count - 1) {
                 world->chunk_cache.chunks[i] = world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
@@ -440,6 +452,37 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
             i++;
         }
     }
+}
+
+// Save a single chunk to disk
+bool world_save_chunk(Chunk* chunk, const char* world_name)
+{
+    if (!chunk || !world_name) return false;
+
+    char filepath[512];
+    snprintf(filepath, sizeof(filepath), "./worlds/%s/chunks/chunk_%d_%d_%d.chunk",
+             world_name, chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
+
+    FILE* file = fopen(filepath, "wb");
+    if (!file) return false;
+
+    bool success = true;
+    for (int y = 0; y < CHUNK_HEIGHT; y++) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                BlockType block_type = chunk->blocks[y][z][x].type;
+                if (fwrite(&block_type, sizeof(BlockType), 1, file) != 1) {
+                    success = false;
+                    break;
+                }
+            }
+            if (!success) break;
+        }
+        if (!success) break;
+    }
+
+    fclose(file);
+    return success;
 }
 
 // Initialize worlds folder if it doesn't exist
@@ -513,6 +556,7 @@ bool world_save(World* world, const char* world_name)
         }
 
         fclose(file);
+        chunk->modified = false;  // Mark chunk as saved
     }
 
     return true;

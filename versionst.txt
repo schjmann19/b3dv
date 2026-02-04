@@ -1,3 +1,16 @@
+0.0.9b:
+    added translations:
+        + french
+        + german
+        + portuguese
+        + ukrainian
+        + russian
+
+0.0.9:
+    added credits & info button to main menu
+    added translations:
+        + spanish
+
 0.0.8d:
     added main menu
     tidied up worlds system
