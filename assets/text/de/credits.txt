@@ -1,5 +1,5 @@
-B3DV - Basic 3D Visualizer
-Version 0.0.9b
+B3DV - Basic 3D Visualizer - https://github.com/schjmann19/b3dv/
+Version 0.0.9d
 
 Ein voxelbasierter 3D-Weltenerkunder
 erstellt mit Raylib

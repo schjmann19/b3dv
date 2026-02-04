@@ -62,6 +62,7 @@ bool menu_load_text_file(const char* language, const char* filename, char* out_b
 
     FILE* file = fopen(path, "r");
     if (!file) {
+        fprintf(stderr, "Failed to load: %s\n", path);
         return false;
     }
 
@@ -157,45 +158,75 @@ void menu_load_language(MenuSystem* menu, const char* language)
         }
         fclose(file);
 
-        if (line_count == 28) return;  // Successfully loaded all
+        if (line_count < 28) {
+            // Fallback to English defaults if not found or incomplete
+            strcpy(menu->text_select_world, "Select World");
+            strcpy(menu->text_create_world, "Create World");
+            strcpy(menu->text_credits_info, "Credits & Info");
+            strcpy(menu->text_quit, "Quit");
+            strcpy(menu->text_back, "Back");
+            strcpy(menu->text_world_name_label, "World Name (alphanumeric + underscore):");
+            strcpy(menu->text_create_btn, "Create");
+            strcpy(menu->text_cancel_btn, "Cancel");
+            strcpy(menu->text_error_empty_name, "World name cannot be empty");
+            strcpy(menu->text_error_exists, "World already exists");
+            strcpy(menu->text_no_worlds, "No worlds found");
+            strcpy(menu->text_title_create_world, "Create New World");
+            strcpy(menu->text_title_select_world, "Select World");
+            strcpy(menu->text_last, "Last: %s | Chunks: %d");
+            strcpy(menu->game_text.move_controls, "WASD to move, Space to jump");
+            strcpy(menu->game_text.metrics_help, "F3 for performance metrics, F2 for this");
+            strcpy(menu->game_text.mouse_help, "F7 to toggle mouse capture");
+            strcpy(menu->game_text.look_help, "Mouse to look around");
+            strcpy(menu->game_text.pause_help, "ESC or P to pause");
+            strcpy(menu->game_text.paused, "PAUSED");
+            strcpy(menu->game_text.resume, "Resume");
+            strcpy(menu->game_text.back_to_menu, "Back to Menu");
+            strcpy(menu->game_text.perf_metrics, "=== PERFORMANCE METRICS ===");
+            strcpy(menu->game_text.system_info, "=== SYSTEM INFO ===");
+            strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
+            strcpy(menu->game_text.fps_label, "FPS:");
+            strcpy(menu->game_text.coord_label, "Coordinates:");
+            strcpy(menu->game_text.version, "b3dv 0.0.9d");
+        }
+    } else {
+        // Fallback to English defaults if menu.txt not found
+        strcpy(menu->text_select_world, "Select World");
+        strcpy(menu->text_create_world, "Create World");
+        strcpy(menu->text_credits_info, "Credits & Info");
+        strcpy(menu->text_quit, "Quit");
+        strcpy(menu->text_back, "Back");
+        strcpy(menu->text_world_name_label, "World Name (alphanumeric + underscore):");
+        strcpy(menu->text_create_btn, "Create");
+        strcpy(menu->text_cancel_btn, "Cancel");
+        strcpy(menu->text_error_empty_name, "World name cannot be empty");
+        strcpy(menu->text_error_exists, "World already exists");
+        strcpy(menu->text_no_worlds, "No worlds found");
+        strcpy(menu->text_title_create_world, "Create New World");
+        strcpy(menu->text_title_select_world, "Select World");
+        strcpy(menu->text_last, "Last: %s | Chunks: %d");
+        strcpy(menu->game_text.move_controls, "WASD to move, Space to jump");
+        strcpy(menu->game_text.metrics_help, "F3 for performance metrics, F2 for this");
+        strcpy(menu->game_text.mouse_help, "F7 to toggle mouse capture");
+        strcpy(menu->game_text.look_help, "Mouse to look around");
+        strcpy(menu->game_text.pause_help, "ESC or P to pause");
+        strcpy(menu->game_text.paused, "PAUSED");
+        strcpy(menu->game_text.resume, "Resume");
+        strcpy(menu->game_text.back_to_menu, "Back to Menu");
+        strcpy(menu->game_text.perf_metrics, "=== PERFORMANCE METRICS ===");
+        strcpy(menu->game_text.system_info, "=== SYSTEM INFO ===");
+        strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
+        strcpy(menu->game_text.fps_label, "FPS:");
+        strcpy(menu->game_text.coord_label, "Coordinates:");
+        strcpy(menu->game_text.version, "b3dv 0.0.9d");
     }
 
-    // Fallback to English defaults if not found
-    strcpy(menu->text_select_world, "Select World");
-    strcpy(menu->text_create_world, "Create World");
-    strcpy(menu->text_credits_info, "Credits & Info");
-    strcpy(menu->text_quit, "Quit");
-    strcpy(menu->text_back, "Back");
-    strcpy(menu->text_world_name_label, "World Name (alphanumeric + underscore):");
-    strcpy(menu->text_create_btn, "Create");
-    strcpy(menu->text_cancel_btn, "Cancel");
-    strcpy(menu->text_error_empty_name, "World name cannot be empty");
-    strcpy(menu->text_error_exists, "World already exists");
-    strcpy(menu->text_no_worlds, "No worlds found");
-    strcpy(menu->text_title_create_world, "Create New World");
-    strcpy(menu->text_title_select_world, "Select World");
-    strcpy(menu->text_last, "Last: %s | Chunks: %d");
-    strcpy(menu->game_text.move_controls, "WASD to move, Space to jump");
-    strcpy(menu->game_text.metrics_help, "F3 for performance metrics, F2 for this");
-    strcpy(menu->game_text.mouse_help, "F7 to toggle mouse capture");
-    strcpy(menu->game_text.look_help, "Mouse to look around");
-    strcpy(menu->game_text.pause_help, "ESC or P to pause");
-    strcpy(menu->game_text.paused, "PAUSED");
-    strcpy(menu->game_text.resume, "Resume");
-    strcpy(menu->game_text.back_to_menu, "Back to Menu");
-    strcpy(menu->game_text.perf_metrics, "=== PERFORMANCE METRICS ===");
-    strcpy(menu->game_text.system_info, "=== SYSTEM INFO ===");
-    strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
-    strcpy(menu->game_text.fps_label, "FPS:");
-    strcpy(menu->game_text.coord_label, "Coordinates:");
-    strcpy(menu->game_text.version, "b3dv 0.0.9b");
-
-    // Load credits text
+    // Load credits text (always attempt, regardless of menu.txt success)
     if (!menu_load_text_file(language, "credits.txt", menu->credits_text, sizeof(menu->credits_text))) {
         // Fallback if file not found
         strcpy(menu->credits_text,
             "B3DV - Basic 3D Visualizer\n"
-            "Version 0.0.9b\n"
+            "Version 0.0.9d\n"
             "\n"
             "A voxel-based 3D world explorer\n"
             "built with raylib\n"
@@ -203,6 +234,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
             "Press ESC to return to main menu");
     }
 }
+
 
 MenuSystem* menu_system_create(void)
 {
@@ -368,7 +400,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.9b";
+    const char* version = "Basic 3D Visualizer - v0.0.9d";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
@@ -829,20 +861,8 @@ void menu_draw_credits(MenuSystem* menu, Font font)
                        WHITE);
 
 // Draw the credits text directly - simple single line test
-    DrawTextEx(font, "B3DV - Basic 3D Visualizer",
+    DrawTextEx(font, menu->credits_text,
                (Vector2){text_x, text_y},
-               font_size, spacing, WHITE);
-
-    DrawTextEx(font, "Version 0.0.9b",
-               (Vector2){text_x, text_y + 30},
-               font_size, spacing, WHITE);
-
-    DrawTextEx(font, "A voxel-based 3D world explorer",
-               (Vector2){text_x, text_y + 60},
-               font_size, spacing, WHITE);
-
-    DrawTextEx(font, "built with raylib",
-               (Vector2){text_x, text_y + 90},
                font_size, spacing, WHITE);
 
     // Draw instructions

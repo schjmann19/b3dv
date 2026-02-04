@@ -1,0 +1,28 @@
+Seleziona mondo
+Crea mondo
+Crediti e informazioni
+Esci
+Indietro
+Nome del mondo (alfanumerico + trattino basso):
+Crea
+Annulla
+Il nome del mondo non può essere vuoto
+Il mondo esiste già
+Nessun mondo trovato
+Crea nuovo mondo
+Seleziona mondo
+Ultimo: %s | Frammenti: %d
+WASD per muoversi, Barra spaziatrice per saltare
+F3 per le metriche delle prestazioni, F2 per questo, f4 per le statistiche del giocatore
+F5 per le informazioni di sistema, F7 per attivare/disattivare l'acquisizione del mouse
+Mouse per guardarsi intorno
+ESC o P per mettere in pausa
+IN PAUSA
+Riprendi
+Torna al menu
+Metriche delle prestazioni
+Informazioni di sistema
+Informazioni sul giocatore
+FPS:
+Coordinate:
+b3dv 0.0.9d

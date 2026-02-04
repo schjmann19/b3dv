@@ -1,3 +1,13 @@
+0.0.9d:
+    fixed credits ui
+
+    notes: let up and don't try to optimize the loading of text files by not doing it, thank you
+
+0.0.9c:
+    added translations:
+        + italian
+        + na'vi
+
 0.0.9b:
     added translations:
         + french

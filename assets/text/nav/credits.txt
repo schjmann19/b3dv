@@ -1,0 +1,15 @@
+B3DV - Tseng 3D Tìng Nì’aw - https://github.com/schjmann19/b3dv/
+
+Sìlpey 0.0.9d
+
+Mì fìtxon, kelku 3D a tsun tivakx nì’aw
+a tseng mì ayvoxel,
+sì tìkangkem a fì’u mì raylib.
+
+Tìngäzìk:
+Tìpawm: Leandro Testa
+Fì’u sì fì’ut a tseng nì’aw: oel
+
+Raylib a Ramon Santamaria: https://www.raylib.com/
+
+(c) 2026 Jimena Neumann

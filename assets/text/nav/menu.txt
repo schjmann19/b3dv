@@ -1,0 +1,28 @@
+Ftxey Srakrr
+Tìng Mikyun Srakrr
+Aysäfpìl Sì Hapxì
+Hum
+Nì’aw
+Zin Srakrr (aysäfpìl sì ayskxawng):
+Tìng Mikyun
+Ke tsun
+Zin srakrr ke tsun livu kehe
+Srakrr lu tsatseng
+Ke tsun tivìng srakrr
+Tìng Mikyun Srakrr Fì’uri
+Ftxey Srakrr
+Nì’aw: %s | Ayhapxì: %d
+WASD fte tsun tsivun, Space fte tsun taron
+F3 fte ayhapxì tìtìng, F2 fte fì’u, F4 fte ayhapxì tìtxur
+F5 fte hapxì a tìkangkem, F7 fte tsun kelku pxìm
+Pxìm fte tsun tse’a nìtxan
+ESC ulte P fte tsun hì’i
+HÌ’Ì
+Tìng Tseng
+Nì’aw Ne Menù
+Ayhapxì Tìtìng
+Hapxì A Tìkangkem
+Hapxì A Tìtxur
+FPS:
+Ayngar:
+b3dv 0.0.9d

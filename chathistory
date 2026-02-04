@@ -440,3 +440,5 @@ e
 /tp 0 20 10
 /save asd2
 /tp -2000 100 -2000
+/save default
+/save default

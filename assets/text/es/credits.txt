@@ -1,5 +1,5 @@
-B3DV - Visualizador 3D Básico
-Versión 0.0.9b
+B3DV - Visualizador 3D Básico - https://github.com/schjmann19/b3dv/
+Versión 0.0.9d
 
 Un explorador de mundos voxel en 3D
 construido con raylib
