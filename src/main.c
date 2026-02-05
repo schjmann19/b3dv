@@ -17,11 +17,11 @@
 #define RENDER_DISTANCE 50.0f
 #define FOG_START 30.0f
 #define CULLING_FOV 110.0f
-#define ASPECT_RATIO ((float)WINDOW_WIDTH / (float)WINDOW_HEIGHT)
 
 
 int main(void)
 {
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9d");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
@@ -120,10 +120,9 @@ int main(void)
     // Raycast caching - only update every 3 frames
     int raycast_frame_counter = 0;
 
-    // Pre-compute FOV values for visibility checks (avoid repeated tan calculations)
-    float fovy_rad = CULLING_FOV * 3.14159265f / 180.0f;
-    float fov_half_vert_tan = tanf(fovy_rad / 2.0f);
-    float fov_half_horiz_tan = fov_half_vert_tan * ASPECT_RATIO;
+    // FOV values for visibility checks (computed dynamically to handle window resizing)
+    float fov_half_vert_tan = 0.0f;
+    float fov_half_horiz_tan = 0.0f;
 
     //SetTargetFPS(TARGET_FPS);
     SetTargetFPS(0);
@@ -201,6 +200,12 @@ int main(void)
         if (!world || !player) {
             continue;
         }
+
+        // Recalculate FOV values based on current window size (handles window resizing)
+        float window_aspect = (float)GetScreenWidth() / (float)GetScreenHeight();
+        float fovy_rad = CULLING_FOV * 3.14159265f / 180.0f;
+        fov_half_vert_tan = tanf(fovy_rad / 2.0f);
+        fov_half_horiz_tan = fov_half_vert_tan * window_aspect;
 
         // Chat system - handle first to consume all input when active
         if (chat_active) {

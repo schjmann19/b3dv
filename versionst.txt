@@ -1,3 +1,6 @@
+0.0.9e:
+    made window flexible
+
 0.0.9d:
     fixed credits ui
 
@@ -6,7 +9,7 @@
 0.0.9c:
     added translations:
         + italian
-        + na'vi
+        + na'vi (by santino rubbo)
 
 0.0.9b:
     added translations:
