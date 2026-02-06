@@ -19,10 +19,10 @@ Maus zum Umschauen
 ESC oder P zum Pausieren
 PAUSIERT
 Fortsetzen
-Zurück zum Menü
+Speichern & Beenden
 Leistungsstatistiken
 Systeminformationen
 Spielerinformationen
 FPS:
 Koordinaten:
-b3dv 0.0.9d
+b3dv 0.0.9f

@@ -19,10 +19,10 @@ Souris pour regarder autour
 ÉCHAP ou P pour mettre en pause
 PAUSE
 Reprendre
-Retour au menu
+Enregistrer et quitter
 Statistiques de performance
 Informations système
 Informations du joueur
 FPS:
 Coordonnées:
-b3dv 0.0.9d
+b3dv 0.0.9f

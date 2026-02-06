@@ -19,10 +19,10 @@ Ratón para mirar alrededor
 ESC o P para pausar
 EN PAUSA
 Reanudar
-Volver al Menú
+Guardar y Salir
 Métricas de Rendimiento
 Información del Sistema
 Información del Jugador
 FPS:
 Coordenadas:
-b3dv 0.0.9d
+b3dv 0.0.9f

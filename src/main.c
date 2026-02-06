@@ -22,7 +22,7 @@
 int main(void)
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9d");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9f");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -173,15 +173,10 @@ int main(void)
                 // Load block textures
                 world_load_textures(world);
 
-                // Create player at spawn position
-                float spawn_x = 8.0f;
-                float spawn_z = 8.0f;
-                // Calculate terrain height at spawn position
-                float h1 = sinf(spawn_x * 0.1f) * cosf(spawn_z * 0.1f) * 8.0f;
-                float h2 = sinf(spawn_x * 0.05f) * cosf(spawn_z * 0.05f) * 6.0f;
-                float terrain_h = h1 + h2 + 10.0f + 5.0f;
-                float spawn_y = terrain_h + 1.5f;
-                player = player_create(spawn_x, spawn_y, spawn_z);
+                // Create player at saved position (or default if no save)
+                player = player_create(world->last_player_position.x,
+                                      world->last_player_position.y,
+                                      world->last_player_position.z);
 
                 // Enable mouse capture for gameplay
                 mouse_captured = true;
@@ -960,7 +955,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9f - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -990,14 +985,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9f - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.9d - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9f - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused
@@ -1070,6 +1065,9 @@ int main(void)
                     DisableCursor();
                 } else if (quit_hover) {
                     // Save world and return to main menu
+                    if (player) {
+                        world->last_player_position = player->position;
+                    }
                     world_save(world, world->world_name);
                     paused = false;
                     should_quit = false;
@@ -1124,7 +1122,8 @@ int main(void)
     }
 
     // Save world before closing (if one was loaded)
-    if (world) {
+    if (world && player) {
+        world->last_player_position = player->position;
         world_save(world, world->world_name);
     }
 

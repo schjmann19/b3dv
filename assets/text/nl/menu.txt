@@ -1,0 +1,28 @@
+Wereld selecteren
+Wereld maken
+Credits & Info
+Afsluiten
+Terug
+Wereldnaam (alfanumeriek + underscore):
+Maken
+Annuleren
+Wereldnaam mag niet leeg zijn
+Wereld bestaat al
+Geen werelden gevonden
+Nieuwe wereld maken
+Wereld selecteren
+Laatste: %s | Chunks: %d
+WASD om te bewegen, spatie om te springen
+F3 voor prestatiegegevens, F2 voor dit, F4 voor spelersstatistieken
+F5 voor systeeminfo, F7 om muisopname in/uit te schakelen
+Muis om rond te kijken
+ESC of P om te pauzeren
+GEPAUZEERD
+Hervatten
+Opslaan & Afsluiten
+Prestatiegegevens
+Systeeminfo
+Spelersinfo
+FPS:
+Coördinaten:
+b3dv 0.0.9f

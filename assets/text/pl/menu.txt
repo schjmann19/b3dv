@@ -1,0 +1,28 @@
+Wybierz świat
+Utwórz świat
+Napisy i informacje
+Wyjdź
+Wstecz
+Nazwa świata (alfanumeryczna + podkreślenie):
+Utwórz
+Anuluj
+Nazwa świata nie może być pusta
+Świat już istnieje
+Nie znaleziono światów
+Utwórz nowy świat
+Wybierz świat
+Ostatni: %s | Fragmenty: %d
+WASD – poruszanie się, spacja – skakanie
+F3 – metryki wydajności, F2 – to, F4 – statystyki gracza
+F5 – informacje o systemie, F7 – przełączanie przechwytywania myszy
+Mysz – rozglądanie się
+ESC lub P – pauza
+WSTRZYMANO
+Wznów
+Zapisz i wyjdź
+Metryki wydajności
+Informacje o systemie
+Informacje o graczu
+FPS:
+Współrzędne:
+b3dv 0.0.9f

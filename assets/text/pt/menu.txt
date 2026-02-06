@@ -19,10 +19,10 @@ Mouse para olhar ao redor
 ESC ou P para pausar
 PAUSADO
 Retomar
-Voltar ao Menu
+Salvar e sair
 Métricas de Desempenho
 Informações do Sistema
 Informações do Jogador
 FPS:
 Coordenadas:
-b3dv 0.0.9d
+b3dv 0.0.9f

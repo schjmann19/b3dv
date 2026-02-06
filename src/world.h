@@ -64,6 +64,7 @@ typedef struct {
     int32_t last_loaded_chunk_y;
     int32_t last_loaded_chunk_z;
     char world_name[256];  // Current world name for proper chunk loading
+    Vector3 last_player_position;  // Last known player position for saving/loading
 } World;
 
 // Function declarations

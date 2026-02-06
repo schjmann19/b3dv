@@ -19,10 +19,10 @@ Mouse to look around
 ESC or P to pause
 PAUSED
 Resume
-Back to Menu
+Save & Quit
 Performance Metrics
 System Info
 Player Info
 FPS:
 Coordinates:
-b3dv 0.0.9d
+b3dv 0.0.9f

@@ -532,6 +532,9 @@ bool world_save(World* world, const char* world_name)
         fprintf(metadata_file, "name=%s\n", world_name);
         fprintf(metadata_file, "last_saved=%s\n", time_str);
         fprintf(metadata_file, "chunk_count=%d\n", world->chunk_cache.chunk_count);
+        fprintf(metadata_file, "player_x=%.6f\n", world->last_player_position.x);
+        fprintf(metadata_file, "player_y=%.6f\n", world->last_player_position.y);
+        fprintf(metadata_file, "player_z=%.6f\n", world->last_player_position.z);
         fclose(metadata_file);
     }
 
@@ -583,6 +586,26 @@ bool world_load(World* world, const char* world_name)
     world->last_loaded_chunk_x = INT32_MAX;
     world->last_loaded_chunk_y = INT32_MAX;
     world->last_loaded_chunk_z = INT32_MAX;
+
+    // Load player position from metadata if it exists
+    world->last_player_position = (Vector3){8.0f, 20.0f, 8.0f};  // Default position
+    char metadata_path[512];
+    snprintf(metadata_path, sizeof(metadata_path), "./worlds/%s/world.txt", world_name);
+    FILE* metadata_file = fopen(metadata_path, "r");
+    if (metadata_file) {
+        char line[256];
+        while (fgets(line, sizeof(line), metadata_file)) {
+            float x, y, z;
+            if (sscanf(line, "player_x=%f", &x) == 1) {
+                world->last_player_position.x = x;
+            } else if (sscanf(line, "player_y=%f", &y) == 1) {
+                world->last_player_position.y = y;
+            } else if (sscanf(line, "player_z=%f", &z) == 1) {
+                world->last_player_position.z = z;
+            }
+        }
+        fclose(metadata_file);
+    }
 
     // Try to load initial chunks from disk
     // Start from origin chunk and nearby chunks

@@ -187,7 +187,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
             strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
             strcpy(menu->game_text.fps_label, "FPS:");
             strcpy(menu->game_text.coord_label, "Coordinates:");
-            strcpy(menu->game_text.version, "b3dv 0.0.9d");
+            strcpy(menu->game_text.version, "b3dv 0.0.9f");
         }
     } else {
         // Fallback to English defaults if menu.txt not found
@@ -218,7 +218,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
         strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
         strcpy(menu->game_text.fps_label, "FPS:");
         strcpy(menu->game_text.coord_label, "Coordinates:");
-        strcpy(menu->game_text.version, "b3dv 0.0.9d");
+        strcpy(menu->game_text.version, "b3dv 0.0.9f");
     }
 
     // Load credits text (always attempt, regardless of menu.txt success)
@@ -226,7 +226,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
         // Fallback if file not found
         strcpy(menu->credits_text,
             "B3DV - Basic 3D Visualizer\n"
-            "Version 0.0.9d\n"
+            "Version 0.0.9f\n"
             "\n"
             "A voxel-based 3D world explorer\n"
             "built with raylib\n"
@@ -400,7 +400,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.9d";
+    const char* version = "Basic 3D Visualizer - v0.0.9f";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
