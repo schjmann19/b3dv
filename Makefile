@@ -47,7 +47,7 @@ endif
 WIN_CC = x86_64-w64-mingw32-gcc
 WIN_RAYLIB_PATH = ./external/raylib
 WIN_CFLAGS = -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto -fno-signed-zeros \
-            -fno-trapping-math -faligned-new -funroll-loops -I$(WIN_RAYLIB_PATH)/src
+            -fno-trapping-math -funroll-loops -I$(WIN_RAYLIB_PATH)/src
 WIN_LDFLAGS = -L$(WIN_RAYLIB_PATH)/src -l:libraylib.a -lopengl32 -lgdi32 -lwinmm -lpsapi -lm -static-libgcc -flto
 
 SOURCES = src/main.c src/world_generation.c src/player.c src/vec_math.c src/rendering.c src/utils.c src/menu.c
@@ -111,7 +111,7 @@ check-local-raylib-windows:
 		fi; \
 	fi; \
 	if [ -d $(LOCAL_RAYLIB_DIR)/src ]; then \
-		(cd $(LOCAL_RAYLIB_DIR)/src && $(MAKE) CC=$(WIN_CC) PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=STATIC clean && $(MAKE) CC=$(WIN_CC) PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=STATIC); \
+		(cd $(LOCAL_RAYLIB_DIR)/src && $(MAKE) CC=$(WIN_CC) PLATFORM=PLATFORM_DESKTOP_WIN32 RAYLIB_LIBTYPE=STATIC clean && $(MAKE) CC=$(WIN_CC) PLATFORM=PLATFORM_DESKTOP_WIN32 RAYLIB_LIBTYPE=STATIC); \
 	fi
 
 # Windows build

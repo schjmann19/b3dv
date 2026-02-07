@@ -170,92 +170,6 @@ void menu_load_language(MenuSystem* menu, const char* language)
         }
         fclose(file);
 
-        if (line_count < 34) {
-            // Fallback to English defaults if not found or incomplete
-            strcpy(menu->text_select_world, "Select World");
-            strcpy(menu->text_create_world, "Create World");
-            strcpy(menu->text_credits_info, "Credits & Info");
-            strcpy(menu->text_quit, "Quit");
-            strcpy(menu->text_back, "Back");
-            strcpy(menu->text_world_name_label, "World Name (alphanumeric + underscore):");
-            strcpy(menu->text_create_btn, "Create");
-            strcpy(menu->text_cancel_btn, "Cancel");
-            strcpy(menu->text_error_empty_name, "World name cannot be empty");
-            strcpy(menu->text_error_exists, "World already exists");
-            strcpy(menu->text_no_worlds, "No worlds found");
-            strcpy(menu->text_title_create_world, "Create New World");
-            strcpy(menu->text_title_select_world, "Select World");
-            strcpy(menu->text_last, "Last: %s | Chunks: %d");
-            strcpy(menu->game_text.move_controls, "WASD to move, Space to jump");
-            strcpy(menu->game_text.metrics_help, "F3 for performance metrics, F2 for this");
-            strcpy(menu->game_text.mouse_help, "F7 to toggle mouse capture");
-            strcpy(menu->game_text.look_help, "Mouse to look around");
-            strcpy(menu->game_text.pause_help, "ESC or P to pause");
-            strcpy(menu->game_text.paused, "PAUSED");
-            strcpy(menu->game_text.resume, "Resume");
-            strcpy(menu->game_text.back_to_menu, "Back to Menu");
-            strcpy(menu->game_text.perf_metrics, "=== PERFORMANCE METRICS ===");
-            strcpy(menu->game_text.system_info, "=== SYSTEM INFO ===");
-            strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
-            strcpy(menu->game_text.fps_label, "FPS:");
-            strcpy(menu->game_text.coord_label, "Coordinates:");
-            strcpy(menu->game_text.version, "b3dv 0.0.9g");
-            strcpy(menu->game_text.settings, "Settings");
-            strcpy(menu->game_text.render_dist_label, "Render Distance:");
-            strcpy(menu->game_text.max_fps_label, "Max FPS:");
-            strcpy(menu->game_text.font_family_label, "Font Family:");
-            strcpy(menu->game_text.font_variant_label, "Variant:");
-            strcpy(menu->game_text.press_esc_to_return, "Press ESC to return to main menu");
-        }
-    } else {
-        // Fallback to English defaults if menu.txt not found
-        strcpy(menu->text_select_world, "Select World");
-        strcpy(menu->text_create_world, "Create World");
-        strcpy(menu->text_credits_info, "Credits & Info");
-        strcpy(menu->text_quit, "Quit");
-        strcpy(menu->text_back, "Back");
-        strcpy(menu->text_world_name_label, "World Name (alphanumeric + underscore):");
-        strcpy(menu->text_create_btn, "Create");
-        strcpy(menu->text_cancel_btn, "Cancel");
-        strcpy(menu->text_error_empty_name, "World name cannot be empty");
-        strcpy(menu->text_error_exists, "World already exists");
-        strcpy(menu->text_no_worlds, "No worlds found");
-        strcpy(menu->text_title_create_world, "Create New World");
-        strcpy(menu->text_title_select_world, "Select World");
-        strcpy(menu->text_last, "Last: %s | Chunks: %d");
-        strcpy(menu->game_text.move_controls, "WASD to move, Space to jump");
-        strcpy(menu->game_text.metrics_help, "F3 for performance metrics, F2 for this");
-        strcpy(menu->game_text.mouse_help, "F7 to toggle mouse capture");
-        strcpy(menu->game_text.look_help, "Mouse to look around");
-        strcpy(menu->game_text.pause_help, "ESC or P to pause");
-        strcpy(menu->game_text.paused, "PAUSED");
-        strcpy(menu->game_text.resume, "Resume");
-        strcpy(menu->game_text.back_to_menu, "Back to Menu");
-        strcpy(menu->game_text.perf_metrics, "=== PERFORMANCE METRICS ===");
-        strcpy(menu->game_text.system_info, "=== SYSTEM INFO ===");
-        strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
-        strcpy(menu->game_text.fps_label, "FPS:");
-        strcpy(menu->game_text.coord_label, "Coordinates:");
-        strcpy(menu->game_text.version, "b3dv 0.0.9g");
-        strcpy(menu->game_text.settings, "Settings");
-        strcpy(menu->game_text.render_dist_label, "Render Distance:");
-        strcpy(menu->game_text.max_fps_label, "Max FPS:");
-        strcpy(menu->game_text.font_family_label, "Font Family:");
-        strcpy(menu->game_text.font_variant_label, "Variant:");
-        strcpy(menu->game_text.press_esc_to_return, "Press ESC to return to main menu");
-    }
-
-    // Load credits text (always attempt, regardless of menu.txt success)
-    if (!menu_load_text_file(language, "credits.txt", menu->credits_text, sizeof(menu->credits_text))) {
-        // Fallback if file not found
-        strcpy(menu->credits_text,
-            "B3DV - Basic 3D Visualizer\n"
-            "Version 0.0.9g\n"
-            "\n"
-            "A voxel-based 3D world explorer\n"
-            "built with raylib\n"
-            "\n"
-            "Press ESC to return to main menu");
     }
 }
 
@@ -325,16 +239,14 @@ void menu_scan_font_variants(MenuSystem* menu, const char* font_family)
         struct dirent* entry;
         while ((entry = readdir(dir)) && menu->font_variants_count < 32) {
             // Look for .ttf files
-            if (entry->d_type == DT_REG) {
-                char* dot = strrchr(entry->d_name, '.');
-                if (dot && strcmp(dot, ".ttf") == 0) {
-                    strcpy(menu->font_variants[menu->font_variants_count], entry->d_name);
-                    // Prefer Regular variant if available
-                    if (strstr(entry->d_name, "Regular") != NULL) {
-                        menu->current_font_variant_index = menu->font_variants_count;
-                    }
-                    menu->font_variants_count++;
+            char* dot = strrchr(entry->d_name, '.');
+            if (dot && strcmp(dot, ".ttf") == 0) {
+                strcpy(menu->font_variants[menu->font_variants_count], entry->d_name);
+                // Prefer Regular variant if available
+                if (strstr(entry->d_name, "Regular") != NULL) {
+                    menu->current_font_variant_index = menu->font_variants_count;
                 }
+                menu->font_variants_count++;
             }
         }
         closedir(dir);

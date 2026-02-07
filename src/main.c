@@ -73,13 +73,11 @@ static Font load_font_by_name(const char* font_name)
         struct dirent* entry;
         while ((entry = readdir(dir))) {
             // Look for .ttf files
-            if (entry->d_type == DT_REG) {
-                char* dot = strrchr(entry->d_name, '.');
-                if (dot && strcmp(dot, ".ttf") == 0) {
-                    // Found a .ttf file, try to load it
-                    closedir(dir);
-                    return load_font_variant(font_name, entry->d_name);
-                }
+            char* dot = strrchr(entry->d_name, '.');
+            if (dot && strcmp(dot, ".ttf") == 0) {
+                // Found a .ttf file, try to load it
+                closedir(dir);
+                return load_font_variant(font_name, entry->d_name);
             }
         }
         closedir(dir);

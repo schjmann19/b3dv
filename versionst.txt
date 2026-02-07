@@ -1,3 +1,7 @@
+0.0.9h:
+    bye bye build.sh
+    fixed windows build
+
 0.0.9g:
     added settins in main menu
     settings:
@@ -6,9 +10,10 @@
         + switching text font
     fixed some text that wasnt translated
     shipping fonts: JetBrainsMono, Minecraft Enchantment, Inter
+    update build script
 
 
-0.0.9f:
+0.0.9f
     fixed wolrd saving player's position
     tweaked wording: "Back to Menu" -> "Save & Quit"
     added translations:
