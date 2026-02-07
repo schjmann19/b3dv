@@ -1,5 +1,5 @@
 B3DV – Podstawowy wizualizator 3D – https://github.com/schjmann19/b3dv/
-Wersja 0.0.9f
+Wersja 0.0.9g
 
 Eksplorator świata 3D oparty na wokselach
 zbudowany w bibliotece raylib

@@ -25,4 +25,10 @@ Informacje o systemie
 Informacje o graczu
 FPS:
 Współrzędne:
-b3dv 0.0.9f
+b3dv 0.0.9g
+Ustawienia
+Dystans renderowania:
+Max klatek/s:
+Rodzina czcionek:
+Wariant:
+Nacisnij ESC, aby wrócić do menu głównego

@@ -25,4 +25,10 @@ Informations système
 Informations du joueur
 FPS:
 Coordonnées:
-b3dv 0.0.9f
+b3dv 0.0.9g
+Paramètres
+Distance de rendu :
+FPS max :
+Famille de polices :
+Variante :
+Appuyez sur ESC pour revenir au menu principal

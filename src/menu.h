@@ -10,6 +10,7 @@ typedef enum {
     MENU_STATE_WORLD_SELECT,
     MENU_STATE_CREATE_WORLD,
     MENU_STATE_CREDITS,
+    MENU_STATE_SETTINGS,
     MENU_STATE_GAME
 } MenuState;
 
@@ -36,6 +37,14 @@ typedef struct {
     char fps_label[64];
     char coord_label[64];
     char version[256];
+    // Settings menu text
+    char settings[64];
+    char render_dist_label[256];
+    char max_fps_label[256];
+    char font_family_label[256];
+    char font_variant_label[256];
+    // Credits & Info text
+    char press_esc_to_return[256];
 } GameText;
 
 // Menu system state
@@ -80,16 +89,30 @@ typedef struct {
     GameText game_text;
     // Credits & info text
     char credits_text[4096];
+    // Settings
+    float render_distance;
+    int max_fps;
+    // Font selection
+    char font_families[16][256];  // Up to 16 font families (folder names)
+    int font_families_count;
+    int current_font_family_index;
+    // Font variants for current family
+    char font_variants[32][256];  // Up to 32 variants per family
+    int font_variants_count;
+    int current_font_variant_index;
 } MenuSystem;
 
 // Function declarations
 MenuSystem* menu_system_create(void);
 void menu_system_free(MenuSystem* menu);
 void menu_scan_worlds(MenuSystem* menu);
+void menu_scan_fonts(MenuSystem* menu);
+void menu_scan_font_variants(MenuSystem* menu, const char* font_family);
 void menu_draw_main(MenuSystem* menu, Font font);
 void menu_draw_world_select(MenuSystem* menu, Font font);
 void menu_draw_create_world(MenuSystem* menu, Font font);
 void menu_draw_credits(MenuSystem* menu, Font font);
+void menu_draw_settings(MenuSystem* menu, Font font);
 void menu_update_input(MenuSystem* menu);
 void menu_load_language(MenuSystem* menu, const char* language);
 bool menu_load_text_file(const char* language, const char* filename, char* out_buffer, int buffer_size);

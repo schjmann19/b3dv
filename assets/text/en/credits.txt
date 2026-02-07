@@ -1,5 +1,5 @@
 B3DV - Basic 3D Visualizer - https://github.com/schjmann19/b3dv/
-Version 0.0.9f
+Version 0.0.9g
 
 A voxel-based 3D world explorer
 built with raylib
@@ -11,3 +11,7 @@ Credits:
 Raylib by Ramon Santamaria: https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Fonts:
+Custom fonts you can put in:
+./assets/fonts/[fontname]/ttf/*.ttf

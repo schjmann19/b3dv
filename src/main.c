@@ -1,6 +1,9 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "raylib.h"
 #include "world.h"
@@ -19,16 +22,11 @@
 #define CULLING_FOV 110.0f
 
 
-int main(void)
+// Helper function to load a specific font variant
+static Font load_font_variant(const char* font_family, const char* font_variant)
 {
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9f");
-
-    // Disable default ESC key behavior (we handle it manually for pause menu)
-    SetExitKey(KEY_NULL);
-
-    // Load JetBrainsMono font from assets directory with comprehensive Unicode support
-    Font custom_font = {0};
+    char font_path[512];
+    snprintf(font_path, sizeof(font_path), "./assets/fonts/%s/ttf/%s", font_family, font_variant);
 
     // Build codepoint array with all ASCII and common extended characters
     int codepoints[1024] = {0};
@@ -46,17 +44,75 @@ int main(void)
     for (int i = 256; i < 384; i++) {
         codepoints[codepoint_count++] = i;
     }
-    // Cyrillic block (0x0400-0x04FF) for Russian, Ukrainian, Serbian, etc.
+    // Cyrillic block (0x0400-0x04FF)
     for (int i = 0x0400; i <= 0x04FF && codepoint_count < 1024; i++) {
         codepoints[codepoint_count++] = i;
     }
 
-    custom_font = LoadFontEx("./assets/fonts/JetBrainsMono/ttf/JetBrainsMono-Regular.ttf", 64, codepoints, codepoint_count);
+    Font font = LoadFontEx(font_path, 64, codepoints, codepoint_count);
 
-    // if font not loaded, use default raylib font
-    if (custom_font.glyphCount == 0) {
-        custom_font = GetFontDefault();
+    if (font.glyphCount > 0) {
+        return font;
     }
+
+    // Fallback to default if font not found
+    return GetFontDefault();
+}
+
+// Helper function to load a font by family (uses first variant found)
+static Font load_font_by_name(const char* font_name)
+{
+    char ttf_dir[512];
+    snprintf(ttf_dir, sizeof(ttf_dir), "./assets/fonts/%s/ttf", font_name);
+
+    // Open the ttf directory and find the first .ttf file
+    DIR* dir = opendir(ttf_dir);
+    Font font = {0};
+
+    if (dir) {
+        struct dirent* entry;
+        while ((entry = readdir(dir))) {
+            // Look for .ttf files
+            if (entry->d_type == DT_REG) {
+                char* dot = strrchr(entry->d_name, '.');
+                if (dot && strcmp(dot, ".ttf") == 0) {
+                    // Found a .ttf file, try to load it
+                    closedir(dir);
+                    return load_font_variant(font_name, entry->d_name);
+                }
+            }
+        }
+        closedir(dir);
+    }
+
+    // Fallback to default if no font found
+    return GetFontDefault();
+}
+
+int main(void)
+{
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9g");
+
+    // Disable default ESC key behavior (we handle it manually for pause menu)
+    SetExitKey(KEY_NULL);
+
+    // Initialize world save system (needed for menu world scanning)
+    world_system_init();
+
+    // Create menu system
+    MenuSystem* menu = menu_system_create();
+
+    // Set target FPS based on menu settings (will be updated dynamically)
+    SetTargetFPS(menu->max_fps);
+
+    // Load initial font from menu settings
+    Font custom_font = load_font_variant(menu->font_families[menu->current_font_family_index],
+                                         menu->font_variants[menu->current_font_variant_index]);
+    char last_loaded_family[256];
+    char last_loaded_variant[256];
+    strcpy(last_loaded_family, menu->font_families[menu->current_font_family_index]);
+    strcpy(last_loaded_variant, menu->font_variants[menu->current_font_variant_index]);
 
     Camera3D camera = {
         .position = (Vector3){ 20, 15, 20 },
@@ -65,12 +121,6 @@ int main(void)
         .fovy = 90,
         .projection = CAMERA_PERSPECTIVE
     };
-
-    // Initialize world save system (needed for menu world scanning)
-    world_system_init();
-
-    // Create menu system
-    MenuSystem* menu = menu_system_create();
 
     // World and player will be created after menu selection
     World* world = NULL;
@@ -124,12 +174,23 @@ int main(void)
     float fov_half_vert_tan = 0.0f;
     float fov_half_horiz_tan = 0.0f;
 
-    //SetTargetFPS(TARGET_FPS);
-    SetTargetFPS(0);
-
     while (!WindowShouldClose() && !should_quit)
     {
         float dt = GetFrameTime();
+
+        // Check if font family or variant changed in settings and reload if needed
+        if (strcmp(menu->font_families[menu->current_font_family_index], last_loaded_family) != 0 ||
+            strcmp(menu->font_variants[menu->current_font_variant_index], last_loaded_variant) != 0) {
+            // Unload old font if it's not the default
+            if (custom_font.glyphCount > 0 && custom_font.glyphCount != GetFontDefault().glyphCount) {
+                UnloadFont(custom_font);
+            }
+            // Load new font variant
+            custom_font = load_font_variant(menu->font_families[menu->current_font_family_index],
+                                           menu->font_variants[menu->current_font_variant_index]);
+            strcpy(last_loaded_family, menu->font_families[menu->current_font_family_index]);
+            strcpy(last_loaded_variant, menu->font_variants[menu->current_font_variant_index]);
+        }
 
         // Handle menu state
         if (menu->current_state == MENU_STATE_MAIN) {
@@ -156,6 +217,13 @@ int main(void)
         else if (menu->current_state == MENU_STATE_CREDITS) {
             BeginDrawing();
             menu_draw_credits(menu, custom_font);
+            EndDrawing();
+            menu_update_input(menu);
+            continue;
+        }
+        else if (menu->current_state == MENU_STATE_SETTINGS) {
+            BeginDrawing();
+            menu_draw_settings(menu, custom_font);
             EndDrawing();
             menu_update_input(menu);
             continue;
@@ -201,6 +269,9 @@ int main(void)
         float fovy_rad = CULLING_FOV * 3.14159265f / 180.0f;
         fov_half_vert_tan = tanf(fovy_rad / 2.0f);
         fov_half_horiz_tan = fov_half_vert_tan * window_aspect;
+
+        // Update target FPS from settings
+        SetTargetFPS(menu->max_fps);
 
         // Chat system - handle first to consume all input when active
         if (chat_active) {
@@ -803,7 +874,7 @@ int main(void)
                 float chunk_dist_sq = dx*dx + dy*dy + dz*dz;
 
                 // Skip chunks beyond render distance (add chunk size to account for chunk extent)
-                float max_dist = RENDER_DISTANCE + CHUNK_WIDTH;
+                float max_dist = menu->render_distance + CHUNK_WIDTH;
                 if (chunk_dist_sq > max_dist * max_dist) {
                     continue;
                 }
@@ -827,7 +898,7 @@ int main(void)
                                 // distance-based LOD: use squared distance to avoid sqrt
                                 Vector3 to_block = vec3_sub(world_pos, shifted_cam_pos);
                                 float dist_sq = to_block.x*to_block.x + to_block.y*to_block.y + to_block.z*to_block.z;
-                                float render_dist_sq = RENDER_DISTANCE * RENDER_DISTANCE;
+                                float render_dist_sq = menu->render_distance * menu->render_distance;
 
                                 // hard render distance limit
                                 if (dist_sq > render_dist_sq) {
@@ -841,7 +912,7 @@ int main(void)
 
                                 // Only do expensive visibility checks after distance/occlusion pass
                                 if (!is_block_visible_fast(world_pos, shifted_cam_pos, cam_forward, cam_right,
-                                                        camera.up, RENDER_DISTANCE, fov_half_vert_tan, fov_half_horiz_tan)) {
+                                                        camera.up, menu->render_distance, fov_half_vert_tan, fov_half_horiz_tan)) {
                                     continue;
                                 }
 
@@ -850,8 +921,9 @@ int main(void)
 
                                 // apply fog effect: fade color towards sky blue based on distance
                                 float fog_factor = 0.0f;
-                                if (dist > FOG_START) {
-                                    fog_factor = (dist - FOG_START) / (RENDER_DISTANCE - FOG_START);
+                                float fog_start = menu->render_distance * 0.6f;  // Fog starts at 60% of render distance
+                                if (dist > fog_start) {
+                                    fog_factor = (dist - fog_start) / (menu->render_distance - fog_start);
                                     fog_factor = fog_factor > 1.0f ? 1.0f : fog_factor;  // Clamp to 0-1
 
                                     // blend color towards sky blue
@@ -955,7 +1027,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9f - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9g - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -985,14 +1057,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9f - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9g - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.9f - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9g - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused

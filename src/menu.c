@@ -87,7 +87,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
     if (file) {
         char line[512];
         int line_count = 0;
-        while (fgets(line, sizeof(line), file) && line_count < 28) {
+        while (fgets(line, sizeof(line), file) && line_count < 34) {
             // Remove newline
             line[strcspn(line, "\n")] = '\0';
 
@@ -119,7 +119,13 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 menu->game_text.player_info,
                 menu->game_text.fps_label,
                 menu->game_text.coord_label,
-                menu->game_text.version
+                menu->game_text.version,
+                menu->game_text.settings,
+                menu->game_text.render_dist_label,
+                menu->game_text.max_fps_label,
+                menu->game_text.font_family_label,
+                menu->game_text.font_variant_label,
+                menu->game_text.press_esc_to_return
             };
             int sizes[] = {
                 sizeof(menu->text_select_world),
@@ -149,7 +155,13 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->game_text.player_info),
                 sizeof(menu->game_text.fps_label),
                 sizeof(menu->game_text.coord_label),
-                sizeof(menu->game_text.version)
+                sizeof(menu->game_text.version),
+                sizeof(menu->game_text.settings),
+                sizeof(menu->game_text.render_dist_label),
+                sizeof(menu->game_text.max_fps_label),
+                sizeof(menu->game_text.font_family_label),
+                sizeof(menu->game_text.font_variant_label),
+                sizeof(menu->game_text.press_esc_to_return)
             };
 
             strncpy(buffers[line_count], line, sizes[line_count] - 1);
@@ -158,7 +170,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
         }
         fclose(file);
 
-        if (line_count < 28) {
+        if (line_count < 34) {
             // Fallback to English defaults if not found or incomplete
             strcpy(menu->text_select_world, "Select World");
             strcpy(menu->text_create_world, "Create World");
@@ -187,7 +199,13 @@ void menu_load_language(MenuSystem* menu, const char* language)
             strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
             strcpy(menu->game_text.fps_label, "FPS:");
             strcpy(menu->game_text.coord_label, "Coordinates:");
-            strcpy(menu->game_text.version, "b3dv 0.0.9f");
+            strcpy(menu->game_text.version, "b3dv 0.0.9g");
+            strcpy(menu->game_text.settings, "Settings");
+            strcpy(menu->game_text.render_dist_label, "Render Distance:");
+            strcpy(menu->game_text.max_fps_label, "Max FPS:");
+            strcpy(menu->game_text.font_family_label, "Font Family:");
+            strcpy(menu->game_text.font_variant_label, "Variant:");
+            strcpy(menu->game_text.press_esc_to_return, "Press ESC to return to main menu");
         }
     } else {
         // Fallback to English defaults if menu.txt not found
@@ -218,7 +236,13 @@ void menu_load_language(MenuSystem* menu, const char* language)
         strcpy(menu->game_text.player_info, "=== PLAYER INFO ===");
         strcpy(menu->game_text.fps_label, "FPS:");
         strcpy(menu->game_text.coord_label, "Coordinates:");
-        strcpy(menu->game_text.version, "b3dv 0.0.9f");
+        strcpy(menu->game_text.version, "b3dv 0.0.9g");
+        strcpy(menu->game_text.settings, "Settings");
+        strcpy(menu->game_text.render_dist_label, "Render Distance:");
+        strcpy(menu->game_text.max_fps_label, "Max FPS:");
+        strcpy(menu->game_text.font_family_label, "Font Family:");
+        strcpy(menu->game_text.font_variant_label, "Variant:");
+        strcpy(menu->game_text.press_esc_to_return, "Press ESC to return to main menu");
     }
 
     // Load credits text (always attempt, regardless of menu.txt success)
@@ -226,7 +250,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
         // Fallback if file not found
         strcpy(menu->credits_text,
             "B3DV - Basic 3D Visualizer\n"
-            "Version 0.0.9f\n"
+            "Version 0.0.9g\n"
             "\n"
             "A voxel-based 3D world explorer\n"
             "built with raylib\n"
@@ -235,6 +259,94 @@ void menu_load_language(MenuSystem* menu, const char* language)
     }
 }
 
+// Scan available fonts from assets/fonts/<font-name>/ttf/
+void menu_scan_fonts(MenuSystem* menu)
+{
+    DIR* dir = opendir("./assets/fonts");
+    if (!dir) {
+        // Fallback to default font if directory doesn't exist
+        strcpy(menu->font_families[0], "JetBrainsMono");
+        menu->font_families_count = 1;
+        menu->current_font_family_index = 0;
+        return;
+    }
+
+    menu->font_families_count = 0;
+    struct dirent* entry;
+
+    while ((entry = readdir(dir)) && menu->font_families_count < 16) {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        char full_path[512];
+        snprintf(full_path, sizeof(full_path), "./assets/fonts/%s", entry->d_name);
+
+        // Check if it's a directory and has a ttf subdirectory
+        if (is_directory(full_path)) {
+            char ttf_path[512];
+            snprintf(ttf_path, sizeof(ttf_path), "%s/ttf", full_path);
+            if (is_directory(ttf_path)) {
+                strcpy(menu->font_families[menu->font_families_count], entry->d_name);
+                menu->font_families_count++;
+            }
+        }
+    }
+    closedir(dir);
+
+    // Set current family to first available (prefer JetBrainsMono)
+    menu->current_font_family_index = 0;
+    for (int i = 0; i < menu->font_families_count; i++) {
+        if (strcmp(menu->font_families[i], "JetBrainsMono") == 0) {
+            menu->current_font_family_index = i;
+            break;
+        }
+    }
+
+    if (menu->font_families_count == 0) {
+        // Fallback if no fonts found
+        strcpy(menu->font_families[0], "JetBrainsMono");
+        menu->font_families_count = 1;
+        menu->current_font_family_index = 0;
+    }
+}
+
+// Scan font variants (individual .ttf files) for a given font family
+void menu_scan_font_variants(MenuSystem* menu, const char* font_family)
+{
+    char ttf_dir[512];
+    snprintf(ttf_dir, sizeof(ttf_dir), "./assets/fonts/%s/ttf", font_family);
+
+    DIR* dir = opendir(ttf_dir);
+    menu->font_variants_count = 0;
+    menu->current_font_variant_index = 0;
+
+    if (dir) {
+        struct dirent* entry;
+        while ((entry = readdir(dir)) && menu->font_variants_count < 32) {
+            // Look for .ttf files
+            if (entry->d_type == DT_REG) {
+                char* dot = strrchr(entry->d_name, '.');
+                if (dot && strcmp(dot, ".ttf") == 0) {
+                    strcpy(menu->font_variants[menu->font_variants_count], entry->d_name);
+                    // Prefer Regular variant if available
+                    if (strstr(entry->d_name, "Regular") != NULL) {
+                        menu->current_font_variant_index = menu->font_variants_count;
+                    }
+                    menu->font_variants_count++;
+                }
+            }
+        }
+        closedir(dir);
+    }
+
+    // If no variants found, add a placeholder
+    if (menu->font_variants_count == 0) {
+        strcpy(menu->font_variants[0], "Regular");
+        menu->font_variants_count = 1;
+        menu->current_font_variant_index = 0;
+    }
+}
 
 MenuSystem* menu_system_create(void)
 {
@@ -253,6 +365,10 @@ MenuSystem* menu_system_create(void)
     menu->create_world_error = false;
     strcpy(menu->create_world_error_msg, "");
 
+    // Initialize settings with defaults
+    menu->render_distance = 50.0f;
+    menu->max_fps = 144;
+
     // Load background image
     menu->background_loaded = false;
     if (FileExists("./assets/MainMenuBackground.png")) {
@@ -267,6 +383,12 @@ MenuSystem* menu_system_create(void)
     if (menu->available_languages_count > 0) {
         menu_load_language(menu, menu->available_languages[menu->current_language_index]);
     }
+
+    // Scan for available fonts
+    menu_scan_fonts(menu);
+
+    // Scan variants for the current font family
+    menu_scan_font_variants(menu, menu->font_families[menu->current_font_family_index]);
 
     // Scan for available worlds
     menu_scan_worlds(menu);
@@ -400,7 +522,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.9f";
+    const char* version = "Basic 3D Visualizer - v0.0.9g";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
@@ -437,10 +559,18 @@ void menu_draw_main(MenuSystem* menu, Font font)
         button_height
     };
 
+    // Settings button
+    Rectangle settings_button = {
+        center_x - button_width / 2,
+        center_y + 3 * (button_height + button_spacing),
+        button_width,
+        button_height
+    };
+
     // Quit button
     Rectangle quit_button = {
         center_x - button_width / 2,
-        center_y + 3 * (button_height + button_spacing),
+        center_y + 4 * (button_height + button_spacing),
         button_width,
         button_height
     };
@@ -450,6 +580,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     bool world_hover = CheckCollisionPointRec(mouse_pos, world_button);
     bool create_hover = CheckCollisionPointRec(mouse_pos, create_button);
     bool credits_hover = CheckCollisionPointRec(mouse_pos, credits_button);
+    bool settings_hover = CheckCollisionPointRec(mouse_pos, settings_button);
     bool quit_hover = CheckCollisionPointRec(mouse_pos, quit_button);
 
     // Draw Select World button
@@ -476,12 +607,20 @@ void menu_draw_main(MenuSystem* menu, Font font)
                (Vector2){center_x - credits_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 14},
                32, 1, BLACK);
 
+    // Draw Settings button
+    DrawRectangleRec(settings_button, settings_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(settings_button, 2, WHITE);
+    Vector2 settings_text_size = MeasureTextEx(font, menu->game_text.settings, 32, 1);
+    DrawTextEx(font, menu->game_text.settings,
+               (Vector2){center_x - settings_text_size.x / 2, center_y + 3 * (button_height + button_spacing) + 14},
+               32, 1, BLACK);
+
     // Draw Quit button
     DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(quit_button, 2, WHITE);
     Vector2 quit_text_size = MeasureTextEx(font, menu->text_quit, 32, 1);
     DrawTextEx(font, menu->text_quit,
-               (Vector2){center_x - quit_text_size.x / 2, center_y + 3 * (button_height + button_spacing) + 14},
+               (Vector2){center_x - quit_text_size.x / 2, center_y + 4 * (button_height + button_spacing) + 14},
                32, 1, BLACK);
 
     // Handle button clicks
@@ -496,6 +635,8 @@ void menu_draw_main(MenuSystem* menu, Font font)
             menu->create_world_error = false;
         } else if (credits_hover) {
             menu->current_state = MENU_STATE_CREDITS;
+        } else if (settings_hover) {
+            menu->current_state = MENU_STATE_SETTINGS;
         } else if (quit_hover) {
             exit(0);
         }
@@ -665,6 +806,10 @@ void menu_update_input(MenuSystem* menu)
     if (menu->current_state == MENU_STATE_CREDITS && IsKeyPressed(KEY_ESCAPE)) {
         menu->current_state = MENU_STATE_MAIN;
     }
+    // ESC key returns to main menu from settings
+    if (menu->current_state == MENU_STATE_SETTINGS && IsKeyPressed(KEY_ESCAPE)) {
+        menu->current_state = MENU_STATE_MAIN;
+    }
 }
 
 void menu_draw_create_world(MenuSystem* menu, Font font)
@@ -824,6 +969,251 @@ void menu_draw_create_world(MenuSystem* menu, Font font)
         }
     }
 }
+
+void menu_draw_settings(MenuSystem* menu, Font font)
+{
+    int screen_width = GetScreenWidth();
+
+    // Clear background
+    ClearBackground((Color){20, 20, 20, 255});
+
+    // Draw title
+    Vector2 title_size = MeasureTextEx(font, menu->game_text.settings, 64, 2);
+    DrawTextEx(font, menu->game_text.settings,
+               (Vector2){(screen_width - title_size.x) / 2, 40},
+               64, 2, WHITE);
+
+    // Settings panel - increased height for font selection
+    int panel_width = 600;
+    int panel_height = 420;
+    int panel_x = (screen_width - panel_width) / 2;
+    int panel_y = 120;
+
+    DrawRectangle(panel_x - 10, panel_y - 10, panel_width + 20, panel_height + 20, (Color){40, 40, 40, 255});
+    DrawRectangleLines(panel_x - 10, panel_y - 10, panel_width + 20, panel_height + 20, WHITE);
+
+    // Render Distance slider
+    int slider_y = panel_y + 30;
+    int slider_x = panel_x + 50;
+    int slider_width = 500;
+    int slider_height = 20;
+
+    // Draw label
+    DrawTextEx(font, menu->game_text.render_dist_label, (Vector2){panel_x + 30, slider_y - 35}, 28, 1, WHITE);
+
+    // Draw value
+    char render_dist_str[32];
+    snprintf(render_dist_str, sizeof(render_dist_str), "%.0f", menu->render_distance);
+    DrawTextEx(font, render_dist_str, (Vector2){panel_x + 500, slider_y - 35}, 28, 1, GRAY);
+
+    // Draw slider background
+    DrawRectangle(slider_x, slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
+    DrawRectangleLines(slider_x, slider_y, slider_width, slider_height, WHITE);
+
+    // Calculate slider knob position
+    float render_dist_normalized = (menu->render_distance - 10.0f) / (100.0f - 10.0f);
+    render_dist_normalized = render_dist_normalized < 0 ? 0 : (render_dist_normalized > 1 ? 1 : render_dist_normalized);
+    int knob_x = slider_x + (int)(render_dist_normalized * slider_width);
+
+    // Draw knob
+    DrawRectangle(knob_x - 6, slider_y - 5, 12, slider_height + 10, LIGHTGRAY);
+    DrawRectangleLines(knob_x - 6, slider_y - 5, 12, slider_height + 10, WHITE);
+
+    // Handle render distance slider input
+    Vector2 mouse_pos = GetMousePosition();
+    Rectangle render_slider_rect = {(float)slider_x, (float)(slider_y - 10), (float)slider_width, slider_height + 20};
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, render_slider_rect)) {
+        float new_pos = (mouse_pos.x - slider_x) / slider_width;
+        new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
+        menu->render_distance = 10.0f + (new_pos * (100.0f - 10.0f));
+    }
+
+    // Max FPS slider
+    int fps_slider_y = slider_y + 100;
+
+    // Draw label
+    DrawTextEx(font, menu->game_text.max_fps_label, (Vector2){panel_x + 30, fps_slider_y - 35}, 28, 1, WHITE);
+
+    // Draw value
+    char fps_str[32];
+    snprintf(fps_str, sizeof(fps_str), "%d", menu->max_fps);
+    DrawTextEx(font, fps_str, (Vector2){panel_x + 500, fps_slider_y - 35}, 28, 1, GRAY);
+
+    // Draw slider background
+    DrawRectangle(slider_x, fps_slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
+    DrawRectangleLines(slider_x, fps_slider_y, slider_width, slider_height, WHITE);
+
+    // Calculate FPS slider knob position (30-240)
+    float fps_normalized = (menu->max_fps - 30) / (240.0f - 30);
+    fps_normalized = fps_normalized < 0 ? 0 : (fps_normalized > 1 ? 1 : fps_normalized);
+    int fps_knob_x = slider_x + (int)(fps_normalized * slider_width);
+
+    // Draw knob
+    DrawRectangle(fps_knob_x - 6, fps_slider_y - 5, 12, slider_height + 10, LIGHTGRAY);
+    DrawRectangleLines(fps_knob_x - 6, fps_slider_y - 5, 12, slider_height + 10, WHITE);
+
+    // Handle FPS slider input
+    Rectangle fps_slider_rect = {(float)slider_x, (float)(fps_slider_y - 10), (float)slider_width, slider_height + 20};
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, fps_slider_rect)) {
+        float new_pos = (mouse_pos.x - slider_x) / slider_width;
+        new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
+        menu->max_fps = (int)(30 + (new_pos * (240 - 30)));
+        if (menu->max_fps < 30) menu->max_fps = 30;
+    }
+
+    // Font selection
+    int font_y = fps_slider_y + 90;
+
+    // Draw label
+    DrawTextEx(font, menu->game_text.font_family_label, (Vector2){panel_x + 30, font_y - 35}, 24, 1, WHITE);
+
+    // Previous/Next buttons for font family selection
+    int button_small_width = 35;
+    int button_small_height = 35;
+    int prev_button_x = panel_x + 50;
+    int next_button_x = panel_x + 500;
+    int font_display_y = font_y - 15;
+
+    Rectangle prev_button = {
+        (float)prev_button_x,
+        (float)font_display_y,
+        (float)button_small_width,
+        (float)button_small_height
+    };
+
+    Rectangle next_button = {
+        (float)next_button_x,
+        (float)font_display_y,
+        (float)button_small_width,
+        (float)button_small_height
+    };
+
+    bool prev_hover = CheckCollisionPointRec(mouse_pos, prev_button);
+    bool next_hover = CheckCollisionPointRec(mouse_pos, next_button);
+
+    // Draw previous button
+    DrawRectangleRec(prev_button, prev_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(prev_button, 2, WHITE);
+    DrawTextEx(font, "<", (Vector2){prev_button_x + 7, font_display_y + 3}, 24, 1, BLACK);
+
+    // Draw next button
+    DrawRectangleRec(next_button, next_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(next_button, 2, WHITE);
+    DrawTextEx(font, ">", (Vector2){next_button_x + 9, font_display_y + 3}, 24, 1, BLACK);
+
+    // Draw current font family name in the middle
+    Vector2 family_name_size = MeasureTextEx(font, menu->font_families[menu->current_font_family_index], 22, 1);
+    DrawTextEx(font, menu->font_families[menu->current_font_family_index],
+               (Vector2){panel_x + (panel_width - (int)family_name_size.x) / 2, font_display_y + 6},
+               22, 1, WHITE);
+
+    // Handle font family selection buttons
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (prev_hover) {
+            menu->current_font_family_index = (menu->current_font_family_index - 1 + menu->font_families_count) % menu->font_families_count;
+            // Scan variants for the new family
+            menu_scan_font_variants(menu, menu->font_families[menu->current_font_family_index]);
+        } else if (next_hover) {
+            menu->current_font_family_index = (menu->current_font_family_index + 1) % menu->font_families_count;
+            // Scan variants for the new family
+            menu_scan_font_variants(menu, menu->font_families[menu->current_font_family_index]);
+        }
+    }
+
+    // Font variant dropdown
+    int variant_y = font_display_y + 50;
+    DrawTextEx(font, menu->game_text.font_variant_label, (Vector2){panel_x + 30, variant_y - 25}, 24, 1, WHITE);
+
+    // Draw variant dropdown background
+    int dropdown_x = panel_x + 140;
+    int dropdown_y = variant_y - 20;
+    int dropdown_width = 330;
+    int dropdown_height = 30;
+
+    DrawRectangle(dropdown_x, dropdown_y, dropdown_width, dropdown_height, (Color){60, 60, 60, 255});
+    DrawRectangleLines(dropdown_x, dropdown_y, dropdown_width, dropdown_height, WHITE);
+
+    // Display current variant name (without .ttf extension)
+    char variant_display[256];
+    strcpy(variant_display, menu->font_variants[menu->current_font_variant_index]);
+    // Remove .ttf extension
+    char* ext = strrchr(variant_display, '.');
+    if (ext) *ext = '\0';
+
+    DrawTextEx(font, variant_display,
+               (Vector2){dropdown_x + 10, dropdown_y + 5},
+               20, 1, WHITE);
+
+    // Up/Down buttons for variant selection
+    int variant_button_width = 30;
+    int variant_button_height = 30;
+    int variant_up_x = dropdown_x + dropdown_width + 5;
+    int variant_down_x = dropdown_x + dropdown_width + 5;
+    int variant_up_y = variant_y - 20;
+    int variant_down_y = variant_y - 20 + variant_button_height;
+
+    Rectangle variant_up_button = {
+        (float)variant_up_x,
+        (float)variant_up_y,
+        (float)variant_button_width,
+        (float)variant_button_height
+    };
+
+    Rectangle variant_down_button = {
+        (float)variant_down_x,
+        (float)variant_down_y,
+        (float)variant_button_width,
+        (float)variant_button_height
+    };
+
+    bool variant_up_hover = CheckCollisionPointRec(mouse_pos, variant_up_button);
+    bool variant_down_hover = CheckCollisionPointRec(mouse_pos, variant_down_button);
+
+    // Draw up button
+    DrawRectangleRec(variant_up_button, variant_up_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(variant_up_button, 2, WHITE);
+    DrawTextEx(font, "^", (Vector2){variant_up_x + 6, variant_up_y + 2}, 20, 1, BLACK);
+
+    // Draw down button
+    DrawRectangleRec(variant_down_button, variant_down_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(variant_down_button, 2, WHITE);
+    DrawTextEx(font, "v", (Vector2){variant_down_x + 6, variant_down_y + 2}, 20, 1, BLACK);
+
+    // Handle variant selection
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (variant_up_hover && menu->current_font_variant_index > 0) {
+            menu->current_font_variant_index--;
+        } else if (variant_down_hover && menu->current_font_variant_index < menu->font_variants_count - 1) {
+            menu->current_font_variant_index++;
+        }
+    }
+
+    // Back button
+    int button_width = 150;
+    int button_height = 50;
+    int button_y = panel_y + panel_height + 40;
+    Rectangle back_button = {
+        (float)(screen_width / 2 - button_width / 2),
+        (float)button_y,
+        (float)button_width,
+        (float)button_height
+    };
+
+    bool back_hover = CheckCollisionPointRec(mouse_pos, back_button);
+    DrawRectangleRec(back_button, back_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(back_button, 2, WHITE);
+    Vector2 back_text_size = MeasureTextEx(font, menu->text_back, 28, 1);
+    DrawTextEx(font, menu->text_back,
+               (Vector2){back_button.x + (button_width - back_text_size.x) / 2, back_button.y + 10},
+               28, 1, BLACK);
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && back_hover) {
+        menu->current_state = MENU_STATE_MAIN;
+    }
+}
+
 void menu_draw_credits(MenuSystem* menu, Font font)
 {
     int screen_width = GetScreenWidth();
@@ -866,9 +1256,8 @@ void menu_draw_credits(MenuSystem* menu, Font font)
                font_size, spacing, WHITE);
 
     // Draw instructions
-    const char* instructions = "Press ESC to return to main menu";
-    Vector2 instr_size = MeasureTextEx(font, instructions, 18, 1);
-    DrawTextEx(font, instructions,
+    Vector2 instr_size = MeasureTextEx(font, menu->game_text.press_esc_to_return, 18, 1);
+    DrawTextEx(font, menu->game_text.press_esc_to_return,
                (Vector2){(screen_width - instr_size.x) / 2, screen_height - 40},
                18, 1, GRAY);
 }

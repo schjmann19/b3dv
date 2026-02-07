@@ -25,4 +25,9 @@ Informazioni di sistema
 Informazioni sul giocatore
 FPS:
 Coordinate:
-b3dv 0.0.9f
+b3dv 0.0.9gImpostazioni
+Distanza di rendering:
+FPS massimi:
+Famiglia caratteri:
+Variante:
+Premi ESC per tornare al menu principale
