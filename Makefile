@@ -93,7 +93,9 @@ check-local-raylib:
 				exit 1; \
 			fi; \
 		fi; \
-		cd $(LOCAL_RAYLIB_DIR)/src && $(MAKE) PLATFORM=$(PLATFORM) RAYLIB_LIBTYPE=STATIC; \
+		if [ -d $(LOCAL_RAYLIB_DIR)/src ]; then \
+			(cd $(LOCAL_RAYLIB_DIR)/src && $(MAKE) PLATFORM=$(PLATFORM) RAYLIB_LIBTYPE=STATIC); \
+		fi; \
 	fi
 
 # Check and build local raylib for Windows
@@ -108,7 +110,9 @@ check-local-raylib-windows:
 			exit 1; \
 		fi; \
 	fi; \
-	cd $(LOCAL_RAYLIB_DIR)/src && $(MAKE) CC=$(WIN_CC) PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=STATIC clean && $(MAKE) CC=$(WIN_CC) PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=STATIC
+	if [ -d $(LOCAL_RAYLIB_DIR)/src ]; then \
+		(cd $(LOCAL_RAYLIB_DIR)/src && $(MAKE) CC=$(WIN_CC) PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=STATIC clean && $(MAKE) CC=$(WIN_CC) PLATFORM=PLATFORM_DESKTOP RAYLIB_LIBTYPE=STATIC); \
+	fi
 
 # Windows build
 .PHONY: windows
