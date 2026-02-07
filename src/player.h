@@ -25,7 +25,7 @@ typedef struct {
 // Function declarations
 Player* player_create(float x, float y, float z);
 void player_free(Player* player);
-void player_move_input(Player* player, Vector3 forward, Vector3 right, float dt);
+void player_move_input(Player* player, Vector3 forward, Vector3 right);
 void player_update(Player* player, World* world, float dt);
 bool world_check_collision_box(World* world, Vector3 center_pos, float width, float height, float depth);
 

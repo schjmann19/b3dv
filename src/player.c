@@ -27,10 +27,8 @@ void player_free(Player* player)
 }
 
 // Handle player movement input
-void player_move_input(Player* player, Vector3 forward, Vector3 right, float dt)
+void player_move_input(Player* player, Vector3 forward, Vector3 right)
 {
-    (void)dt;  // unused
-
     // Extract horizontal (XZ) component of right vector and normalize it.
     // Then derive a stable horizontal forward from world up and right to avoid issues when
     // the camera is looking straight up/down (forward XZ component near zero).

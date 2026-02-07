@@ -1,3 +1,6 @@
+0.0.9i:
+    optimizationz
+
 0.0.9h:
     bye bye build.sh
     fixed windows build

@@ -90,7 +90,7 @@ static Font load_font_by_name(const char* font_name)
 int main(void)
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9g");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9i");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -109,8 +109,10 @@ int main(void)
                                          menu->font_variants[menu->current_font_variant_index]);
     char last_loaded_family[256];
     char last_loaded_variant[256];
-    strcpy(last_loaded_family, menu->font_families[menu->current_font_family_index]);
-    strcpy(last_loaded_variant, menu->font_variants[menu->current_font_variant_index]);
+    strncpy(last_loaded_family, menu->font_families[menu->current_font_family_index], sizeof(last_loaded_family) - 1);
+    last_loaded_family[sizeof(last_loaded_family) - 1] = '\0';
+    strncpy(last_loaded_variant, menu->font_variants[menu->current_font_variant_index], sizeof(last_loaded_variant) - 1);
+    last_loaded_variant[sizeof(last_loaded_variant) - 1] = '\0';
 
     Camera3D camera = {
         .position = (Vector3){ 20, 15, 20 },
@@ -736,7 +738,7 @@ int main(void)
 
         // handle player movement and update physics (only if not paused or in chat)
         if (!paused && !chat_active) {
-            player_move_input(player, forward, right, dt);
+            player_move_input(player, forward, right);
             player_update(player, world, dt);
             world_update_chunks(world, player->position, camera_forward);  // Load/unload chunks based on player position and camera direction
 
@@ -1025,7 +1027,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9g - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9i - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1055,14 +1057,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9g - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9i - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.9g - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9i - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused

@@ -6,23 +6,34 @@
 #include "world.h"
 #include "vec_math.h"
 
-#define RENDER_WIREFRAMES false
+// Rendering constants
+#define LIGHT_CHECK_HEIGHT 240
+#define LIGHT_CHECK_RANGE 30
+#define LIGHT_LEVEL_SHADOWED 0.6f
+#define LIGHT_LEVEL_MIN 0.25f
+#define LIGHT_BRIGHTNESS_TOP 1.0f
+#define LIGHT_BRIGHTNESS_BOTTOM 0.8f
+#define LIGHT_BRIGHTNESS_SIDE 0.95f
+#define BLOCK_NEAR_EXEMPTION_DIST_SQ 225.0f  // 15^2
+#define BLOCK_MIN_DIST 0.1f
+#define BLOCK_RADIUS 0.5f
+#define WORLD_HEIGHT_MAX 256
 
 // Calculate light level for a block - check for unobstructed access to sunlight
 // Uses early termination and limited search to avoid expensive iteration
 float get_block_light_level(World* world, int x, int y, int z)
 {
-    // Quick check: if we're at height 240 or above, assume fully lit
-    if (y >= 240) return 1.0f;
+    // Quick check: if we're at height threshold or above, assume fully lit
+    if (y >= LIGHT_CHECK_HEIGHT) return 1.0f;
 
-    // Check only up to 30 blocks above (most light is blocked within this range)
-    int check_limit = (y + 30 < 256) ? y + 30 : 256;
+    // Check limited range above (most light is blocked within this range)
+    int check_limit = (y + LIGHT_CHECK_RANGE < WORLD_HEIGHT_MAX) ? y + LIGHT_CHECK_RANGE : WORLD_HEIGHT_MAX;
 
     for (int check_y = y + 1; check_y < check_limit; check_y++) {
         BlockType above = world_get_block(world, x, check_y, z);
         if (above != BLOCK_AIR) {
             // Hit a solid block - this position is shadowed
-            return 0.6f;  // Dim lighting
+            return LIGHT_LEVEL_SHADOWED;
         }
     }
 
@@ -35,28 +46,18 @@ float get_block_light_level(World* world, int x, int y, int z)
 // neighbor_x/y/z: coordinates of the adjacent air block this face is exposed to
 Color apply_face_lighting(Color base_color, int face_index, World* world, int neighbor_x, int neighbor_y, int neighbor_z)
 {
-    float face_brightness = 1.0f;
-
-    if (face_index == 2) {
-        // Top face - brightest
-        face_brightness = 1.0f;
-    } else if (face_index == 3) {
-        // Bottom face - darkest
-        face_brightness = 0.8f;
-    } else {
-        // Side faces - nearly full brightness
-        face_brightness = 0.95f;
-    }
+    // Get face brightness based on orientation
+    float face_brightness = (face_index == 2) ? LIGHT_BRIGHTNESS_TOP :
+                           (face_index == 3) ? LIGHT_BRIGHTNESS_BOTTOM :
+                           LIGHT_BRIGHTNESS_SIDE;
 
     // Check if the adjacent air block has direct sky access
     // This determines if the face should be shadowed
     float adjacent_light = get_block_light_level(world, neighbor_x, neighbor_y, neighbor_z);
 
-    // Apply both face brightness and adjacent block's light level
+    // Apply both face brightness and adjacent block's light level, with clamping
     float final_brightness = face_brightness * adjacent_light;
-
-    // Clamp between 0.25 and 1.0 to ensure minimum visibility
-    if (final_brightness < 0.25f) final_brightness = 0.25f;
+    if (final_brightness < LIGHT_LEVEL_MIN) final_brightness = LIGHT_LEVEL_MIN;
     if (final_brightness > 1.0f) final_brightness = 1.0f;
 
     // Apply brightness to color
@@ -100,58 +101,8 @@ bool is_block_occluded(World* world, int x, int y, int z)
     return false;
 }
 
-// check if a block is visible in the camera frustum
-bool is_block_visible(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
-                      Vector3 cam_right, Vector3 cam_up, float render_distance,
-                      float fovy, float aspect)
-{
-    Vector3 to_block = vec3_sub(block_pos, cam_pos);
-    float dist_sq = to_block.x*to_block.x + to_block.y*to_block.y + to_block.z*to_block.z;
-    float render_dist_sq = render_distance * render_distance;
-
-    if (dist_sq > render_dist_sq) {
-        return false;
-    }
-
-    // always render blocks within 15 units of player (exempt from FOV culling)
-    if (dist_sq < 225.0f) return true;  // 15^2 = 225
-
-    // normalize direction to block (need actual distance for normalized direction)
-    float dist = sqrtf(dist_sq);
-    if (dist < 0.1f) return true;
-
-    float inv_dist = 1.0f / dist;
-    to_block.x *= inv_dist;
-    to_block.y *= inv_dist;
-    to_block.z *= inv_dist;
-
-    // check if block is in front of camera
-    float depth = to_block.x * cam_forward.x + to_block.y * cam_forward.y + to_block.z * cam_forward.z;
-    if (depth <= 0) return false;
-
-    // convert FOV to radians
-    float fovy_rad = fovy * 3.14159265f / 180.0f;
-
-    // much smaller block margin - just account for 0.5 block radius, not 1.2
-    float block_angular_size = atanf(0.5f / (dist > 0.5f ? dist : 0.5f));
-
-    // calculate angle thresholds - use actual tangent-based FOV bounds
-    float half_vert_tan = tanf(fovy_rad / 2.0f);
-    float half_horiz_tan = half_vert_tan * aspect;
-
-    // project block direction onto right and up vectors
-    float right_proj = to_block.x * cam_right.x + to_block.y * cam_right.y + to_block.z * cam_right.z;
-    float up_proj = to_block.x * cam_up.x + to_block.y * cam_up.y + to_block.z * cam_up.z;
-
-    // check if angles are within FOV bounds (compare tan of angles)
-    // tan(angle) = opposite / adjacent, so right_proj / depth gives tan of horizontal angle
-    if (fabsf(right_proj / depth) > (half_horiz_tan + block_angular_size)) return false;
-    if (fabsf(up_proj / depth) > (half_vert_tan + block_angular_size)) return false;
-
-    return true;
-}
-
-// Optimized version with pre-computed FOV values to avoid recalculating tan each block
+// Check if a block is visible in the camera frustum
+// Uses precomputed FOV tangent values if provided for performance
 bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forward,
                            Vector3 cam_right, Vector3 cam_up, float render_distance,
                            float half_vert_tan, float half_horiz_tan)
@@ -164,30 +115,30 @@ bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forwa
         return false;
     }
 
-    // always render blocks within 15 units of player (exempt from FOV culling)
-    if (dist_sq < 225.0f) return true;  // 15^2 = 225
+    // Always render blocks within exemption distance (exempt from FOV culling)
+    if (dist_sq < BLOCK_NEAR_EXEMPTION_DIST_SQ) return true;
 
-    // normalize direction to block
+    // Normalize direction to block
     float dist = sqrtf(dist_sq);
-    if (dist < 0.1f) return true;
+    if (dist < BLOCK_MIN_DIST) return true;
 
     float inv_dist = 1.0f / dist;
     to_block.x *= inv_dist;
     to_block.y *= inv_dist;
     to_block.z *= inv_dist;
 
-    // check if block is in front of camera
+    // Check if block is in front of camera
     float depth = to_block.x * cam_forward.x + to_block.y * cam_forward.y + to_block.z * cam_forward.z;
     if (depth <= 0) return false;
 
-    // block angular size for margin
-    float block_angular_size = atanf(0.5f / (dist > 0.5f ? dist : 0.5f));
+    // Block angular size for margin
+    float block_angular_size = atanf(BLOCK_RADIUS / (dist > BLOCK_RADIUS ? dist : BLOCK_RADIUS));
 
-    // project block direction onto right and up vectors
+    // Project block direction onto right and up vectors
     float right_proj = to_block.x * cam_right.x + to_block.y * cam_right.y + to_block.z * cam_right.z;
     float up_proj = to_block.x * cam_up.x + to_block.y * cam_up.y + to_block.z * cam_up.z;
 
-    // check if angles are within FOV bounds using pre-computed tangent values
+    // Check if angles are within FOV bounds using pre-computed tangent values
     if (fabsf(right_proj / depth) > (half_horiz_tan + block_angular_size)) return false;
     if (fabsf(up_proj / depth) > (half_vert_tan + block_angular_size)) return false;
 
@@ -334,14 +285,6 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
                     DrawTriangle3D(faces[i].v[0], faces[i].v[1], faces[i].v[2], lit_color);
                     DrawTriangle3D(faces[i].v[0], faces[i].v[2], faces[i].v[3], lit_color);
                 }
-
-                // draw wireframe if enabled
-                if (RENDER_WIREFRAMES) {
-                    DrawLine3D(faces[i].v[0], faces[i].v[1], wire_color);
-                    DrawLine3D(faces[i].v[1], faces[i].v[2], wire_color);
-                    DrawLine3D(faces[i].v[2], faces[i].v[3], wire_color);
-                    DrawLine3D(faces[i].v[3], faces[i].v[0], wire_color);
-                }
             }
         }
     }
@@ -363,7 +306,7 @@ bool raycast_block(World* world, Camera3D camera, float max_distance,
     Vector3 ray_origin = camera.position;
     Vector3 ray_dir = vec3_normalize(vec3_sub(camera.target, camera.position));
 
-    float step = 0.1f;  // Larger step size since raycast is only every 3 frames anyway
+    const float step = 0.1f;  // Step size for raycast iterations
     float distance = 0.0f;
 
     Vector3 prev_pos = ray_origin;
