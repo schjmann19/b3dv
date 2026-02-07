@@ -121,6 +121,17 @@ windows: check-local-raylib-windows $(SOURCES) $(HEADERS)
 	$(WIN_CC) $(SOURCES) -o b3dv.exe $(WIN_CFLAGS) $(WIN_LDFLAGS)
 	@echo "Windows build complete: b3dv.exe"
 
+# Updater build targets
+updater: updater-linux
+
+updater-linux:
+	$(CC) updater/src/updater.c -o b3dv-updater $(CFLAGS) -lm
+	@echo "Updater built successfully: ./b3dv-updater"
+
+updater-windows:
+	$(WIN_CC) updater/src/updater.c -o b3dv-updater.exe $(WIN_CFLAGS)
+	@echo "Windows updater built successfully: ./b3dv-updater.exe"
+
 # Platform-specific targets
 .PHONY: linux
 linux: all
@@ -136,7 +147,7 @@ openbsd: all
 
 # Clean
 clean:
-	rm -f b3dv b3dv-noopt b3dv.exe *.o
+	rm -f b3dv b3dv-noopt b3dv.exe b3dv-updater b3dv-updater.exe *.o
 
 # Deep clean (including local raylib)
 distclean: clean
@@ -152,9 +163,12 @@ help:
 	@echo "  noopt         - Build with no optimization flags (system raylib)"
 	@echo "  noopt-local   - Build with no optimization flags (local raylib)"
 	@echo "  windows       - Cross-compile for Windows"
+	@echo "  updater       - Build the updater utility (Linux)"
+	@echo "  updater-linux - Build updater for Linux"
+	@echo "  updater-windows - Cross-compile updater for Windows"
 	@echo "  clean         - Remove build artifacts"
 	@echo "  distclean     - Remove build artifacts and local raylib"
 	@echo ""
 	@echo "Platform targets: linux, macos, freebsd, openbsd"
 
-.PHONY: all noopt noopt-local clean distclean help check-local-raylib check-local-raylib-windows
+.PHONY: all noopt noopt-local clean distclean help check-local-raylib check-local-raylib-windows updater updater-linux updater-windows

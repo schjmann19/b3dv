@@ -25,7 +25,7 @@ Informations système
 Informations du joueur
 FPS:
 Coordonnées:
-b3dv 0.0.9i
+b3dv 0.0.9i-2
 Paramètres
 Distance de rendu :
 FPS max :
