@@ -28,24 +28,15 @@ uses Raylib
 
 ### Linux, macOS, FreeBSD, and other Unix-like systems:
 ```bash
-$ ./build.sh         # Build only
-$ ./build.sh --run   # Build and run (useful when updating)
+$ make
 $ ./b3dv             # Run existing executable
 ```
 
-### Windows (native):
-```cmd
-build-windows.bat           :: Build only
-build-windows.bat --run     :: Build and run (useful when updating)
-world.exe                   :: Run existing executable
+### Windows
+```bash
+$ make windows
 ```
 
-### Windows (MinGW/MSYS2/Cygwin):
-```bash
-$ ./build.sh         # Use Unix-style build
-# or
-$ make windows       # Cross-compile for Windows
-```
 ## Dependencies
 
 ### Linux/macOS/BSD:
