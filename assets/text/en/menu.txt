@@ -25,7 +25,7 @@ System Info
 Player Info
 FPS:
 Coordinates:
-b3dv 0.0.10c
+b3dv 0.0.10d
 Settings
 Render Distance:
 Max FPS:

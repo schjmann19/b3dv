@@ -86,6 +86,10 @@ typedef struct {
     // Background image
     Texture2D background_texture;
     bool background_loaded;
+    // Splash texts
+    char splash_texts[256][512];  // Up to 256 splash texts, max 512 chars each
+    int splash_texts_count;
+    char current_splash_text[512];
     // Localization
     char current_language[32];
     char available_languages[16][32];  // Up to 16 language codes

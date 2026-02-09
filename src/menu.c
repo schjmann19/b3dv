@@ -61,6 +61,37 @@ static void menu_load_random_background(MenuSystem* menu)
     }
 }
 
+// Load splash texts from file and select a random one
+static void menu_load_splash_text(MenuSystem* menu)
+{
+    menu->splash_texts_count = 0;
+    strcpy(menu->current_splash_text, "");
+
+    FILE* file = fopen("./assets/splashtexts/splashs.txt", "r");
+    if (!file) {
+        return;  // File doesn't exist
+    }
+
+    char line[512];
+    while (fgets(line, sizeof(line), file) && menu->splash_texts_count < 256) {
+        // Remove newline
+        line[strcspn(line, "\n")] = '\0';
+
+        // Skip empty lines
+        if (strlen(line) == 0) continue;
+
+        strcpy(menu->splash_texts[menu->splash_texts_count], line);
+        menu->splash_texts_count++;
+    }
+    fclose(file);
+
+    // Select a random splash text if any were loaded
+    if (menu->splash_texts_count > 0) {
+        int random_index = rand() % menu->splash_texts_count;
+        strcpy(menu->current_splash_text, menu->splash_texts[random_index]);
+    }
+}
+
 // Scan available language directories in assets/text/
 static void menu_scan_languages(MenuSystem* menu)
 {
@@ -554,6 +585,9 @@ MenuSystem* menu_system_create(void)
     // Load random background image from mainmenubackground folder
     menu_load_random_background(menu);
 
+    // Load splash texts and select a random one
+    menu_load_splash_text(menu);
+
     // Scan for available languages
     menu_scan_languages(menu);
 
@@ -707,11 +741,27 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.10c";
+    const char* version = "Basic 3D Visualizer - v0.0.10d";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
                24, 1, GRAY);
+
+    // Draw splash text (semi-diagonal, like Minecraft)
+    if (strlen(menu->current_splash_text) > 0) {
+        Vector2 splash_size = MeasureTextEx(font, menu->current_splash_text, 36, 1);
+        float splash_x = (screen_width - title_size.x) / 2 + title_size.x + 30;  // Right of title
+        float splash_y = 210;
+        float rotation = -20.0f;  // 20 degrees rotation (negative for clockwise)
+
+        // Draw with rotation
+        DrawTextPro(font, menu->current_splash_text,
+                   (Vector2){splash_x, splash_y},
+                   (Vector2){0, splash_size.y / 2},  // Rotate around center height
+                   rotation,
+                   36, 1,
+                   (Color){255, 255, 0, 200});  // Yellow with slight transparency
+    }
 
     // Button dimensions
     int button_width = 400;
