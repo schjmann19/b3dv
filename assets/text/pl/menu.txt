@@ -25,7 +25,7 @@ Informacje o systemie
 Informacje o graczu
 FPS:
 Współrzędne:
-b3dv 0.0.10
+b3dv 0.0.10b
 Ustawienia
 Dystans renderowania:
 Max klatek/s:

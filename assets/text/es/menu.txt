@@ -25,7 +25,7 @@ Información del Sistema
 Información del Jugador
 FPS:
 Coordenadas:
-b3dv 0.0.10
+b3dv 0.0.10b
 Ajustes
 Distancia de renderizado:
 FPS máx.:
