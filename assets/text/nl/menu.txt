@@ -25,7 +25,7 @@ Systeeminfo
 Spelersinfo
 FPS:
 Coördinaten:
-b3dv 0.0.10d
+b3dv 0.0.10e
 Instellingen
 Renderafstand:
 Max FPS:
