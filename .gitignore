@@ -1,6 +1,5 @@
 worlds
-todos.txt
 .github
 .idea
 backups
-.old/save
+.old
