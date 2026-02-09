@@ -465,3 +465,37 @@ e
 /tp 99 5 105
 /tp 99 5 105
 /tp 99 5 105
+/select stone
+/select sand
+/select stone
+/select grass
+/fly enable
+/fly disable
+/fly enable
+/fly enabled
+/fly enable
+/fly enable
+/fly disable
+/tp 100 100 100
+/flight
+/fly enabled
+/fly enable
+/fly enable
+/fly disable
+/fly disable
+/asd
+/asd
+/fly enable
+/fly enable
+/fly enable
+/fly enable
+/noclip enable
+/noclip disable
+/tp 100 100 100
+/fly enable
+/noclip enable
+/noclip disable
+/fly disable
+/fly enable
+/fly disable
+/fly enable

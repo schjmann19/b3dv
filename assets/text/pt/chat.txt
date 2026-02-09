@@ -1,0 +1,20 @@
+Encerrando...
+Teleportado para (%.1f, %.1f, %.1f)
+Uso: /tp x y z
+Mundo '%s' salvo com sucesso.
+Falha ao salvar mundo '%s'.
+Mundo '%s' carregado com sucesso.
+Falha ao carregar mundo '%s'.
+Nome de mundo inválido. Use apenas caracteres alfanuméricos e sublinhado.
+Bloco selecionado: %s
+Tipo de bloco desconhecido: %s. Disponíveis: stone, dirt, grass, sand, wood
+Voo ativado. Clique duas vezes em Espaço para alternar.
+Voo desativado.
+Uso: /fly enable ou /fly disable
+Modo fantasma ativado. Você pode passar through blocos.
+Modo fantasma desativado. Colisão está ativa novamente.
+Uso: /noclip enable ou /noclip disable
+Bloco colocado em (%.1f, %.1f, %.1f) como %s
+Fora dos limites: y in [0, 255]
+Uso: /setblock x y z [block_type]
+Comando desconhecido: %s

@@ -1,3 +1,12 @@
+0.0.10b:
+    added chat output
+    flight had no clip
+    (also chat doesnt pause anymore)
+    fixed sprinting
+
+0.0.10:
+    added flight (/fly <enable|disable>)
+
 0.0.9k:
     added persistent settings (./options.txt)
 

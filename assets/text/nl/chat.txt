@@ -1,0 +1,20 @@
+Afsluiten...
+Teleporteerd naar (%.1f, %.1f, %.1f)
+Gebruik: /tp x y z
+Wereld '%s' succesvol opgeslagen.
+Fout bij opslaan van wereld '%s'.
+Wereld '%s' succesvol geladen.
+Fout bij laden van wereld '%s'.
+Ongeldige wereldnaam. Gebruik alleen alfanumerieke tekens en onderstrepen.
+Blok geselecteerd: %s
+Onbekend bloktype: %s. Beschikbaar: stone, dirt, grass, sand, wood
+Vliegen ingeschakeld. Dubbelklik op Spatie om in/uit te schakelen.
+Vliegen uitgeschakeld.
+Gebruik: /fly enable of /fly disable
+Ghost-modus ingeschakeld. Je kunt door blokken gaan.
+Ghost-modus uitgeschakeld. Botsingdetectie is weer actief.
+Gebruik: /noclip enable of /noclip disable
+Blok geplaatst op (%.1f, %.1f, %.1f) als %s
+Buiten grenzen: y in [0, 255]
+Gebruik: /setblock x y z [block_type]
+Onbekend commando: %s

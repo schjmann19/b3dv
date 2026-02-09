@@ -1,0 +1,20 @@
+Cerrando...
+Teletransportado a (%.1f, %.1f, %.1f)
+Uso: /tp x y z
+El mundo '%s' se guardó correctamente.
+Error al guardar el mundo '%s'.
+El mundo '%s' se cargó correctamente.
+Error al cargar el mundo '%s'.
+Nombre de mundo inválido. Use solo caracteres alfanuméricos y guion bajo.
+Bloque seleccionado: %s
+Tipo de bloque desconocido: %s. Disponibles: stone, dirt, grass, sand, wood
+Vuelo habilitado. Doble clic en Espacio para alternar.
+Vuelo deshabilitado.
+Uso: /fly enable o /fly disable
+Sin colisión activado. Puedes pasar a través de bloques.
+Sin colisión desactivado. La colisión está activa de nuevo.
+Uso: /noclip enable o /noclip disable
+Bloque colocado en (%.1f, %.1f, %.1f) como %s
+Fuera de límites: y en [0, 255]
+Uso: /setblock x y z [block_type]
+Comando desconocido: %s

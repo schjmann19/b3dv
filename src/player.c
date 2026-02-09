@@ -15,6 +15,9 @@ Player* player_create(float x, float y, float z)
     player->on_ground = false;
     player->jump_used = false;
     player->selected_block = BLOCK_STONE;  // Default to stone
+    player->is_flying = false;
+    player->no_clip = false;
+    player->space_press_time = 1.0f;  // Initialize to high value so first press isn't a double-tap
     return player;
 }
 
@@ -27,7 +30,7 @@ void player_free(Player* player)
 }
 
 // Handle player movement input
-void player_move_input(Player* player, Vector3 forward, Vector3 right)
+void player_move_input(Player* player, Vector3 forward, Vector3 right, bool flight_enabled)
 {
     // Extract horizontal (XZ) component of right vector and normalize it.
     // Then derive a stable horizontal forward from world up and right to avoid issues when
@@ -54,10 +57,24 @@ void player_move_input(Player* player, Vector3 forward, Vector3 right)
     player->shifting = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
     bool sprinting = IsKeyDown(KEY_LEFT_CONTROL);
     float move_speed = PLAYER_SPEED;
-    if (player->shifting) {
+    if (player->shifting && !player->is_flying) {
         move_speed *= 0.5f;
-    } else if (sprinting) {
+    } else if (sprinting && !player->is_flying) {
         move_speed *= 1.5f;
+    }
+
+    // Handle flight toggling with double-tap space (when FLIGHT_ENABLED is true)
+    bool space_pressed_now = IsKeyPressed(KEY_SPACE);
+    if (space_pressed_now) {
+        if (flight_enabled && player->space_press_time < DOUBLE_TAP_THRESHOLD) {
+            // Double-tap detected - toggle flying
+            player->is_flying = !player->is_flying;
+            if (player->is_flying) {
+                // Entering flight mode - stop falling velocity
+                player->velocity.y = 0;
+            }
+        }
+        player->space_press_time = 0.0f;
     }
 
     Vector3 move = { 0, 0, 0 };
@@ -82,18 +99,41 @@ void player_move_input(Player* player, Vector3 forward, Vector3 right)
         move.z *= scale;
     }
 
-    if (IsKeyDown(KEY_SPACE)) {
-        if (player->on_ground && !player->jump_used) {
-            player->velocity.y = JUMP_FORCE;
-            player->on_ground = false;
-            player->jump_used = true;
+    if (player->is_flying) {
+        // Flying mode: space goes up, shift goes down, WASD moves horizontally
+        // Apply sprint boost when flying (ctrl key)
+        float fly_speed_mult = 1.0f;
+        if (sprinting) {
+            fly_speed_mult = 1.5f;
+        }
+
+        // Scale horizontal movement by sprint multiplier
+        player->velocity.x = move.x * fly_speed_mult;
+        player->velocity.z = move.z * fly_speed_mult;
+
+        // Vertical movement in flight
+        player->velocity.y = 0;
+        if (IsKeyDown(KEY_SPACE)) {
+            player->velocity.y = FLY_SPEED * fly_speed_mult;
+        }
+        if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+            player->velocity.y = -FLY_SPEED * fly_speed_mult;
         }
     } else {
-        player->jump_used = false;
-    }
+        // Normal mode: jumping with space
+        if (IsKeyDown(KEY_SPACE)) {
+            if (player->on_ground && !player->jump_used) {
+                player->velocity.y = JUMP_FORCE;
+                player->on_ground = false;
+                player->jump_used = true;
+            }
+        } else {
+            player->jump_used = false;
+        }
 
-    player->velocity.x = move.x;
-    player->velocity.z = move.z;
+        player->velocity.x = move.x;
+        player->velocity.z = move.z;
+    }
 }
 
 // Check collision for a rectangular prism (box) - AABB collision
@@ -143,11 +183,20 @@ bool world_check_collision_box(World* world, Vector3 center_pos, float width, fl
 }
 
 // Update player physics
-void player_update(Player* player, World* world, float dt)
+void player_update(Player* player, World* world, float dt, bool flight_enabled)
 {
+    // Update space press timing for double-tap detection
+    if (player->space_press_time < DOUBLE_TAP_THRESHOLD) {
+        player->space_press_time += dt;
+    }
+
     // Store previous position for speedometer
     player->prev_position = player->position;
-    player->velocity.y -= GRAVITY * dt;
+
+    // Only apply gravity if not flying
+    if (!player->is_flying) {
+        player->velocity.y -= GRAVITY * dt;
+    }
 
     if (player->velocity.y < -50.0f) {
         player->velocity.y = -50.0f;
@@ -158,6 +207,13 @@ void player_update(Player* player, World* world, float dt)
         player->position.y + player->velocity.y * dt,
         player->position.z + player->velocity.z * dt
     };
+
+    // When no-clipping, bypass collision detection
+    if (player->no_clip) {
+        player->position = new_pos;
+        player->on_ground = false;
+        return;
+    }
 
     // Edge safety: if shifting, prevent walking off ledges
     if (player->shifting && player->on_ground) {

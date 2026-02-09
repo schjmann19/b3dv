@@ -90,7 +90,7 @@ static Font load_font_by_name(const char* font_name)
 int main(void)
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9k");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.10");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -136,6 +136,9 @@ int main(void)
     char cached_gpu[128] = {0};
     char cached_kernel[128] = {0};
 
+    // Flight system
+    bool flight_enabled = false;
+
     // Pause state
     bool paused = false;
     bool pause_settings_open = false;
@@ -148,11 +151,22 @@ int main(void)
     int chat_cursor_pos = 0;  // cursor position in input string
     int history_index = 0;    // 0 means no history entry selected, 1+ means Nth-from-last
 
-    // Block highlighting for raycast
-    int highlighted_block_x = 0;
-    int highlighted_block_y = 0;
-    int highlighted_block_z = 0;
-    bool has_highlighted_block = false;
+    // Chat message display (feedback messages)
+    #define CHAT_MESSAGE_BUFFER_SIZE 16
+    #define CHAT_MESSAGE_MAX_LEN 512
+    char chat_messages[CHAT_MESSAGE_BUFFER_SIZE][CHAT_MESSAGE_MAX_LEN] = {0};
+    double chat_message_times[CHAT_MESSAGE_BUFFER_SIZE] = {0};
+    int chat_message_count = 0;
+
+    // Macro to add a chat message to the buffer
+    #define add_chat_message(message) \
+    do { \
+        int _msg_idx = chat_message_count % CHAT_MESSAGE_BUFFER_SIZE; \
+        strncpy(chat_messages[_msg_idx], (message), CHAT_MESSAGE_MAX_LEN - 1); \
+        chat_messages[_msg_idx][CHAT_MESSAGE_MAX_LEN - 1] = '\0'; \
+        chat_message_times[_msg_idx] = GetTime(); \
+        chat_message_count++; \
+    } while(0)
 
     // Camera angle tracking (in radians)
     float camera_yaw = 0.0f;    // horizontal rotation around Y axis
@@ -163,6 +177,12 @@ int main(void)
     Vector3 camera_up = {0, 1, 0};
     // Persistent camera forward (actual look direction)
     Vector3 camera_forward = (Vector3){0, 0, 1};
+
+    // Block highlighting for raycast
+    int highlighted_block_x = 0;
+    int highlighted_block_y = 0;
+    int highlighted_block_z = 0;
+    bool has_highlighted_block = false;
 
     // Initialize camera angles from initial forward direction
     camera_yaw = 0.0f;
@@ -366,6 +386,7 @@ int main(void)
                 if (chat_input[0] == '/') {
                     // Parse command
                     if (strncmp(chat_input, "/quit", 5) == 0) {
+                        add_chat_message(menu->game_text.msg_quitting);
                         should_quit = true;
                     } else if (strncmp(chat_input, "/tp ", 4) == 0) {
                         // Parse teleport coordinates
@@ -373,6 +394,11 @@ int main(void)
                         if (sscanf(chat_input, "/tp %f %f %f", &x, &y, &z) == 3) {
                             player->position = (Vector3){ x, y, z };
                             player->velocity = (Vector3){ 0, 0, 0 };
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_teleported, x, y, z);
+                            add_chat_message(msg);
+                        } else {
+                            add_chat_message(menu->game_text.msg_teleport_usage);
                         }
                     } else if (strncmp(chat_input, "/save ", 6) == 0) {
                         // Save world: /save worldname
@@ -382,9 +408,13 @@ int main(void)
                         trim_string(world_name_buf);
                         const char* world_name = world_name_buf;
                         if (world_save(world, world_name)) {
-                            printf("World '%s' saved successfully.\n", world_name);
+                            char msg[512];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_world_saved, world_name);
+                            add_chat_message(msg);
                         } else {
-                            printf("Failed to save world '%s'.\n", world_name);
+                            char msg[512];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_world_save_failed, world_name);
+                            add_chat_message(msg);
                         }
                     } else if (strncmp(chat_input, "/load ", 6) == 0) {
                         // Load world: /load worldname
@@ -398,9 +428,14 @@ int main(void)
                             world_save(world, world->world_name);
                         }
                         if (world_load(world, world_name)) {
-                            printf("World '%s' loaded successfully.\n", world_name);
+                            char msg[512];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_world_loaded, world_name);
+                            add_chat_message(msg);
                         } else {
-                            printf("Failed to load world '%s'.\n", world_name);
+                            char msg[512];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_world_load_failed, world_name);
+                            add_chat_message(msg);
+                            world_generate_prism(world);  // Fall back to default world
                         }
                     } else if (strncmp(chat_input, "/createworld ", 13) == 0) {
                         // Create new world: /createworld worldname
@@ -426,7 +461,7 @@ int main(void)
                         }
 
                         if (!valid_name) {
-                            printf("Invalid world name. Use only alphanumeric characters and underscore.\n");
+                            add_chat_message("Invalid world name. Use only alphanumeric characters and underscore.");
                         } else {
                             // Free current world and create new one
                             world_free(world);
@@ -439,12 +474,16 @@ int main(void)
                             world_generate_prism(world);
                             // Save the newly created world
                             if (world_save(world, world_name)) {
-                                printf("World '%s' created and saved successfully.\n", world_name);
+                                char msg[512];
+                                snprintf(msg, sizeof(msg), "World '%s' created and saved successfully.", world_name);
+                                add_chat_message(msg);
                                 // Reset player position to origin
                                 player->position = (Vector3){ 0, 20, 0 };
                                 player->velocity = (Vector3){ 0, 0, 0 };
                             } else {
-                                printf("Failed to create world '%s'.\n", world_name);
+                                char msg[512];
+                                snprintf(msg, sizeof(msg), "Failed to create world '%s'.", world_name);
+                                add_chat_message(msg);
                             }
                         }
                     } else if (strncmp(chat_input, "/loadworld ", 11) == 0) {
@@ -471,7 +510,7 @@ int main(void)
                         }
 
                         if (!valid_name) {
-                            printf("Invalid world name. Use only alphanumeric characters and underscore.\n");
+                            add_chat_message(menu->game_text.msg_invalid_world_name);
                         } else {
                             // Free current world and player, then load the saved one
                             world_free(world);
@@ -490,8 +529,13 @@ int main(void)
                                 // Reset player position
                                 player->position = (Vector3){ 0, 20, 0 };
                                 player->velocity = (Vector3){ 0, 0, 0 };
+                                char msg[512];
+                                snprintf(msg, sizeof(msg), menu->game_text.msg_world_loaded, world_name);
+                                add_chat_message(msg);
                             } else {
-                                printf("Failed to load world '%s'.\n", world_name);
+                                char msg[512];
+                                snprintf(msg, sizeof(msg), menu->game_text.msg_world_load_failed, world_name);
+                                add_chat_message(msg);
                                 world_generate_prism(world);  // Fall back to default world
                             }
                         }
@@ -505,21 +549,68 @@ int main(void)
 
                         if (strcmp(block_name, "stone") == 0) {
                             player->selected_block = BLOCK_STONE;
-                            printf("Selected block: stone\n");
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "stone");
+                            add_chat_message(msg);
                         } else if (strcmp(block_name, "dirt") == 0) {
                             player->selected_block = BLOCK_DIRT;
-                            printf("Selected block: dirt\n");
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "dirt");
+                            add_chat_message(msg);
                         } else if (strcmp(block_name, "grass") == 0) {
                             player->selected_block = BLOCK_GRASS;
-                            printf("Selected block: grass\n");
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "grass");
+                            add_chat_message(msg);
                         } else if (strcmp(block_name, "sand") == 0) {
                             player->selected_block = BLOCK_SAND;
-                            printf("Selected block: sand\n");
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "sand");
+                            add_chat_message(msg);
                         } else if (strcmp(block_name, "wood") == 0) {
                             player->selected_block = BLOCK_WOOD;
-                            printf("Selected block: wood\n");
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "wood");
+                            add_chat_message(msg);
                         } else {
-                            printf("Unknown block type: %s. Available: stone, dirt, grass, sand, wood\n", block_name);
+                            char msg[512];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_block, block_name);
+                            add_chat_message(msg);
+                        }
+                    } else if (strncmp(chat_input, "/fly ", 5) == 0) {
+                        // Flight control: /fly enable or /fly disable
+                        char fly_cmd_buf[32];
+                        strncpy(fly_cmd_buf, chat_input + 5, sizeof(fly_cmd_buf) - 1);
+                        fly_cmd_buf[31] = '\0';
+                        trim_string(fly_cmd_buf);
+                        const char* fly_cmd = fly_cmd_buf;
+
+                        if (strcmp(fly_cmd, "enable") == 0) {
+                            flight_enabled = true;
+                            add_chat_message(menu->game_text.msg_flight_enabled);
+                        } else if (strcmp(fly_cmd, "disable") == 0) {
+                            flight_enabled = false;
+                            player->is_flying = false;  // Stop flying if currently flying
+                            add_chat_message(menu->game_text.msg_flight_disabled);
+                        } else {
+                            add_chat_message(menu->game_text.msg_fly_usage);
+                        }
+                    } else if (strncmp(chat_input, "/noclip ", 8) == 0) {
+                        // No-clip mode control: /noclip enable or /noclip disable
+                        char noclip_cmd_buf[32];
+                        strncpy(noclip_cmd_buf, chat_input + 8, sizeof(noclip_cmd_buf) - 1);
+                        noclip_cmd_buf[31] = '\0';
+                        trim_string(noclip_cmd_buf);
+                        const char* noclip_cmd = noclip_cmd_buf;
+
+                        if (strcmp(noclip_cmd, "enable") == 0) {
+                            player->no_clip = true;
+                            add_chat_message(menu->game_text.msg_noclip_enabled);
+                        } else if (strcmp(noclip_cmd, "disable") == 0) {
+                            player->no_clip = false;
+                            add_chat_message(menu->game_text.msg_noclip_disabled);
+                        } else {
+                            add_chat_message(menu->game_text.msg_noclip_usage);
                         }
                     } else if (strncmp(chat_input, "/setblock ", 10) == 0) {
                         // Set block: /setblock x y z [block_type]
@@ -575,7 +666,9 @@ int main(void)
                                     block_type = BLOCK_AIR;
                                     type_str = "air";
                                 } else {
-                                    printf("Unknown block type: %s. Available: air, stone, dirt, grass, sand, wood\n", block_name);
+                                    char msg[512];
+                                    snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_block, block_name);
+                                    add_chat_message(msg);
                                     ix = -1;  // Skip application
                                 }
                             }
@@ -583,17 +676,20 @@ int main(void)
                             // Apply if y is within valid bounds (x and z can be infinite)
                             if (iy >= 0 && iy < 256) {
                                 world_set_block(world, ix, iy, iz, block_type);
-                                printf("Set block at world (%.1f, %.1f, %.1f) → index (%d, %d, %d) to %s.\n", fx, fy, fz, ix, iy, iz, type_str);
+                                char msg[512];
+                                snprintf(msg, sizeof(msg), menu->game_text.msg_block_set, fx, fy, fz, type_str);
+                                add_chat_message(msg);
                             } else if (ix != -1) {
-                                printf("Out of bounds: world (%.1f, %.1f, %.1f) → index (%d, %d, %d)\n", fx, fy, fz, ix, iy, iz);
-                                printf("Valid range: x,z unlimited, y in [0, %d]\n", 256);
+                                add_chat_message(menu->game_text.msg_out_of_bounds);
                             }
                         } else {
-                            printf("Usage: /setblock x y z [block_type]\n");
-                            printf("Coordinates are world-space (player spawn is ~0, 0, 0)\n");
-                            printf("Available blocks: air, stone, dirt, grass, sand, wood\n");
-                            printf("If block_type is omitted, uses currently selected block (use /select to change)\n");
+                            add_chat_message(menu->game_text.msg_setblock_usage);
                         }
+                    } else {
+                        // Unknown command
+                        char msg[512];
+                        snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_command, chat_input);
+                        add_chat_message(msg);
                     }
                 }
 
@@ -737,10 +833,10 @@ int main(void)
         Vector3 forward = (Vector3){ -sinf(camera_yaw), 0.0f, -cosf(camera_yaw) };
         forward = vec3_normalize(forward);
 
-        // handle player movement and update physics (only if not paused or in chat)
-        if (!paused && !chat_active) {
-            player_move_input(player, forward, right);
-            player_update(player, world, dt);
+        // handle player movement and update physics (only if not paused)
+        if (!paused) {
+            player_move_input(player, forward, right, flight_enabled);
+            player_update(player, world, dt, flight_enabled);
             world_update_chunks(world, player->position, camera_forward);  // Load/unload chunks based on player position and camera direction
 
             // Handle block breaking (left click)
@@ -1028,7 +1124,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9k", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.10", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1058,14 +1154,42 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9k", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.10", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.9k", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.10", (Vector2){10, 250}, 32, 1, DARKGRAY);
+        }
+
+        // Draw chat message history (last few messages with fade-out)
+        double current_time = GetTime();
+        double message_lifetime = 5.0;  // Messages stay for 5 seconds
+        int screen_height = GetScreenHeight();
+        int message_start_y = screen_height - 200;  // Start drawing messages from bottom-left
+        int messages_shown = 0;
+
+        for (int i = 0; i < CHAT_MESSAGE_BUFFER_SIZE && messages_shown < 5; i++) {
+            // Find the most recent messages (iterate backwards)
+            int msg_index = (chat_message_count - 1 - i) % CHAT_MESSAGE_BUFFER_SIZE;
+            if (i >= chat_message_count) break;  // Don't show messages that haven't been set yet
+
+            double message_age = current_time - chat_message_times[msg_index];
+            if (message_age < message_lifetime && strlen(chat_messages[msg_index]) > 0) {
+                // Calculate fade: full opacity for first 4 seconds, fade out in last 1 second
+                float fade_factor = 1.0f;
+                if (message_age > 4.0) {
+                    fade_factor = 1.0f - (message_age - 4.0f);  // Fade over last 1 second
+                    fade_factor = fade_factor < 0 ? 0 : fade_factor;
+                }
+
+                Color msg_color = (Color){255, 255, 255, (unsigned char)(255 * fade_factor)};
+                int y_offset = message_start_y - (messages_shown * 35);
+                DrawTextEx(custom_font, chat_messages[msg_index], (Vector2){10, y_offset}, 28, 1, msg_color);
+                messages_shown++;
+            }
         }
 
         // display pause menu with buttons if paused

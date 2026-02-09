@@ -46,6 +46,27 @@ typedef struct {
     char uncapped[64];
     // Credits & Info text
     char press_esc_to_return[256];
+    // Chat feedback messages
+    char msg_quitting[128];
+    char msg_teleported[256];
+    char msg_teleport_usage[128];
+    char msg_world_saved[256];
+    char msg_world_save_failed[256];
+    char msg_world_loaded[256];
+    char msg_world_load_failed[256];
+    char msg_invalid_world_name[256];
+    char msg_block_selected[128];
+    char msg_unknown_block[512];
+    char msg_flight_enabled[256];
+    char msg_flight_disabled[128];
+    char msg_fly_usage[256];
+    char msg_noclip_enabled[256];
+    char msg_noclip_disabled[128];
+    char msg_noclip_usage[256];
+    char msg_block_set[256];
+    char msg_out_of_bounds[256];
+    char msg_setblock_usage[256];
+    char msg_unknown_command[256];
 } GameText;
 
 // Menu system state

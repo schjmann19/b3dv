@@ -1,5 +1,5 @@
 # B3DV Game Settings
-render_distance=50.5
+render_distance=49.8
 max_fps=0
 language=es
 font_family=Inter

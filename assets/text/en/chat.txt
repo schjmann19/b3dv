@@ -1,0 +1,20 @@
+Quitting...
+Teleported to (%.1f, %.1f, %.1f)
+Usage: /tp x y z
+World '%s' saved successfully.
+Failed to save world '%s'.
+World '%s' loaded successfully.
+Failed to load world '%s'.
+Invalid world name. Use only alphanumeric characters and underscore.
+Selected block: %s
+Unknown block type: %s. Available: stone, dirt, grass, sand, wood
+Flight enabled. Double-tap Space to toggle flying.
+Flight disabled.
+Usage: /fly enable or /fly disable
+No-clip enabled. You can pass through blocks.
+No-clip disabled. Collision is active again.
+Usage: /noclip enable or /noclip disable
+Set block at (%.1f, %.1f, %.1f) to %s
+Out of bounds: y in [0, 255]
+Usage: /setblock x y z [block_type]
+Unknown command: %s

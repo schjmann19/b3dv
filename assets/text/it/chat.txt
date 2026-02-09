@@ -1,0 +1,20 @@
+Chiusura...
+Teletrasportato a (%.1f, %.1f, %.1f)
+Utilizzo: /tp x y z
+Il mondo '%s' è stato salvato con successo.
+Impossibile salvare il mondo '%s'.
+Il mondo '%s' è stato caricato con successo.
+Impossibile caricare il mondo '%s'.
+Nome del mondo non valido. Utilizzare solo caratteri alfanumerici e underscore.
+Blocco selezionato: %s
+Tipo di blocco sconosciuto: %s. Disponibili: stone, dirt, grass, sand, wood
+Volo abilitato. Doppio clic su Spazio per attivare/disattivare.
+Volo disabilitato.
+Utilizzo: /fly enable o /fly disable
+Modalità no-clip abilitata. Puoi passare attraverso i blocchi.
+Modalità no-clip disabilitata. La collisione è di nuovo attiva.
+Utilizzo: /noclip enable o /noclip disable
+Blocco posizionato a (%.1f, %.1f, %.1f) come %s
+Fuori dai limiti: y in [0, 255]
+Utilizzo: /setblock x y z [block_type]
+Comando sconosciuto: %s

@@ -126,7 +126,24 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 menu->game_text.font_family_label,
                 menu->game_text.font_variant_label,
                 menu->game_text.uncapped,
-                menu->game_text.press_esc_to_return
+                menu->game_text.press_esc_to_return,
+                menu->game_text.msg_quitting,
+                menu->game_text.msg_teleported,
+                menu->game_text.msg_teleport_usage,
+                menu->game_text.msg_world_saved,
+                menu->game_text.msg_world_save_failed,
+                menu->game_text.msg_world_loaded,
+                menu->game_text.msg_world_load_failed,
+                menu->game_text.msg_invalid_world_name,
+                menu->game_text.msg_block_selected,
+                menu->game_text.msg_unknown_block,
+                menu->game_text.msg_flight_enabled,
+                menu->game_text.msg_flight_disabled,
+                menu->game_text.msg_fly_usage,
+                menu->game_text.msg_block_set,
+                menu->game_text.msg_out_of_bounds,
+                menu->game_text.msg_setblock_usage,
+                menu->game_text.msg_unknown_command
             };
             int sizes[] = {
                 sizeof(menu->text_select_world),
@@ -163,7 +180,24 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->game_text.font_family_label),
                 sizeof(menu->game_text.font_variant_label),
                 sizeof(menu->game_text.uncapped),
-                sizeof(menu->game_text.press_esc_to_return)
+                sizeof(menu->game_text.press_esc_to_return),
+                sizeof(menu->game_text.msg_quitting),
+                sizeof(menu->game_text.msg_teleported),
+                sizeof(menu->game_text.msg_teleport_usage),
+                sizeof(menu->game_text.msg_world_saved),
+                sizeof(menu->game_text.msg_world_save_failed),
+                sizeof(menu->game_text.msg_world_loaded),
+                sizeof(menu->game_text.msg_world_load_failed),
+                sizeof(menu->game_text.msg_invalid_world_name),
+                sizeof(menu->game_text.msg_block_selected),
+                sizeof(menu->game_text.msg_unknown_block),
+                sizeof(menu->game_text.msg_flight_enabled),
+                sizeof(menu->game_text.msg_flight_disabled),
+                sizeof(menu->game_text.msg_fly_usage),
+                sizeof(menu->game_text.msg_block_set),
+                sizeof(menu->game_text.msg_out_of_bounds),
+                sizeof(menu->game_text.msg_setblock_usage),
+                sizeof(menu->game_text.msg_unknown_command)
             };
 
             strncpy(buffers[line_count], line, sizes[line_count] - 1);
@@ -173,6 +207,73 @@ void menu_load_language(MenuSystem* menu, const char* language)
         fclose(file);
     } else {
         fprintf(stderr, "Failed to load menu text from: %s\n", menu_path);
+    }
+
+    // Load chat messages from chat.txt
+    char chat_path[512];
+    snprintf(chat_path, sizeof(chat_path), "./assets/text/%s/chat.txt", language);
+
+    FILE* chat_file = fopen(chat_path, "r");
+    if (chat_file) {
+        char line[512];
+        int chat_line_count = 0;
+
+        char* chat_buffers[] = {
+            menu->game_text.msg_quitting,
+            menu->game_text.msg_teleported,
+            menu->game_text.msg_teleport_usage,
+            menu->game_text.msg_world_saved,
+            menu->game_text.msg_world_save_failed,
+            menu->game_text.msg_world_loaded,
+            menu->game_text.msg_world_load_failed,
+            menu->game_text.msg_invalid_world_name,
+            menu->game_text.msg_block_selected,
+            menu->game_text.msg_unknown_block,
+            menu->game_text.msg_flight_enabled,
+            menu->game_text.msg_flight_disabled,
+            menu->game_text.msg_fly_usage,
+            menu->game_text.msg_noclip_enabled,
+            menu->game_text.msg_noclip_disabled,
+            menu->game_text.msg_noclip_usage,
+            menu->game_text.msg_block_set,
+            menu->game_text.msg_out_of_bounds,
+            menu->game_text.msg_setblock_usage,
+            menu->game_text.msg_unknown_command
+        };
+
+        int chat_sizes[] = {
+            sizeof(menu->game_text.msg_quitting),
+            sizeof(menu->game_text.msg_teleported),
+            sizeof(menu->game_text.msg_teleport_usage),
+            sizeof(menu->game_text.msg_world_saved),
+            sizeof(menu->game_text.msg_world_save_failed),
+            sizeof(menu->game_text.msg_world_loaded),
+            sizeof(menu->game_text.msg_world_load_failed),
+            sizeof(menu->game_text.msg_invalid_world_name),
+            sizeof(menu->game_text.msg_block_selected),
+            sizeof(menu->game_text.msg_unknown_block),
+            sizeof(menu->game_text.msg_flight_enabled),
+            sizeof(menu->game_text.msg_flight_disabled),
+            sizeof(menu->game_text.msg_fly_usage),
+            sizeof(menu->game_text.msg_noclip_enabled),
+            sizeof(menu->game_text.msg_noclip_disabled),
+            sizeof(menu->game_text.msg_noclip_usage),
+            sizeof(menu->game_text.msg_block_set),
+            sizeof(menu->game_text.msg_out_of_bounds),
+            sizeof(menu->game_text.msg_setblock_usage),
+            sizeof(menu->game_text.msg_unknown_command)
+        };
+
+        while (fgets(line, sizeof(line), chat_file) && chat_line_count < 20) {
+            // Remove newline
+            line[strcspn(line, "\n")] = '\0';
+            strncpy(chat_buffers[chat_line_count], line, chat_sizes[chat_line_count] - 1);
+            chat_buffers[chat_line_count][chat_sizes[chat_line_count] - 1] = '\0';
+            chat_line_count++;
+        }
+        fclose(chat_file);
+    } else {
+        fprintf(stderr, "Failed to load chat text from: %s\n", chat_path);
     }
 
     // Load credits text from credits.txt
@@ -569,7 +670,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.9k";
+    const char* version = "Basic 3D Visualizer - v0.0.10";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},

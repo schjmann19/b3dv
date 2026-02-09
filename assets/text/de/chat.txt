@@ -1,0 +1,20 @@
+Beenden...
+Teleportiert zu (%.1f, %.1f, %.1f)
+Verwendung: /tp x y z
+Welt '%s' erfolgreich gespeichert.
+Fehler beim Speichern der Welt '%s'.
+Welt '%s' erfolgreich geladen.
+Fehler beim Laden der Welt '%s'.
+Ungültiger Weltname. Verwenden Sie nur alphanumerische Zeichen und Unterstriche.
+Block ausgewählt: %s
+Unbekannter Blocktyp: %s. Verfügbar: stone, dirt, grass, sand, wood
+Flug aktiviert. Doppelklick auf Leertaste zum Umschalten.
+Flug deaktiviert.
+Verwendung: /fly enable oder /fly disable
+Kollisionserkennung deaktiviert. Du kannst durch Blöcke gehen.
+Kollisionserkennung aktiviert. Kollisionserkennung ist wieder aktiv.
+Verwendung: /noclip enable oder /noclip disable
+Block platziert bei (%.1f, %.1f, %.1f) als %s
+Außerhalb der Grenzen: y in [0, 255]
+Verwendung: /setblock x y z [block_type]
+Unbekannter Befehl: %s

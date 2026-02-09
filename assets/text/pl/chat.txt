@@ -1,0 +1,18 @@
+Zamykanie...
+Przeteleportowano do (%.1f, %.1f, %.1f)
+Użycie: /tp x y z
+Świat '%s' zapisany pomyślnie.
+Nie udało się zapisać świata '%s'.
+Świat '%s' załadowany pomyślnie.
+Nie udało się załadować świata '%s'.
+Nieprawidłowa nazwa świata. Używaj tylko znaków alfanumerycznych i podkreśleń.
+Wybrany blok: %s
+Nieznany typ bloku: %s. Dostępne: stone, dirt, grass, sand, wood
+Latanie włączone. Kliknij dwukrotnie Spację, aby przełączyć.
+Latanie wyłączone.
+Użycie: /fly enable lub /fly disablePrzechodzenie przez obiekty włączone. Móżesz przechodzić przez bloki.
+Przechodzenie przez obiekty wyłączone. Kolizje są ponownie aktywne.
+Użycie: /noclip enable lub /noclip disableBlok umieszczony w (%.1f, %.1f, %.1f) jako %s
+Poza granicami: y in [0, 255]
+Użycie: /setblock x y z [block_type]
+Nieznana komenda: %s
