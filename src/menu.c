@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <dirent.h>
+#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -18,6 +19,46 @@ static int is_directory(const char* path)
     #else
         return S_ISDIR(statbuf.st_mode);
     #endif
+}
+
+// Helper function to count and load a random background image from any .png in mainmenubackground/
+static void menu_load_random_background(MenuSystem* menu)
+{
+    menu->background_loaded = false;
+
+    // Open the backgrounds directory
+    DIR* dir = opendir("./assets/mainmenubackground");
+    if (!dir) {
+        return;  // Directory doesn't exist
+    }
+
+    // Collect all .png filenames
+    char filenames[256][256] = {0};  // Up to 256 images
+    int png_count = 0;
+    struct dirent* entry;
+
+    while ((entry = readdir(dir)) && png_count < 256) {
+        // Check if filename ends with .png
+        int len = strlen(entry->d_name);
+        if (len > 4 && strcmp(entry->d_name + len - 4, ".png") == 0) {
+            strcpy(filenames[png_count], entry->d_name);
+            png_count++;
+        }
+    }
+    closedir(dir);
+
+    if (png_count > 0) {
+        // Seed random number generator
+        srand((unsigned int)time(NULL));
+        // Select a random background index
+        int random_index = rand() % png_count;
+
+        char path[512];
+        snprintf(path, sizeof(path), "./assets/mainmenubackground/%s", filenames[random_index]);
+
+        menu->background_texture = LoadTexture(path);
+        menu->background_loaded = true;
+    }
 }
 
 // Scan available language directories in assets/text/
@@ -510,12 +551,8 @@ MenuSystem* menu_system_create(void)
     menu->render_distance = 50.0f;
     menu->max_fps = 144;
 
-    // Load background image
-    menu->background_loaded = false;
-    if (FileExists("./assets/MainMenuBackground.png")) {
-        menu->background_texture = LoadTexture("./assets/MainMenuBackground.png");
-        menu->background_loaded = true;
-    }
+    // Load random background image from mainmenubackground folder
+    menu_load_random_background(menu);
 
     // Scan for available languages
     menu_scan_languages(menu);
@@ -670,7 +707,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.10b";
+    const char* version = "Basic 3D Visualizer - v0.0.10c";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},

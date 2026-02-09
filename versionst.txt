@@ -1,3 +1,6 @@
+0.0.10c:
+    added randomized main menu background
+
 0.0.10b:
     added chat output
     flight had no clip

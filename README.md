@@ -8,10 +8,9 @@ simple terrain, multiple blocks, a worlds (with chunks) system, optimized render
 heavily inspired in early iterations of Minecraft by Markus Persson.
 uses Raylib
 
+## directory structure
 
-## directory structure:
-
-```
+```txt
 ./external/         - raylib (submodule)
 ./Screenshots/      - Screenshots
 ./src/              - source code
@@ -26,25 +25,29 @@ uses Raylib
 
 ## Building and Running
 
-### Linux, macOS, FreeBSD, and other Unix-like systems:
+### Linux, macOS, FreeBSD, and other Unix-like systems
+
 ```bash
 $ make
 $ ./b3dv             # Run existing executable
 ```
 
 ### Windows
+
 ```bash
 $ make windows
 ```
 
 ## Dependencies
 
-### Linux/macOS/BSD:
+### Linux/macOS/BSD
+
 - GCC or Clang compiler
 - GNU Make
 - raylib development libraries
 
-### Windows:
+### Windows
+
 - MinGW-w64 (or MSVC)
 - GNU Make
 - raylib libraries compiled for Windows
@@ -52,35 +55,42 @@ $ make windows
 ### Install Dependencies
 
 **Arch Linux:**
+
 ```bash
 pacman -S base-devel raylib
 ```
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt-get update
 sudo apt-get install build-essential libraylib-dev
 ```
 
 **Fedora/RHEL:**
+
 ```bash
 sudo dnf install gcc make raylib-devel
 ```
 
 **macOS:**
+
 ```bash
 brew install raylib
 ```
 
 **FreeBSD:**
+
 ```bash
 sudo pkg install raylib
 ```
 
 **Windows (with MinGW-w64):**
+
 Download from https://www.mingw-w64.org/ or use MSYS2/Cygwin package managers.
 
-# NOTES:
+# NOTES
+
 As of right now, it has been only tested in linux (raylib 5.5)
 If you use other system, kindly test it and tell me if it works - I have tried my best at compatibilitymaxxing, but I don't promise anything.
 
