@@ -25,10 +25,11 @@ System Info
 Player Info
 FPS:
 Coordinates:
-b3dv 0.0.9i-2
+b3dv 0.0.9k
 Settings
 Render Distance:
 Max FPS:
 Font Family:
 Variant:
+Uncapped
 Press ESC to return to main menu

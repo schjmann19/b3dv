@@ -25,10 +25,11 @@ Systeeminfo
 Spelersinfo
 FPS:
 Coördinaten:
-b3dv 0.0.9i-2
+b3dv 0.0.9k
 Instellingen
 Renderafstand:
 Max FPS:
 Lettertypefamilie:
 Variant:
+Onbeperkt
 Druk ESC om terug te gaan naar het hoofdmenu

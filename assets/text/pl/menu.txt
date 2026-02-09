@@ -25,10 +25,11 @@ Informacje o systemie
 Informacje o graczu
 FPS:
 Współrzędne:
-b3dv 0.0.9i-2
+b3dv 0.0.9k
 Ustawienia
 Dystans renderowania:
 Max klatek/s:
 Rodzina czcionek:
 Wariant:
+Bez ograniczeń
 Nacisnij ESC, aby wrócić do menu głównego

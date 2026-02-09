@@ -445,3 +445,23 @@ e
 /save asd
 /save asd
 /save asd
+/tp 100 100 100
+/select sand
+/select stone
+/select wood
+/select stone
+/select wood
+/select stone
+/select stone
+/tp 100 10000 100
+/tp 100 100 100
+/select grass
+/select stone
+/select grass
+/select stone
+/select grass
+/tp 99 5 105
+/tp 99 5 105
+/tp 99 5 105
+/tp 99 5 105
+/tp 99 5 105

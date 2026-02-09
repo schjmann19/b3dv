@@ -87,7 +87,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
     if (file) {
         char line[512];
         int line_count = 0;
-        while (fgets(line, sizeof(line), file) && line_count < 34) {
+        while (fgets(line, sizeof(line), file) && line_count < 35) {
             // Remove newline
             line[strcspn(line, "\n")] = '\0';
 
@@ -125,6 +125,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 menu->game_text.max_fps_label,
                 menu->game_text.font_family_label,
                 menu->game_text.font_variant_label,
+                menu->game_text.uncapped,
                 menu->game_text.press_esc_to_return
             };
             int sizes[] = {
@@ -161,6 +162,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->game_text.max_fps_label),
                 sizeof(menu->game_text.font_family_label),
                 sizeof(menu->game_text.font_variant_label),
+                sizeof(menu->game_text.uncapped),
                 sizeof(menu->game_text.press_esc_to_return)
             };
 
@@ -169,7 +171,22 @@ void menu_load_language(MenuSystem* menu, const char* language)
             line_count++;
         }
         fclose(file);
+    } else {
+        fprintf(stderr, "Failed to load menu text from: %s\n", menu_path);
+    }
 
+    // Load credits text from credits.txt
+    char credits_path[512];
+    snprintf(credits_path, sizeof(credits_path), "./assets/text/%s/credits.txt", language);
+
+    FILE* credits_file = fopen(credits_path, "r");
+    if (credits_file) {
+        size_t bytes_read = fread(menu->credits_text, 1, sizeof(menu->credits_text) - 1, credits_file);
+        menu->credits_text[bytes_read] = '\0';
+        fclose(credits_file);
+    } else {
+        fprintf(stderr, "Failed to load credits text from: %s\n", credits_path);
+        strcpy(menu->credits_text, "Credits data not available.");
     }
 }
 
@@ -260,6 +277,117 @@ void menu_scan_font_variants(MenuSystem* menu, const char* font_family)
     }
 }
 
+void menu_load_settings(MenuSystem* menu)
+{
+    FILE* file = fopen("./options.txt", "r");
+    if (!file) {
+        // File doesn't exist, use defaults (already set in menu_system_create)
+        return;
+    }
+
+    char language[32] = {0};
+    char font_family[256] = {0};
+    char font_variant[256] = {0};
+
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        // Remove newline
+        line[strcspn(line, "\n")] = '\0';
+
+        // Skip empty lines and comments
+        if (line[0] == '\0' || line[0] == '#') {
+            continue;
+        }
+
+        // Parse key=value format
+        char* equals = strchr(line, '=');
+        if (!equals) {
+            continue;
+        }
+
+        *equals = '\0';
+        char* key = line;
+        char* value = equals + 1;
+
+        if (strcmp(key, "render_distance") == 0) {
+            menu->render_distance = atof(value);
+            // Clamp to valid range
+            if (menu->render_distance < 10.0f) menu->render_distance = 10.0f;
+            if (menu->render_distance > 100.0f) menu->render_distance = 100.0f;
+        } else if (strcmp(key, "max_fps") == 0) {
+            menu->max_fps = atoi(value);
+            // Clamp to valid range (0 = uncapped, 30-240 = capped)
+            if (menu->max_fps != 0 && menu->max_fps < 30) menu->max_fps = 30;
+            if (menu->max_fps > 240) menu->max_fps = 240;
+        } else if (strcmp(key, "language") == 0) {
+            strncpy(language, value, sizeof(language) - 1);
+            language[sizeof(language) - 1] = '\0';
+        } else if (strcmp(key, "font_family") == 0) {
+            strncpy(font_family, value, sizeof(font_family) - 1);
+            font_family[sizeof(font_family) - 1] = '\0';
+        } else if (strcmp(key, "font_variant") == 0) {
+            strncpy(font_variant, value, sizeof(font_variant) - 1);
+            font_variant[sizeof(font_variant) - 1] = '\0';
+        }
+    }
+
+    fclose(file);
+
+    // Now apply the loaded settings
+    // Load language if saved
+    if (language[0] != '\0') {
+        // Find language index
+        for (int i = 0; i < menu->available_languages_count; i++) {
+            if (strcmp(menu->available_languages[i], language) == 0) {
+                menu->current_language_index = i;
+                menu_load_language(menu, language);
+                break;
+            }
+        }
+    }
+
+    // Load font family if saved
+    if (font_family[0] != '\0') {
+        // Find font family index
+        for (int i = 0; i < menu->font_families_count; i++) {
+            if (strcmp(menu->font_families[i], font_family) == 0) {
+                menu->current_font_family_index = i;
+                // Scan variants for this family
+                menu_scan_font_variants(menu, font_family);
+                break;
+            }
+        }
+
+        // Load font variant if saved
+        if (font_variant[0] != '\0') {
+            for (int i = 0; i < menu->font_variants_count; i++) {
+                if (strcmp(menu->font_variants[i], font_variant) == 0) {
+                    menu->current_font_variant_index = i;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void menu_save_settings(MenuSystem* menu)
+{
+    FILE* file = fopen("./options.txt", "w");
+    if (!file) {
+        fprintf(stderr, "Failed to save options.txt\n");
+        return;
+    }
+
+    fprintf(file, "# B3DV Game Settings\n");
+    fprintf(file, "render_distance=%.1f\n", menu->render_distance);
+    fprintf(file, "max_fps=%d\n", menu->max_fps);
+    fprintf(file, "language=%s\n", menu->current_language);
+    fprintf(file, "font_family=%s\n", menu->font_families[menu->current_font_family_index]);
+    fprintf(file, "font_variant=%s\n", menu->font_variants[menu->current_font_variant_index]);
+
+    fclose(file);
+}
+
 MenuSystem* menu_system_create(void)
 {
     MenuSystem* menu = (MenuSystem*)malloc(sizeof(MenuSystem));
@@ -302,8 +430,15 @@ MenuSystem* menu_system_create(void)
     // Scan variants for the current font family
     menu_scan_font_variants(menu, menu->font_families[menu->current_font_family_index]);
 
+    // Load persisted settings from options.txt (if it exists)
+    // This must be done after languages and fonts are scanned
+    menu_load_settings(menu);
+
     // Scan for available worlds
     menu_scan_worlds(menu);
+
+    // Create/save options.txt file if it doesn't exist
+    menu_save_settings(menu);
 
     return menu;
 }
@@ -434,7 +569,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.9i-2";
+    const char* version = "Basic 3D Visualizer - v0.0.9k";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
@@ -585,6 +720,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
         // Cycle to next language
         menu->current_language_index = (menu->current_language_index + 1) % menu->available_languages_count;
         menu_load_language(menu, menu->available_languages[menu->current_language_index]);
+        menu_save_settings(menu);
     }
 }
 
@@ -939,6 +1075,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
         float new_pos = (mouse_pos.x - slider_x) / slider_width;
         new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
         menu->render_distance = 10.0f + (new_pos * (100.0f - 10.0f));
+        menu_save_settings(menu);
     }
 
     // Max FPS slider
@@ -949,16 +1086,25 @@ void menu_draw_settings(MenuSystem* menu, Font font)
 
     // Draw value
     char fps_str[32];
-    snprintf(fps_str, sizeof(fps_str), "%d", menu->max_fps);
+    if (menu->max_fps == 0) {
+        snprintf(fps_str, sizeof(fps_str), "%s", menu->game_text.uncapped);
+    } else {
+        snprintf(fps_str, sizeof(fps_str), "%d", menu->max_fps);
+    }
     DrawTextEx(font, fps_str, (Vector2){panel_x + 500, fps_slider_y - 35}, 28, 1, GRAY);
 
     // Draw slider background
     DrawRectangle(slider_x, fps_slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
     DrawRectangleLines(slider_x, fps_slider_y, slider_width, slider_height, WHITE);
 
-    // Calculate FPS slider knob position (30-240)
-    float fps_normalized = (menu->max_fps - 30) / (240.0f - 30);
-    fps_normalized = fps_normalized < 0 ? 0 : (fps_normalized > 1 ? 1 : fps_normalized);
+    // Calculate FPS slider knob position (30-240, or 0 for uncapped)
+    float fps_normalized;
+    if (menu->max_fps == 0) {
+        fps_normalized = 1.0f;  // Show at the right end when uncapped
+    } else {
+        fps_normalized = (menu->max_fps - 30) / (240.0f - 30);
+        fps_normalized = fps_normalized < 0 ? 0 : (fps_normalized > 1 ? 1 : fps_normalized);
+    }
     int fps_knob_x = slider_x + (int)(fps_normalized * slider_width);
 
     // Draw knob
@@ -971,8 +1117,13 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, fps_slider_rect)) {
         float new_pos = (mouse_pos.x - slider_x) / slider_width;
         new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
-        menu->max_fps = (int)(30 + (new_pos * (240 - 30)));
-        if (menu->max_fps < 30) menu->max_fps = 30;
+        if (new_pos >= 0.95f) {
+            menu->max_fps = 0;  // 0 means uncapped
+        } else {
+            menu->max_fps = (int)(30 + (new_pos * (240 - 30)));
+            if (menu->max_fps < 30) menu->max_fps = 30;
+        }
+        menu_save_settings(menu);
     }
 
     // Font selection
@@ -1027,10 +1178,12 @@ void menu_draw_settings(MenuSystem* menu, Font font)
             menu->current_font_family_index = (menu->current_font_family_index - 1 + menu->font_families_count) % menu->font_families_count;
             // Scan variants for the new family
             menu_scan_font_variants(menu, menu->font_families[menu->current_font_family_index]);
+            menu_save_settings(menu);
         } else if (next_hover) {
             menu->current_font_family_index = (menu->current_font_family_index + 1) % menu->font_families_count;
             // Scan variants for the new family
             menu_scan_font_variants(menu, menu->font_families[menu->current_font_family_index]);
+            menu_save_settings(menu);
         }
     }
 
@@ -1097,8 +1250,10 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         if (variant_up_hover && menu->current_font_variant_index > 0) {
             menu->current_font_variant_index--;
+            menu_save_settings(menu);
         } else if (variant_down_hover && menu->current_font_variant_index < menu->font_variants_count - 1) {
             menu->current_font_variant_index++;
+            menu_save_settings(menu);
         }
     }
 

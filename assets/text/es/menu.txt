@@ -25,10 +25,11 @@ Información del Sistema
 Información del Jugador
 FPS:
 Coordenadas:
-b3dv 0.0.9i-2
+b3dv 0.0.9k
 Ajustes
 Distancia de renderizado:
 FPS máx.:
 Familia tipográfica:
 Variante:
+Sin límite
 Presiona ESC para volver al menú principal

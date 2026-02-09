@@ -43,6 +43,7 @@ typedef struct {
     char max_fps_label[256];
     char font_family_label[256];
     char font_variant_label[256];
+    char uncapped[64];
     // Credits & Info text
     char press_esc_to_return[256];
 } GameText;
@@ -116,5 +117,7 @@ void menu_draw_settings(MenuSystem* menu, Font font);
 void menu_update_input(MenuSystem* menu);
 void menu_load_language(MenuSystem* menu, const char* language);
 bool menu_load_text_file(const char* language, const char* filename, char* out_buffer, int buffer_size);
+void menu_load_settings(MenuSystem* menu);
+void menu_save_settings(MenuSystem* menu);
 
 #endif

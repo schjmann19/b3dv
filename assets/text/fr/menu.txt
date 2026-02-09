@@ -25,10 +25,11 @@ Informations système
 Informations du joueur
 FPS:
 Coordonnées:
-b3dv 0.0.9i-2
+b3dv 0.0.9k
 Paramètres
 Distance de rendu :
 FPS max :
 Famille de polices :
 Variante :
+Illimité
 Appuyez sur ESC pour revenir au menu principal

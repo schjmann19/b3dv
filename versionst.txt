@@ -1,3 +1,9 @@
+0.0.9k:
+    added persistent settings (./options.txt)
+
+0.0.9j:
+    fixed text
+
 0.0.9i-2:
     implemented updater: v1
 

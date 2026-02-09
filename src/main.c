@@ -90,7 +90,7 @@ static Font load_font_by_name(const char* font_name)
 int main(void)
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9i-2");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.9k");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -138,6 +138,7 @@ int main(void)
 
     // Pause state
     bool paused = false;
+    bool pause_settings_open = false;
     bool should_quit = false;
 
     // Chat system
@@ -1027,7 +1028,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9i-2 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9k", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1057,103 +1058,264 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.9i-2 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9k", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.9i-2 - Jimena Neumann", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.9k", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // display pause menu with buttons if paused
         if (paused) {
-            // get screen dimensions dynamically
-            int screen_width = GetScreenWidth();
-            int screen_height = GetScreenHeight();
+            if (pause_settings_open) {
+                // Draw settings panel in pause menu
+                int screen_width = GetScreenWidth();
+                int screen_height = GetScreenHeight();
 
-            // draw semi-transparent overlay
-            DrawRectangle(0, 0, screen_width, screen_height, (Color){0, 0, 0, 150});
+                // Clear background
+                DrawRectangle(0, 0, screen_width, screen_height, (Color){0, 0, 0, 150});
 
-            // measure text to center it
-            Vector2 paused_size = MeasureTextEx(custom_font, menu->game_text.paused, 64, 2);
+                // Draw title
+                Vector2 title_size = MeasureTextEx(custom_font, menu->game_text.settings, 64, 2);
+                DrawTextEx(custom_font, menu->game_text.settings,
+                           (Vector2){(screen_width - title_size.x) / 2, 40},
+                           64, 2, WHITE);
 
-            // draw title
-            DrawTextEx(custom_font, menu->game_text.paused,
-                       (Vector2){(screen_width - paused_size.x) / 2, screen_height / 2 - 120},
-                       64, 2, RED);
+                // Settings panel
+                int panel_width = 600;
+                int panel_height = 300;
+                int panel_x = (screen_width - panel_width) / 2;
+                int panel_y = 120;
 
-            // button dimensions
-            int button_width = 450;
-            int button_height = 60;
-            int button_spacing = 20;
-            int center_x = screen_width / 2;
-            int center_y = screen_height / 2 - 20;
+                DrawRectangle(panel_x - 10, panel_y - 10, panel_width + 20, panel_height + 20, (Color){40, 40, 40, 255});
+                DrawRectangleLines(panel_x - 10, panel_y - 10, panel_width + 20, panel_height + 20, WHITE);
 
-            // resume button
-            Rectangle resume_button = {
-                center_x - button_width / 2,
-                center_y,
-                button_width,
-                button_height
-            };
+                // Render Distance slider
+                int slider_y = panel_y + 30;
+                int slider_x = panel_x + 50;
+                int slider_width = 500;
+                int slider_height = 20;
 
-            // quit button
-            Rectangle quit_button = {
-                center_x - button_width / 2,
-                center_y + button_height + button_spacing,
-                button_width,
-                button_height
-            };
+                // Draw label
+                DrawTextEx(custom_font, menu->game_text.render_dist_label, (Vector2){panel_x + 30, slider_y - 35}, 28, 1, WHITE);
 
-            // get mouse position
-            Vector2 mouse_pos = GetMousePosition();
-            bool resume_hover = CheckCollisionPointRec(mouse_pos, resume_button);
-            bool quit_hover = CheckCollisionPointRec(mouse_pos, quit_button);
+                // Draw value
+                char render_dist_str[32];
+                snprintf(render_dist_str, sizeof(render_dist_str), "%.0f", menu->render_distance);
+                DrawTextEx(custom_font, render_dist_str, (Vector2){panel_x + 500, slider_y - 35}, 28, 1, GRAY);
 
-            // draw resume button
-            DrawRectangleRec(resume_button, resume_hover ? LIGHTGRAY : GRAY);
-            DrawRectangleLinesEx(resume_button, 2, WHITE);
-            Vector2 resume_text_size = MeasureTextEx(custom_font, menu->game_text.resume, 32, 1);
-            DrawTextEx(custom_font, menu->game_text.resume,
-                       (Vector2){center_x - resume_text_size.x / 2, center_y + 12},
-                       32, 1, BLACK);
+                // Draw slider background
+                DrawRectangle(slider_x, slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
+                DrawRectangleLines(slider_x, slider_y, slider_width, slider_height, WHITE);
 
-            // draw quit button
-            DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : GRAY);
-            DrawRectangleLinesEx(quit_button, 2, WHITE);
-            Vector2 quit_text_size = MeasureTextEx(custom_font, menu->game_text.back_to_menu, 32, 1);
-            DrawTextEx(custom_font, menu->game_text.back_to_menu,
-                       (Vector2){center_x - quit_text_size.x / 2, center_y + button_height + button_spacing + 12},
-                       32, 1, BLACK);
+                // Calculate slider knob position
+                float render_dist_normalized = (menu->render_distance - 10.0f) / (100.0f - 10.0f);
+                render_dist_normalized = render_dist_normalized < 0 ? 0 : (render_dist_normalized > 1 ? 1 : render_dist_normalized);
+                int knob_x = slider_x + (int)(render_dist_normalized * slider_width);
 
-            // handle button clicks
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                if (resume_hover) {
-                    paused = false;
-                    // Recapture mouse if it was captured before pause
-                    mouse_captured = true;
-                    DisableCursor();
-                } else if (quit_hover) {
-                    // Save world and return to main menu
-                    if (player) {
-                        world->last_player_position = player->position;
+                // Draw knob
+                DrawRectangle(knob_x - 6, slider_y - 5, 12, slider_height + 10, LIGHTGRAY);
+                DrawRectangleLines(knob_x - 6, slider_y - 5, 12, slider_height + 10, WHITE);
+
+                // Handle render distance slider input
+                Vector2 mouse_pos = GetMousePosition();
+                Rectangle render_slider_rect = {(float)slider_x, (float)(slider_y - 10), (float)slider_width, slider_height + 20};
+
+                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, render_slider_rect)) {
+                    float new_pos = (mouse_pos.x - slider_x) / slider_width;
+                    new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
+                    menu->render_distance = 10.0f + (new_pos * (100.0f - 10.0f));
+                    menu_save_settings(menu);
+                }
+
+                // Max FPS slider
+                int fps_slider_y = slider_y + 100;
+
+                // Draw label
+                DrawTextEx(custom_font, menu->game_text.max_fps_label, (Vector2){panel_x + 30, fps_slider_y - 35}, 28, 1, WHITE);
+
+                // Draw value
+                char fps_str[32];
+                if (menu->max_fps == 0) {
+                    snprintf(fps_str, sizeof(fps_str), "%s", menu->game_text.uncapped);
+                } else {
+                    snprintf(fps_str, sizeof(fps_str), "%d", menu->max_fps);
+                }
+                DrawTextEx(custom_font, fps_str, (Vector2){panel_x + 500, fps_slider_y - 35}, 28, 1, GRAY);
+
+                // Draw slider background
+                DrawRectangle(slider_x, fps_slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
+                DrawRectangleLines(slider_x, fps_slider_y, slider_width, slider_height, WHITE);
+
+                // Calculate FPS slider knob position (30-240, or 0 for uncapped)
+                float fps_normalized;
+                if (menu->max_fps == 0) {
+                    fps_normalized = 1.0f;  // Show at the right end when uncapped
+                } else {
+                    fps_normalized = (menu->max_fps - 30) / (240.0f - 30);
+                    fps_normalized = fps_normalized < 0 ? 0 : (fps_normalized > 1 ? 1 : fps_normalized);
+                }
+                int fps_knob_x = slider_x + (int)(fps_normalized * slider_width);
+
+                // Draw knob
+                DrawRectangle(fps_knob_x - 6, fps_slider_y - 5, 12, slider_height + 10, LIGHTGRAY);
+                DrawRectangleLines(fps_knob_x - 6, fps_slider_y - 5, 12, slider_height + 10, WHITE);
+
+                // Handle FPS slider input
+                Rectangle fps_slider_rect = {(float)slider_x, (float)(fps_slider_y - 10), (float)slider_width, slider_height + 20};
+
+                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, fps_slider_rect)) {
+                    float new_pos = (mouse_pos.x - slider_x) / slider_width;
+                    new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
+                    if (new_pos >= 0.95f) {
+                        menu->max_fps = 0;  // 0 means uncapped
+                    } else {
+                        menu->max_fps = (int)(30 + (new_pos * (240 - 30)));
+                        if (menu->max_fps < 30) menu->max_fps = 30;
                     }
-                    world_save(world, world->world_name);
-                    paused = false;
-                    should_quit = false;
-                    // Reset menu state to main
-                    menu->current_state = MENU_STATE_MAIN;
-                    // Free world and player
-                    world_unload_textures(world);
-                    world_free(world);
-                    player_free(player);
-                    world = NULL;
-                    player = NULL;
-                    // Release mouse
-                    mouse_captured = false;
-                    EnableCursor();
+                    menu_save_settings(menu);
+                }
+
+                // Back button to return to pause menu
+                int button_width = 450;
+                int button_height = 60;
+                int button_y = fps_slider_y + 100;
+
+                Rectangle back_button = {
+                    (float)((screen_width - button_width) / 2),
+                    (float)button_y,
+                    (float)button_width,
+                    (float)button_height
+                };
+
+                bool back_hover = CheckCollisionPointRec(mouse_pos, back_button);
+
+                DrawRectangleRec(back_button, back_hover ? LIGHTGRAY : GRAY);
+                DrawRectangleLinesEx(back_button, 2, WHITE);
+                Vector2 back_text_size = MeasureTextEx(custom_font, menu->text_back, 32, 1);
+                DrawTextEx(custom_font, menu->text_back,
+                           (Vector2){(float)screen_width / 2 - back_text_size.x / 2, (float)button_y + 12},
+                           32, 1, BLACK);
+
+                // Handle back button
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && back_hover) {
+                    pause_settings_open = false;
+                }
+
+                // Also allow ESC to go back
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    pause_settings_open = false;
+                }
+            } else {
+                // Draw main pause menu
+                // get screen dimensions dynamically
+                int screen_width = GetScreenWidth();
+                int screen_height = GetScreenHeight();
+
+                // draw semi-transparent overlay
+                DrawRectangle(0, 0, screen_width, screen_height, (Color){0, 0, 0, 150});
+
+                // measure text to center it
+                Vector2 paused_size = MeasureTextEx(custom_font, menu->game_text.paused, 64, 2);
+
+                // draw title
+                DrawTextEx(custom_font, menu->game_text.paused,
+                           (Vector2){(screen_width - paused_size.x) / 2, screen_height / 2 - 120},
+                           64, 2, RED);
+
+                // button dimensions
+                int button_width = 450;
+                int button_height = 60;
+                int button_spacing = 20;
+                int center_x = screen_width / 2;
+                int center_y = screen_height / 2 - 20;
+
+                // resume button
+                Rectangle resume_button = {
+                    center_x - button_width / 2,
+                    center_y,
+                    button_width,
+                    button_height
+                };
+
+                // settings button
+                Rectangle settings_button = {
+                    center_x - button_width / 2,
+                    center_y + button_height + button_spacing,
+                    button_width,
+                    button_height
+                };
+
+                // quit button
+                Rectangle quit_button = {
+                    center_x - button_width / 2,
+                    center_y + 2 * (button_height + button_spacing),
+                    button_width,
+                    button_height
+                };
+
+                // get mouse position
+                Vector2 mouse_pos = GetMousePosition();
+                bool resume_hover = CheckCollisionPointRec(mouse_pos, resume_button);
+                bool settings_hover = CheckCollisionPointRec(mouse_pos, settings_button);
+                bool quit_hover = CheckCollisionPointRec(mouse_pos, quit_button);
+
+                // draw resume button
+                DrawRectangleRec(resume_button, resume_hover ? LIGHTGRAY : GRAY);
+                DrawRectangleLinesEx(resume_button, 2, WHITE);
+                Vector2 resume_text_size = MeasureTextEx(custom_font, menu->game_text.resume, 32, 1);
+                DrawTextEx(custom_font, menu->game_text.resume,
+                           (Vector2){center_x - resume_text_size.x / 2, center_y + 12},
+                           32, 1, BLACK);
+
+                // draw settings button
+                DrawRectangleRec(settings_button, settings_hover ? LIGHTGRAY : GRAY);
+                DrawRectangleLinesEx(settings_button, 2, WHITE);
+                Vector2 settings_text_size = MeasureTextEx(custom_font, menu->game_text.settings, 32, 1);
+                DrawTextEx(custom_font, menu->game_text.settings,
+                           (Vector2){center_x - settings_text_size.x / 2, center_y + button_height + button_spacing + 12},
+                           32, 1, BLACK);
+
+                // draw quit button
+                DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : GRAY);
+                DrawRectangleLinesEx(quit_button, 2, WHITE);
+                Vector2 quit_text_size = MeasureTextEx(custom_font, menu->game_text.back_to_menu, 32, 1);
+                DrawTextEx(custom_font, menu->game_text.back_to_menu,
+                           (Vector2){center_x - quit_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 12},
+                           32, 1, BLACK);
+
+                // handle button clicks
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    if (resume_hover) {
+                        paused = false;
+                        // Recapture mouse if it was captured before pause
+                        mouse_captured = true;
+                        DisableCursor();
+                    } else if (settings_hover) {
+                        pause_settings_open = true;
+                    } else if (quit_hover) {
+                        // Save world and return to main menu
+                        if (player) {
+                            world->last_player_position = player->position;
+                        }
+                        world_save(world, world->world_name);
+                        paused = false;
+                        should_quit = false;
+                        // Reset menu state to main
+                        menu->current_state = MENU_STATE_MAIN;
+                        // Free world and player
+                        world_unload_textures(world);
+                        world_free(world);
+                        player_free(player);
+                        world = NULL;
+                        player = NULL;
+                        // Release mouse
+                        mouse_captured = false;
+                        EnableCursor();
+                    }
                 }
             }
         }
@@ -1198,6 +1360,9 @@ int main(void)
         world->last_player_position = player->position;
         world_save(world, world->world_name);
     }
+
+    // Save settings before closing
+    menu_save_settings(menu);
 
     // Clean up menu system
     menu_system_free(menu);
