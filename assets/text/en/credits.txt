@@ -15,3 +15,10 @@ Raylib by Ramon Santamaria: https://www.raylib.com/
 Fonts:
 Custom fonts you can put in:
 ./assets/fonts/[fontname]/ttf/*.ttf
+
+Commands:
+/tp <x y z> - teleport player to coordinates
+/setblock <x y z [block]> - set block at coordinates
+/select <block> (stone|grass|dirt|wood|sand) - select block to place
+/fly [enable|disable] - enable/disable flight
+/noclip [enable|disable] - enable/disable noclip (going through blocks)

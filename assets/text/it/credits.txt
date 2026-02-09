@@ -11,3 +11,14 @@ Crediti:
 Raylib di Ramon Santamaria: https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Caratteri:
+Caratteri personalizzati che puoi mettere:
+./assets/fonts/[nomecarattere]/ttf/*.ttf
+
+Comandi:
+/tp <x y z> - teletrasportare il giocatore alle coordinate
+/setblock <x y z [blocco]> - impostare il blocco alle coordinate
+/select <blocco> (stone|grass|dirt|wood|sand) - selezionare il blocco da posizionare
+/fly [enable|disable] - attiva/disattiva il volo
+/noclip [enable|disable] - attiva/disattiva il noclip (passare attraverso i blocchi)

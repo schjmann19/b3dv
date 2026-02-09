@@ -13,3 +13,14 @@ Fì’u sì fì’ut a tseng nì’aw: oel
 Raylib a Ramon Santamaria: https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Tìpawmä:
+Tìpawmä sì nìNa'vi, tìpawm nìNa'vi:
+./assets/fonts/[tìpawmä'a txon]/ttf/*.ttf
+
+Tìngäzìk:
+/tp <x y z> - sa'nok tsmukan a plltxe set ìlei
+/setblock <x y z [set]> - set set a ìlei
+/select <set> (stone|grass|dirt|wood|sand) - hu set a plltxe
+/fly [enable|disable] - set/clear tìkangkem
+/noclip [enable|disable] - set/clear noclip (lì'u a pxel)

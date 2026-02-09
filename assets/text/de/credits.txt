@@ -12,3 +12,15 @@ Mitwirkende:
 Raylib von Ramon Santamaria: https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Schriften:
+Benutzerdefinierte Schriften, die Sie hinzufügen können:
+./assets/fonts/[Schriftartname]/ttf/*.ttf
+
+Befehle:
+
+/tp <x y z> – Spieler zu den Koordinaten teleportieren
+/setblock <x y z [Block]> – Block an den Koordinaten platzieren
+/select <Block> (stone|grass|dirt|wood|sand) – Block zum Platzieren auswählen
+/fly [enable|disable] – Flug aktivieren/deaktivieren
+/noclip [enable|disable] – Noclip aktivieren/deaktivieren (Blöcke durchdringen)

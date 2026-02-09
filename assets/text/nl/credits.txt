@@ -11,3 +11,14 @@ Credits:
 Raylib van Ramon Santamaria: https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Lettertypen:
+Aangepaste lettertypen die u kunt plaatsen:
+./assets/fonts/[lettertypenaam]/ttf/*.ttf
+
+Commando's:
+/tp <x y z> - speler naar coördinaten teleporteren
+/setblock <x y z [blok]> - blok op coördinaten instellen
+/select <blok> (stone|grass|dirt|wood|sand) - blok selecteren om te plaatsen
+/fly [enable|disable] - vlucht inschakelen/uitschakelen
+/noclip [enable|disable] - noclip inschakelen/uitschakelen (door blokken gaan)

@@ -11,3 +11,14 @@ Créditos:
 Raylib de Ramon Santamaria: https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Fuentes:
+Fuentes personalizadas que puede poner:
+./assets/fonts/[nombredefuente]/ttf/*.ttf
+
+Comandos:
+/tp <x y z> - teletransportar al jugador a las coordenadas
+/setblock <x y z [bloque]> - fijar el bloque en las coordenadas
+/select <bloque> (stone|grass|dirt|wood|sand) - seleccionar el bloque para colocar
+/fly [enable|disable] - habilitar/deshabilitar el vuelo
+/noclip [enable|disable] - habilitar/deshabilitar el noclip (atravesar bloques)

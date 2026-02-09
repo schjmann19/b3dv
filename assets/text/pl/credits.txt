@@ -11,3 +11,14 @@ Autorzy:
 Raylib autorstwa Ramona Santamarii: https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Czcionki:
+Niestandardowe czcionki, które możesz dodać:
+./assets/fonts/[nazwazinoniki]/ttf/*.ttf
+
+Polecenia:
+/tp <x y z> - teleportuj gracza do współrzędnych
+/setblock <x y z [blok]> - ustaw blok na współrzędnych
+/select <blok> (stone|grass|dirt|wood|sand) - wybierz blok do umieszczenia
+/fly [enable|disable] - włącz/wyłącz lot
+/noclip [enable|disable] - włącz/wyłącz noclip (przechodzenie przez bloki)

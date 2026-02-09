@@ -15,3 +15,14 @@ Crédits :
 Raylib par Ramon Santamaria : https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Polices :
+Polices personnalisées que vous pouvez mettre :
+./assets/fonts/[nomdepolice]/ttf/*.ttf
+
+Commandes :
+/tp <x y z> - téléporter le joueur aux coordonnées
+/setblock <x y z [bloc]> - fixer le bloc aux coordonnées
+/select <bloc> (stone|grass|dirt|wood|sand) - sélectionner le bloc à placer
+/fly [enable|disable] - activer/désactiver le vol
+/noclip [enable|disable] - activer/désactiver le noclip (passer à travers les blocs)

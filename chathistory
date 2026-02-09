@@ -506,3 +506,7 @@ e
 /fly disable
 asd
 /fly enable
+/fly enable
+/noclip enable
+/noclip disable
+/fly disable

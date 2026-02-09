@@ -1,8 +1,21 @@
 Still Basic!
 Uses Raylib!
-Never trust the government!
+Never trust the government.
 Written in C!
 Free & Open Source!
 Done out of boredom...
 Translated to 11* languages!
 Inspired in early Minecraft!
+Time is not yet implemented.
+Only for high end computers!
+Very graphically demanding.
+Undocumented commands!
+Yes I tried to learn C++.
+sudo pacman -Sybau
+*should* run on Windows.
+sudo apt install opsec
+I use Arch, btw.
+There can only be one!
+I dyed my hair twice while making this aaaaaaa
+67
+bd3v?

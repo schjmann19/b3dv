@@ -14,8 +14,8 @@
 #include "menu.h"
 
 // graphics and player constants
-#define WINDOW_WIDTH 800
-#define WINDOW_HEIGHT 600
+#define WINDOW_WIDTH 1200
+#define WINDOW_HEIGHT 800
 #define TARGET_FPS 144
 #define RENDER_DISTANCE 50.0f
 #define FOG_START 30.0f

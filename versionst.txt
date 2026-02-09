@@ -1,3 +1,8 @@
+0.0.10e:
+    added a background picture
+    upload 0.0.1 video recording
+    added some splash texts
+
 0.0.10d:
     added randomized splash texts
 

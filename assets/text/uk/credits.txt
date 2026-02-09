@@ -11,3 +11,14 @@ B3DV - Базовий 3D-візуалізатор - https://github.com/schjmann1
 Raylib від Рамона Сантамарії: https://www.raylib.com/
 
 (c) 2026 Jimena Neumann
+
+Шрифти:
+Користувацькі шрифти, які ви можете розмістити:
+./assets/fonts/[назвашрифту]/ttf/*.ttf
+
+Команди:
+/tp <x y z> - телепортувати гравця на координати
+/setblock <x y z [блок]> - установити блок на координати
+/select <блок> (stone|grass|dirt|wood|sand) - виберіть блок для розміщення
+/fly [enable|disable] - включити/вимкнути польіт
+/noclip [enable|disable] - включити/вимкнути noclip (проходження крізь блоки)
