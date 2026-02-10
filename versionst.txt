@@ -1,3 +1,12 @@
+0.0.11b:
+    fixed chat input
+    chat no longer freezes physics
+    a bug has been promoted to feature: opening chat perpetuates movement (afk walking)
+
+0.0.11:
+    chunk frustum culling
+
+
 0.0.10e:
     added a background picture
     upload 0.0.1 video recording

@@ -833,11 +833,15 @@ int main(void)
         Vector3 forward = (Vector3){ -sinf(camera_yaw), 0.0f, -cosf(camera_yaw) };
         forward = vec3_normalize(forward);
 
-        // handle player movement and update physics (only if not paused)
+        // Update physics and world always (unless game is paused), even if chat is active
         if (!paused) {
-            player_move_input(player, forward, right, flight_enabled);
             player_update(player, world, dt, flight_enabled);
             world_update_chunks(world, player->position, camera_forward);  // Load/unload chunks based on player position and camera direction
+        }
+
+        // Handle player input only if chat is not active
+        if (!paused && !chat_active) {
+            player_move_input(player, forward, right, flight_enabled);
 
             // Handle block breaking (left click)
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -961,18 +965,9 @@ int main(void)
                 // Skip chunks that haven't been generated yet
                 if (!chunk->generated) continue;
 
-                float chunk_center_x = chunk->chunk_x * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f - camera_offset.x;
-                float chunk_center_y = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT / 2.0f;
-                float chunk_center_z = chunk->chunk_z * CHUNK_DEPTH + CHUNK_DEPTH / 2.0f - camera_offset.z;
-
-                float dx = chunk_center_x - camera.position.x;
-                float dy = chunk_center_y - camera.position.y;
-                float dz = chunk_center_z - camera.position.z;
-                float chunk_dist_sq = dx*dx + dy*dy + dz*dz;
-
-                // Skip chunks beyond render distance (add chunk size to account for chunk extent)
-                float max_dist = menu->render_distance + CHUNK_WIDTH;
-                if (chunk_dist_sq > max_dist * max_dist) {
+                // OPTIMIZATION: Chunk-level frustum culling - skips entire chunks at once
+                if (!is_chunk_in_frustum(chunk, shifted_cam_pos, cam_forward, cam_right, camera.up,
+                                        menu->render_distance, fov_half_vert_tan, fov_half_horiz_tan, camera_offset)) {
                     continue;
                 }
 
@@ -999,6 +994,12 @@ int main(void)
 
                                 // hard render distance limit
                                 if (dist_sq > render_dist_sq) {
+                                    continue;
+                                }
+
+                                // OPTIMIZATION: Back-plane culling - skip blocks behind camera
+                                float depth = to_block.x * cam_forward.x + to_block.y * cam_forward.y + to_block.z * cam_forward.z;
+                                if (depth < -1.0f) {  // Small tolerance for block size
                                     continue;
                                 }
 

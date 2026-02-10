@@ -295,6 +295,74 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     }
 }
 
+// Check if a chunk's bounding box is within the camera frustum
+// This is the most efficient culling - eliminates entire chunks at once before iterating blocks
+bool is_chunk_in_frustum(Chunk* chunk, Vector3 cam_pos, Vector3 cam_forward,
+                         Vector3 cam_right, Vector3 cam_up, float render_distance,
+                         float half_vert_tan, float half_horiz_tan, Vector3 camera_offset)
+{
+    // Chunk world bounds
+    float chunk_min_x = chunk->chunk_x * CHUNK_WIDTH - camera_offset.x;
+    float chunk_max_x = chunk_min_x + CHUNK_WIDTH;
+    float chunk_min_y = chunk->chunk_y * CHUNK_HEIGHT - camera_offset.y;
+    float chunk_max_y = chunk_min_y + CHUNK_HEIGHT;
+    float chunk_min_z = chunk->chunk_z * CHUNK_DEPTH - camera_offset.z;
+    float chunk_max_z = chunk_min_z + CHUNK_DEPTH;
+
+    // Chunk center and radius for distance/back-plane checks
+    float chunk_center_x = (chunk_min_x + chunk_max_x) * 0.5f;
+    float chunk_center_y = (chunk_min_y + chunk_max_y) * 0.5f;
+    float chunk_center_z = (chunk_min_z + chunk_max_z) * 0.5f;
+
+    float dx = chunk_center_x - cam_pos.x;
+    float dy = chunk_center_y - cam_pos.y;
+    float dz = chunk_center_z - cam_pos.z;
+    float dist_sq = dx*dx + dy*dy + dz*dz;
+
+    // Hard distance limit
+    float render_dist_sq = render_distance * render_distance;
+    if (dist_sq > render_dist_sq) {
+        return false;
+    }
+
+    float dist = sqrtf(dist_sq);
+
+    // Back-plane culling: if chunk is behind camera, skip it
+    float depth = dx * cam_forward.x + dy * cam_forward.y + dz * cam_forward.z;
+    if (depth < -CHUNK_WIDTH) {  // Account for chunk size
+        return false;
+    }
+
+    // If very close to camera, always render (inside frustum)
+    if (dist < BLOCK_NEAR_EXEMPTION_DIST_SQ) {
+        return true;
+    }
+
+    // Simple bounding sphere frustum test: check if chunk bounding sphere is within FOV
+    float inv_dist = 1.0f / (dist > BLOCK_MIN_DIST ? dist : BLOCK_MIN_DIST);
+    float norm_dx = dx * inv_dist;
+    float norm_dy = dy * inv_dist;
+    float norm_dz = dz * inv_dist;
+
+    // Angular size of chunk (using diagonal for safety)
+    float chunk_radius = sqrtf(CHUNK_WIDTH*CHUNK_WIDTH + CHUNK_HEIGHT*CHUNK_HEIGHT + CHUNK_DEPTH*CHUNK_DEPTH) * 0.5f;
+    float chunk_angular_size = atanf(chunk_radius / dist);
+
+    // Check horizontal FOV
+    float right_proj = norm_dx * cam_right.x + norm_dy * cam_right.y + norm_dz * cam_right.z;
+    if (fabsf(right_proj / depth) > (half_horiz_tan + chunk_angular_size)) {
+        return false;
+    }
+
+    // Check vertical FOV
+    float up_proj = norm_dx * cam_up.x + norm_dy * cam_up.y + norm_dz * cam_up.z;
+    if (fabsf(up_proj / depth) > (half_vert_tan + chunk_angular_size)) {
+        return false;
+    }
+
+    return true;  // Chunk is in frustum
+}
+
 // Raycast from camera to find the block being looked at
 // Returns true if a block was hit, false otherwise
 // out_block_x/y/z: the coordinates of the block hit

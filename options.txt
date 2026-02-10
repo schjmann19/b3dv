@@ -3,4 +3,4 @@ render_distance=49.8
 max_fps=0
 language=es
 font_family=Inter
-font_variant=Inter_28pt-Light.ttf
+font_variant=Inter_24pt-Regular.ttf

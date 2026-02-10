@@ -20,4 +20,9 @@ bool raycast_block(World* world, Camera3D camera, float max_distance,
                    int* out_block_x, int* out_block_y, int* out_block_z,
                    int* out_adjacent_x, int* out_adjacent_y, int* out_adjacent_z);
 
+// Chunk culling - for optimization
+bool is_chunk_in_frustum(Chunk* chunk, Vector3 cam_pos, Vector3 cam_forward,
+                         Vector3 cam_right, Vector3 cam_up, float render_distance,
+                         float half_vert_tan, float half_horiz_tan, Vector3 camera_offset);
+
 #endif
