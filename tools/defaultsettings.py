@@ -9,8 +9,9 @@ import os
 default_settings: str = \
 "# B3DV Default Game Settings\n\
 render_distance=50\n\
-max_fps=0\n\
+max_fps=0 # 0 means unlimited\n\
 language=en\n\
+# do not change fonts manually i made a nice little interface for that :c\n\
 font_family=Inter\n\
 font_variant=Inter_28pt-Light.ttf\n\
 "

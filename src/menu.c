@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <time.h>
 #include <sys/types.h>
@@ -467,9 +468,22 @@ void menu_load_settings(MenuSystem* menu)
         // Remove newline
         line[strcspn(line, "\n")] = '\0';
 
-        // Skip empty lines and comments
+        // Skip empty lines and pure comment lines
         if (line[0] == '\0' || line[0] == '#') {
             continue;
+        }
+
+        // Strip inline comments (anything after #)
+        char* hash = strchr(line, '#');
+        if (hash) {
+            *hash = '\0';
+        }
+
+        // Trim trailing whitespace from the value part
+        int len = strlen(line);
+        while (len > 0 && isspace(line[len - 1])) {
+            line[len - 1] = '\0';
+            len--;
         }
 
         // Parse key=value format
@@ -481,6 +495,11 @@ void menu_load_settings(MenuSystem* menu)
         *equals = '\0';
         char* key = line;
         char* value = equals + 1;
+
+        // Trim leading whitespace from value
+        while (*value && isspace(*value)) {
+            value++;
+        }
 
         if (strcmp(key, "render_distance") == 0) {
             menu->render_distance = atof(value);
@@ -553,8 +572,9 @@ void menu_save_settings(MenuSystem* menu)
 
     fprintf(file, "# B3DV Game Settings\n");
     fprintf(file, "render_distance=%.1f\n", menu->render_distance);
-    fprintf(file, "max_fps=%d\n", menu->max_fps);
+    fprintf(file, "max_fps=%d # 0 means unlimited\n", menu->max_fps);
     fprintf(file, "language=%s\n", menu->current_language);
+    fprintf(file, "# do not change fonts manually i made a nice little interface for that :c\n");
     fprintf(file, "font_family=%s\n", menu->font_families[menu->current_font_family_index]);
     fprintf(file, "font_variant=%s\n", menu->font_variants[menu->current_font_variant_index]);
 
@@ -1325,7 +1345,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     int button_small_height = 35;
     int prev_button_x = panel_x + 50;
     int next_button_x = panel_x + 500;
-    int font_display_y = font_y - 15;
+    int font_display_y = font_y - 1;
 
     Rectangle prev_button = {
         (float)prev_button_x,
@@ -1376,7 +1396,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     }
 
     // Font variant dropdown
-    int variant_y = font_display_y + 50;
+    int variant_y = font_display_y + 67;
     DrawTextEx(font, menu->game_text.font_variant_label, (Vector2){panel_x + 30, variant_y - 25}, 24, 1, WHITE);
 
     // Draw variant dropdown background

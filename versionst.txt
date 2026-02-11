@@ -1,3 +1,7 @@
+0.0.11c:
+    tidy up options.txt handling
+    tidy up settings menu
+
 0.0.11b:
     fixed chat input
     chat no longer freezes physics
