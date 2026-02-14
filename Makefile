@@ -4,14 +4,15 @@
 
 CC = clang
 # Aggressive optimization flags for maximum FPS performance (Clang-compatible)
+# ISO C11 standard for portable pure C code
 # Using -O3 + -ffast-math instead of deprecated -Ofast
-CFLAGS = -Wall -Wextra -O3 -ffast-math -march=native -mtune=native -flto -fno-signed-zeros \
+CFLAGS = -std=c11 -Wall -Wextra -O3 -ffast-math -march=native -mtune=native -flto -fno-signed-zeros \
          -fno-trapping-math -faligned-new -fvectorize -fslp-vectorize \
          -funroll-loops
 LDFLAGS = -lraylib -lm -lpthread -flto
 
 # No optimization flags - default compilation for performance comparison
-NOOPT_CFLAGS = -Wall -Wextra
+NOOPT_CFLAGS = -std=c11 -Wall -Wextra
 NOOPT_LDFLAGS = -lraylib -lm -lpthread
 
 # Local raylib support
@@ -46,7 +47,7 @@ endif
 # Windows cross-compilation with aggressive optimizations
 WIN_CC = x86_64-w64-mingw32-gcc
 WIN_RAYLIB_PATH = ./external/raylib
-WIN_CFLAGS = -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto -fno-signed-zeros \
+WIN_CFLAGS = -std=c11 -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto -fno-signed-zeros \
             -fno-trapping-math -funroll-loops -I$(WIN_RAYLIB_PATH)/src
 WIN_LDFLAGS = -L$(WIN_RAYLIB_PATH)/src -l:libraylib.a -lopengl32 -lgdi32 -lwinmm -lpsapi -lm -static-libgcc -flto
 

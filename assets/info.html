@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<!-- this document follows NUSSS -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="B3DV Game information">
+    <title>B3DV Information</title>
+</head>
+<style>
+    /* default -> light mode */
+    body {
+        background-color: white;
+        color: black;
+    }
+
+    /* if user prefers dark mode */
+    @media (prefers-color-scheme: dark) {
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+    }
+</style>
+<body>
+    <h1>B3DV Information</h1>
+        <section> <!-- summary/header -->
+        <p>
+            <abbr title="Basic 3D Visualizer">B3DV</abbr> is a simple, <abbr title="Free & Open Source Software">FOSS,</abbr> 3D game, or prototype of a game, made by
+            <a href="https://github.com/schjmann19" target="_blank">me</a> with the sole purpose of practicing.<br>
+            I originally started it out of boredom and texturawasd's suggestion, and have continued it since. It is heavily inspired in
+            early iterations of Minecraft.<br>
+            It is <abbr title="'free' as in free and libre">free</abbr> & open source <a href="https://github.com/schjmann19/b3dv" target="_blank">(see github repo)</a>
+        </p><p>
+            It's written in <abbr title="C11 (ISO/IEC 9899:2011) + POSIX; Raylib is C99 (ISO/IEC 9899:1999)">pure C</abbr> + <a href="https://www.raylib.com/" target="_blank">Raylib</a>, with few dependencies <a href="#deps"><i>[see dependencies]</i></a>; and (for now) features
+            just a basic world the player can walk on, break and place blocks, and save (different worlds)
+        </p>
+        </section> <!-- summary/header -->
+
+        <section> <!-- general information -->
+        <h2>Overview:</h2>
+            <p>
+                It is written in <a href="https://www.c-language.org/" target="_blank">C</a> because it's the only language I <i>mostly</i> know how to program in.<br>
+                Also, since the codebase is <abbr title="currently >5k lines of code">not big</abbr> and is rather simple, it's straightforward to keep it portable across operating systems.<a href="#explanation"><i>[see codebase explanation]</i></a><br>
+                Features:<br>
+                - Simple world with terrain<br>
+                - Block placing/destroying<br>
+                - Saving different worlds<br>
+                - Simple commands (/tp, etc)<br>
+                - <abbr title="a.k.a. quick and dirty">Simple</abbr> UI, with translated text to different languages<br>
+                - Fully free and open source: BSD-3-Clause license<br>
+                - Simplistic design throughout<br>
+            </p>
+            <p>
+                <a href="https://www.raylib.com/" target="_blank">Raylib</a> does all the boilerplate work for me, (initialize a window, OpenGL) so I
+                <i>only</i> implemented the game's logic:<br>
+                The render loop, the world data handling, the rendering, the optimizations, the ui (menus)<br>
+            </p>
+            <p>
+                I intend to <abbr title="Keep It Simple, Stupid">KISS</abbr>, hackable and extensible:<br>
+                You can use any font you want if you put a .ttf file in ./assets/fonts/[name]/ttf/[yourfile.ttf];<br>
+                Settings are simply stored in options.txt;<br>
+                The build system is Just A Makefile™;<br>
+                You can implement your own translation for the UI in any language you like (./assets/text/[lang]/[chat|credits|menu].txt),<br>
+                as well as textures (./assets/textures/blocks);<br>
+                Really, you can implement any changes you want to it. (hackable as I said)
+            </p>
+        </section> <!-- general information -->
+
+        <section> <!-- commands -->
+        <h2>In-game commands</h2>
+            <p>
+                Commands that are usable via chat:<br>
+                /select [stone|grass|dirt|wood|sand] - Select which kind of block to place<br>
+                /tp [x y z] - Teleport player to coords X Y Z<br>
+                /setblock [x y z [block]] - set a block at coords<br>
+                /fly [enable|disable] - Toggle flight<br>
+                /noclip [enable|disable] - Toggle noclip<br>
+            </p>
+        </section> <!-- commands -->
+
+        <section> <!-- in-depth explanation -->
+        <h2 id="explanation">"How does it work?" Here's the explanation:</h2>
+            <h3>Big Picture:</h3>
+            Imagine B3DV as a game engine with the following interconnected modules, top to bottom:<br>
+            [User input (kb, mouse)]<br>
+            [Menu (ui) system] & [World (physics, updates)]<br>
+            [Rendering]
+            <h3>Core components:</h3>
+
+            <details><summary><em><b>1 - Worlds:</b></em></summary><p>
+                Each world is saved as a folder with a `chunks` folder, the actual chunk data; and a world.txt file, containing data like last played timestamp and player position<br><br>
+                The world isn't just an array/grid of blocks, but it is divided into manageable chunks.<br>
+                It is an infinite 3D grid, but split into small boxes, that are loaded and unloaded dynamically.<br>
+                Only the chunk that the player is in, and the adjacent ones are 'loaded'
+                (meaning loaded into memory, so effectively, actually relevant)
+                and are unloaded once the player is far enough from them.<br>
+                This is crucial and is what allows <abbr title="infinite as in has no end, goes on forever; though technical limitations do not allow this in practice."><em>infinite</em></abbr> worlds in <abbr title="finite amount of memory, CPU & GPU power, storage, etc."> <em>finite</em> systems,</abbr> just like in Minecraft for instance.<br>
+            </p></details>
+            <details><summary><em><b>2 - The player:</b></em></summary><p>
+                The player has several properties:<br>
+                <em><b>- Physics:</b></em><br>
+                Position relative to player's head's X Y Z coords;<br>
+                Velocity how fast the player is moving;<br>
+                Gravity: 35 m/s^2;<br>
+                Jumping: apply upward force<br>
+                Collision: The player is actually a cilinder, (radius 0.35, height 1.9mts) so they interact (collide) with blocks<br>
+                <em><b>- Features:</b></em><br>
+                Flight mode: can fly (no gravity) (enabled with `/fly enable`)<br>
+                No-clip (no collision) mode: stops interacting with blocks, enabled with `/noclip enable` (especially useful when combined with flight)<br>
+                Block selection: The player struct has a selected block field, as of now it can only be changed with /select<br>
+                Sneaking: the player can "sneak" or move slowly and not go down blocks<br>
+                Sprinting: the player can sprint or move faster than normal walking<br>
+            </p></details>
+            <details><summary><em><b>3 - The rendering system:</b></em></summary><p>
+                The whole shtick:<br>
+                I've use many optimization techniques to bring the FPS above 30:<br>
+                Distance culling, a.k.a. a limited render distance<br>
+                Frustum culling: Only render blocks that are in front of the player, based on FOV; at the block level and chunk level (entire chunks can get skipped before individual blocks)<br>
+                Back-pane culling: Don't draw back faces of blocks (back face meaning faces that the player can't see anyways)<br>
+                Occlusion culling, a.k.a. don't draw blocks that are obscured from view anyways<br>
+                and <em><b>raycasing</b></em> is used to see which block the player is going to break/place<br>
+            </p></details>
+            <details><summary><em><b>4 - The menu system:</b></em></summary><p>
+                Think of the menu system as a state machine with different screens:<br>
+                - Main menu: the start screen, buttons for entering a world, creating a new one, quit, and credits. Displays a backround picture (ranomized from .png files inside ./assets/mainmenubackground/*.png) and a randomized splash text<br>
+                - World select screen<br>
+                - World create screen<br>
+                - Settings: set FPS limit and render distance, modifying options.txt<br>
+                And the gameplay, (when there's no menu) and credits screen which is merely text display<br>
+                The 'menu' is localized (translated to <abbr title="10 languages + na'vi, but it's incomplete">11*</abbr>) and the settings are persistent.
+            </p></details>
+            <details><summary><em><b>5 - Input & commands:</b></em></summary><p>
+                The game uses direct input for gameplay, Raylib takes care of that. Yeah that's it.
+            </p></details>
+            <details><summary><em><b>6 - The main loop:</b></em></summary><p>
+                The main loop which runs every frame, goes from line 200 to 1480, contains the game logic, as the following sequence, roughly:<br>
+                - Handle input:<br>
+                └─ Read keyboard & mouse -&gt; update camera angle and process block placement/destruction<br>
+                - Update player physics<br>
+                └─ Apply gravity to player, handle jumping/flying, check collisions with blocks, update the player's position<br>
+                - Update world<br>
+                └─ Load chunks near the player, unload chunks far from the player, generate terrain for new chunks if needed<br>
+                - Render<br>
+                └─ Calculate which chunks to render,<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ Calculate which blocks to render<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ Calculate which faces to render<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ render those, with their respective texture; if the player is pointing at it, highlight it with a wireframe<br>
+                & draw hud and crosshair on top
+
+            </p></details>
+        </section> <!-- in-depth explanation -->
+
+        <section> <!-- changelog and future features -->
+        <h2>Changelog:</h2>
+            <details> <!-- changelog -->
+            <summary>
+                While a quick & dirty change log can be found in the repo (./versions.txt); here are the changes listed plainly [expand to see]:<br>
+            </summary>
+                Latest is 0.0.12;<br>
+                0.0.12: upload this information page<br>
+                0.0.11c: polish handling of options.txt<br>
+                0.0.11b: fixed chat input; chat no longer freezes physics; bug promoted to feature: opening chat perpetuates movement (afk walking)<br>
+                0.0.11: chunk frustum culling<br>
+                0.0.10e: added backround picture; more splash texts<br>
+                0.0.10d: added randomized splash texts in main menu<br>
+                0.0.10c: added randomized main menu background<br>
+                0.0.10b: added chat output; flight had noclip; chat doesnt pause the game; fixed sprinting<br>
+                0.0.10: added flight (/fly [enable|disable])<br>
+                0.0.9k: added persistent settings (./options.txt)<br>
+                0.0.9j: fixed text<br>
+                0.0.9i-2: implemented updater<br>
+                0.0.9i: general optimizations<br>
+                0.0.9h: fixed windows build<br>
+                0.0.9g: added settins in main menu: render distance, FPS limit, font choice; fixed some untranslated text<br>
+                0.0.9f: world now saves player's position; tweaked wording: "Back to menu" -&gt; "Save & Quit"; added translations: polish; dutch<br>
+                0.0.9e: made window resizable<br>
+                0.0.9d: fixed credits ui<br>
+                0.0.9c: added translations: italian; na'vi<br>
+                0.0.9b: added translations: french; german; portuguese; ukrainian; russian<br>
+                0.0.9: added credits & info button to main menu; added translation: spanish<br>
+                0.0.8d: added main menu; tidy up worlds system<br>
+                0.0.8c: shifting is now smoother<br>
+                0.0.8b: do not spawn the player inside blocks; player is a bit taller; added shifting; added sprinting; fixed speedometer<br>
+                0.0.8: added depth limit -20; hindering the effects of The Great Decelerator; the eldritch creature that lives under the world and lags the game the lower you go. Frames sink into it's uncomprehensible sea of entropy like space dust into black holes.<br>
+                0.0.7e: chunk optimizations<br>
+                0.0.7d: more optimizations, compiler flags<br>
+                0.0.7c: general optimizations<br>
+                0.0.7b: fixed /select; tweaked lighting; fixed placing blocks that intersect the player; generate-textures.py fixed<br>
+                0.0.7: added blocks textures; fixed worlds system again; !issues: /select command is still bugged<br>
+                0.0.6b: fixed rendering; fixed chat up arrow functionality; tidy up<br>
+                0.0.6: added terrain; camera-relative rendering so reality doesnt get messed up in far coords; !issues: rendering still gets messed up at 131071 (x or z, negative or positive) and rendering ceases to render in any negative coordinate<br>
+                0.0.5b: tidy up<br>
+                0.0.5: Added infinte worlds (chunks system); added block placing/breaking; fixed camera up/down angles; fixed movement; made player 2 blocks tall and better hitbox; fixed worlds system<br>
+                0.0.4: Fixed face culling & occlusion; added worlds system; added chat and commands;<br>
+                0.0.3: FOV-based Frustum Culling, Distance-based LOD, Face Culling & Occlusion, Spatial Hashing with Block Indices, Fog Effect for Distance Fading<br>
+                0.0.2: Made slab bigger, bottom face of blocks now exists<br>
+                0.0.1: Slab of stone blocks you can walk on<br>
+            </details> <!-- changelog -->
+        <h2>Future features:</h2> <!-- future features -->
+            <details><summary>These are planned but I don't know when they'll be added. [expand to see]</summary>
+                - Lighting:<br>
+                    light levels to allow for more light sources than just the sun<br>
+                    plan to use 0-15 light levels<br>
+                    also smooth lighting, maybe probably<br><br>
+                - In-game HUD UI:<br>
+                    a HUD to visually represent what block the player has selected, and allow regular gameplay without commands<br><br>
+                - Sound (maybe)<br><br>
+                - Optimizations:<br>
+                    lazy loading,<br>
+                    meshing,<br>
+                    <abbr title="Yes, a lot more, I just don't know what just yet.">and more.</abbr><br>
+            </details> <!-- future features -->
+        </section> <!-- changelog and future features -->
+
+        <section> <!-- Build & Dependencies -->
+        <h2>Build system:</h2>
+            <p>
+                It's just a makefile. run `make` and that's it. (linux)<br>
+                You need raylib. And clang.<br>
+                If you're on windows: <s>why?</s> go on a linux machine (or use <a href="https://learn.microsoft.com/windows/wsl/install" target="_blank">WSL2</a>) and use the "windows" make target. (Just run `make windows`)
+            </p>
+
+    <h3 id="deps">Dependencies:</h3>
+        <p>
+            <a href="https://clang.llvm.org/" target="_blank">clang</a>, <a href="https://www.raylib.com/" target="_blank">Raylib</a>, and C standard library of course.<br>
+            <b><em>How to install:</em></b><br>
+            <em>Arch:</em><br>
+            <code>sudo pacman -S --needed clang base-devel git raylib</code><br>
+            <em>Debian:</em><br>
+            <code>sudo apt update && sudo apt install clang build-essential git libraylib-dev</code><br>
+            <em>Fedora:</em><br>
+            <code>sudo dnf install clang @development-tools git raylib-devel</code><br>
+            <em>RHEL:</em><br>
+            <code>sudo dnf groupinstall "Development Tools"</code><br>
+            <code>sudo dnf install clang git raylib-devel</code><br>
+            <code>sudo dnf install epel-release</code><br>
+            <em>Alpine:</em><br>
+            <code>sudo apk add clang build-base git raylib-dev</code><br>
+            <em>Void:</em><br>
+            <code>sudo xbps-install -S clang base-devel git raylib-devel</code><br>
+            <em>FreeBSD:</em><br>
+            <code>sudo pkg install llvm git raylib gmake</code><br>
+            <em>Windows:</em><br>
+            <small><i>Just use WSL.</i></small>
+        </p>
+            <h3>Credits:</h3>
+        <p>
+            Idea: Leandro Testa ("texturawasd")<br>
+            update-version.py, organize-screeshots.py: Alina Kravetska<br>
+            Raylib: Ramon Santamaria (raysan5)<br>
+            Everything else: me<br>
+            (BSD-3-Clause lic.)
+        </p>
+    </section> <!-- Build & Dependencies -->
+    <small>
+        (c) 2026 Jimena Neumann <!-- feb 2026, NUSSS-compliant as per SSOTF-2-->
+    </small>
+</body>
+</html>

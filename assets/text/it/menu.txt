@@ -25,7 +25,7 @@ Informazioni di sistema
 Informazioni sul giocatore
 FPS:
 Coordinate:
-b3dv 0.0.10e
+b3dv
 Impostazioni
 Distanza di rendering:
 FPS massimi:
@@ -33,3 +33,4 @@ Famiglia caratteri:
 Variante:
 Illimitato
 Premi ESC per tornare al menu principale
+Vedi info complete

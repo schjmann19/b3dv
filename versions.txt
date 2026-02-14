@@ -1,3 +1,6 @@
+0.0.12:
+    add info.html
+
 0.0.11c:
     tidy up options.txt handling
     tidy up settings menu
@@ -9,7 +12,6 @@
 
 0.0.11:
     chunk frustum culling
-
 
 0.0.10e:
     added a background picture

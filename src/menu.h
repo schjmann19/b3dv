@@ -46,6 +46,7 @@ typedef struct {
     char uncapped[64];
     // Credits & Info text
     char press_esc_to_return[256];
+    char see_full_info[64];
     // Chat feedback messages
     char msg_quitting[128];
     char msg_teleported[256];

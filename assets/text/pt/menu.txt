@@ -25,7 +25,7 @@ Informações do Sistema
 Informações do Jogador
 FPS:
 Coordenadas:
-b3dv 0.0.10e
+b3dv
 Configurações
 Distância de renderização:
 FPS máximo:
@@ -33,3 +33,4 @@ Família de fontes:
 Variante:
 Ilimitado
 Pressione ESC para voltar ao menu principal
+Ver informações completas

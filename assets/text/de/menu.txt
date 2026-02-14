@@ -25,7 +25,7 @@ Systeminformationen
 Spielerinformationen
 FPS:
 Koordinaten:
-b3dv 0.0.10e
+b3dv
 Einstellungen
 Render-Distanz:
 Max FPS:
@@ -33,3 +33,4 @@ Schriftartenfamilie:
 Variante:
 Unbegrenzt
 Drücke ESC, um zum Hauptmenü zurückzukehren
+Vollständige Info anzeigen

@@ -160,7 +160,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
     if (file) {
         char line[512];
         int line_count = 0;
-        while (fgets(line, sizeof(line), file) && line_count < 35) {
+        while (fgets(line, sizeof(line), file) && line_count < 36) {
             // Remove newline
             line[strcspn(line, "\n")] = '\0';
 
@@ -200,6 +200,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 menu->game_text.font_variant_label,
                 menu->game_text.uncapped,
                 menu->game_text.press_esc_to_return,
+                menu->game_text.see_full_info,
                 menu->game_text.msg_quitting,
                 menu->game_text.msg_teleported,
                 menu->game_text.msg_teleport_usage,
@@ -254,6 +255,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->game_text.font_variant_label),
                 sizeof(menu->game_text.uncapped),
                 sizeof(menu->game_text.press_esc_to_return),
+                sizeof(menu->game_text.see_full_info),
                 sizeof(menu->game_text.msg_quitting),
                 sizeof(menu->game_text.msg_teleported),
                 sizeof(menu->game_text.msg_teleport_usage),
@@ -761,7 +763,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.10e";
+    const char* version = "Basic 3D Visualizer - v0.0.12";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
@@ -1525,10 +1527,55 @@ void menu_draw_credits(MenuSystem* menu, Font font)
                        box_width + padding, box_height + padding,
                        WHITE);
 
-// Draw the credits text directly - simple single line test
+    // Draw the credits text directly
     DrawTextEx(font, menu->credits_text,
                (Vector2){text_x, text_y},
                font_size, spacing, WHITE);
+
+    // Draw "See full info" button
+    int button_width = 200;
+    int button_height = 50;
+    int button_x = (screen_width - button_width) / 2;
+    int button_y = screen_height - 110;
+
+    Rectangle info_btn = {
+        (float)button_x,
+        (float)button_y,
+        (float)button_width,
+        (float)button_height
+    };
+
+    Vector2 mouse_pos = GetMousePosition();
+    bool info_hover = CheckCollisionPointRec(mouse_pos, info_btn);
+
+    // Draw button
+    DrawRectangleRec(info_btn, info_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(info_btn, 2, WHITE);
+    Vector2 btn_text_size = MeasureTextEx(font, menu->game_text.see_full_info, 24, 1);
+    DrawTextEx(font, menu->game_text.see_full_info,
+               (Vector2){button_x + (button_width - (int)btn_text_size.x) / 2, button_y + 12},
+               24, 1, BLACK);
+
+    // Handle button click - construct absolute path to info.html
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && info_hover) {
+        const char* app_dir = GetApplicationDirectory();
+        char info_path[1024];
+
+        // Build URL with proper platform-specific formatting
+        #ifdef _WIN32
+            // Windows: file:///C:/path/to/file
+            snprintf(info_path, sizeof(info_path), "file:///%s/assets/info.html", app_dir);
+            // Replace backslashes with forward slashes
+            for (int i = 0; info_path[i]; i++) {
+                if (info_path[i] == '\\') info_path[i] = '/';
+            }
+        #else
+            // Unix/Linux/Mac: file:///path/to/file
+            snprintf(info_path, sizeof(info_path), "file://%s/assets/info.html", app_dir);
+        #endif
+
+        OpenURL(info_path);
+    }
 
     // Draw instructions
     Vector2 instr_size = MeasureTextEx(font, menu->game_text.press_esc_to_return, 18, 1);

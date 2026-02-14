@@ -1,7 +1,7 @@
 # B3DV Game Settings
 render_distance=50.0
 max_fps=0 # 0 means unlimited
-language=en
+language=uk
 # do not change fonts manually i made a nice little interface for that :c
 font_family=Inter
 font_variant=Inter_28pt-Light.ttf

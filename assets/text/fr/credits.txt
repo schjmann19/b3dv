@@ -1,6 +1,6 @@
 B3DV - Visualiseur 3D basique - https://github.com/schjmann19/b3dv/
 
-Version 0.0.10e
+Version 
 
 Explorateur de monde 3D voxelisé
 

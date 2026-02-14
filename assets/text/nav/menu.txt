@@ -25,7 +25,7 @@ Hapxì A Tìkangkem
 Hapxì A Tìtxur
 FPS:
 Ayngar:
-b3dv 0.0.10e
+b3dv
 _Settings
 _Render Distance:
 _Max FPS:
@@ -33,3 +33,4 @@ _Font Family:
 _Variant:
 _Uncapped
 _Press ESC to return to main menu
+_See full info

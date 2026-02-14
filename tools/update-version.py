@@ -48,10 +48,10 @@ def update_file(filepath, old_version, new_version):
 def update_version():
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
-    versions_file = project_root / "versionst.txt"
+    versions_file = project_root / "versions.txt"
 
     latest_version = get_latest_version(versions_file)
-    print(f"Latest version from versionst.txt: {latest_version}")
+    print(f"Latest version from versions.txt: {latest_version}")
 
     files_to_update = []
 

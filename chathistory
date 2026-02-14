@@ -527,3 +527,7 @@ asd
 /select dirt
 /select grass
 /select grass
+/fly enable
+/noclip enable
+/select grass
+/select grass

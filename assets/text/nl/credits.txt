@@ -1,5 +1,5 @@
 B3DV - Basis 3D-visualisatie - https://github.com/schjmann19/b3dv/
-Versie 0.0.10e
+Versie 
 
 Een op voxels gebaseerde 3D-wereldverkenner
 gebouwd met raylib

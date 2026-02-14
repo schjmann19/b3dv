@@ -1,6 +1,6 @@
 B3DV - Tseng 3D Tìng Nì’aw - https://github.com/schjmann19/b3dv/
 
-Sìlpey 0.0.10e
+Sìlpey 
 
 Mì fìtxon, kelku 3D a tsun tivakx nì’aw
 a tseng mì ayvoxel,
