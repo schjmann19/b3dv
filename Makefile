@@ -6,7 +6,7 @@ CC = clang
 # Aggressive optimization flags for maximum FPS performance (Clang-compatible)
 # ISO C11 standard for portable pure C code
 # Using -O3 + -ffast-math instead of deprecated -Ofast
-CFLAGS = -std=c11 -Wall -Wextra -O3 -ffast-math -march=native -mtune=native -flto -fno-signed-zeros \
+CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -O3 -ffast-math -march=native -mtune=native -flto -fno-signed-zeros \
          -fno-trapping-math -faligned-new -fvectorize -fslp-vectorize \
          -funroll-loops
 LDFLAGS = -lraylib -lm -lpthread -flto
@@ -32,7 +32,7 @@ PLATFORM_LIBS = -lGL -lpthread -ldl -lrt -lX11
 PLATFORM = PLATFORM_DESKTOP
 endif
 ifeq ($(UNAME_S),Darwin)
-PLATFORM_LIBS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
+PLATFORM_LIBS = -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo -framework CoreServices
 PLATFORM = PLATFORM_DESKTOP
 endif
 ifeq ($(UNAME_S),FreeBSD)

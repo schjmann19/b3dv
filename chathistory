@@ -103,8 +103,8 @@
 /save default
 /loadworld asd
 /load asd
-/loadworld asd 
-/loadworld asd 
+/loadworld asd
+/loadworld asd
 /loadworld asd\
 /loadworld asd
 /loadworld default
@@ -359,7 +359,7 @@ e
 /select grassss
 /select grass
 /selectdirt
-/select grass 
+/select grass
 /select dirt
 /select grass
 /select sand
@@ -531,3 +531,6 @@ asd
 /noclip enable
 /select grass
 /select grass
+/select grass
+/tp 12134 20 153151
+/tp 12134 20 153151
