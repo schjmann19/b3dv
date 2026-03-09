@@ -12,6 +12,7 @@
 #include "rendering.h"
 #include "utils.h"
 #include "menu.h"
+#include "clouds.h"
 
 // graphics and player constants
 #define WINDOW_WIDTH 1200
@@ -90,7 +91,7 @@ static Font load_font_by_name(const char* font_name)
 int main(void)
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.12");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.12b");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -125,6 +126,7 @@ int main(void)
     // World and player will be created after menu selection
     World* world = NULL;
     Player* player = NULL;
+    CloudSystem* clouds = NULL;
 
     // enable mouse capture (will be disabled in menu)
     bool mouse_captured = false;
@@ -266,6 +268,9 @@ int main(void)
                 player = player_create(world->last_player_position.x,
                                       world->last_player_position.y,
                                       world->last_player_position.z);
+
+                // Create cloud system with cloud texture
+                clouds = clouds_create("./assets/textures/clouds.png");
 
                 // Enable mouse capture for gameplay
                 mouse_captured = true;
@@ -465,6 +470,7 @@ int main(void)
                         } else {
                             // Free current world and create new one
                             world_free(world);
+                            clouds_reset(clouds);  // Reset cloud positions for new world
                             world = world_create();
                             world_load_textures(world);  // Load textures for new world
                             // Set the world name before generating
@@ -514,6 +520,7 @@ int main(void)
                         } else {
                             // Free current world and player, then load the saved one
                             world_free(world);
+                            clouds_reset(clouds);  // Reset cloud positions for loaded world
                             world = world_create();
                             world_load_textures(world);  // Reload textures for new world
                             // Recreate player at spawn position calculated from terrain height
@@ -837,6 +844,7 @@ int main(void)
         if (!paused) {
             player_update(player, world, dt, flight_enabled);
             world_update_chunks(world, player->position, camera_forward);  // Load/unload chunks based on player position and camera direction
+            clouds_update(clouds, player->position);  // Update cloud positions
         }
 
         // Handle player input only if chat is not active
@@ -1058,6 +1066,9 @@ int main(void)
                 DrawCubeWires(block_pos, 1.0f, 1.0f, 1.0f, YELLOW);
             }
             DrawGrid(30, 1.0f);
+
+            // Draw clouds
+            clouds_draw(clouds, camera.position, camera_offset);
         EndMode3D();
 
         // Restore original camera position
@@ -1125,7 +1136,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.12", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.12b", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1155,14 +1166,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.12", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.12b", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.12", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.12b", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // Draw chat message history (last few messages with fade-out)
@@ -1435,8 +1446,10 @@ int main(void)
                         world_unload_textures(world);
                         world_free(world);
                         player_free(player);
+                        clouds_free(clouds);
                         world = NULL;
                         player = NULL;
+                        clouds = NULL;
                         // Release mouse
                         mouse_captured = false;
                         EnableCursor();
@@ -1494,6 +1507,7 @@ int main(void)
 
     UnloadFont(custom_font);
     if (player) player_free(player);
+    if (clouds) clouds_free(clouds);
     if (world) {
         world_unload_textures(world);  // Unload textures before closing
         world_free(world);

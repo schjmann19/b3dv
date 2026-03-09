@@ -763,7 +763,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.12";
+    const char* version = "Basic 3D Visualizer - v0.0.12b";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},

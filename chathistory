@@ -534,3 +534,7 @@ asd
 /select grass
 /tp 12134 20 153151
 /tp 12134 20 153151
+/select gras
+/select grass
+/select grass
+/tp 200 200 200
