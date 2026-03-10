@@ -917,9 +917,14 @@ uint8_t world_get_skylight(World* world, int x, int y, int z)
     return chunk->skylight[local_y][local_z][local_x];
 }
 
-// Calculate skylight levels for a chunk - ULTRA-FAST VERSION NO EXPENSIVE LOOKUPS
-// OPTIMIZED: Only scans within current chunk, zero cross-chunk world_get_block calls
-// Algorithm: for each block, light = 15 if exposed, 0 if under a roof
+// Calculate skylight levels for a chunk - GRADATED LIGHT (0-15 like Minecraft)
+// FIXED: Light based on distance to NEAREST roof above, not count of all roofs
+// Algorithm: Track distance from closest blocking solid above
+// - Block is at a roof: light = 0 (pitch dark)
+// - 1 block below roof: light = 1 (very dark)
+// - 5 blocks below: light = 5 (moderate shade)
+// - 15+ blocks below: light = 15 (fully exposed to sky)
+// - No roof above: light = 15 (sky exposed)
 void calculate_chunk_skylight(Chunk* chunk, World* world)
 {
     if (!chunk) return;
@@ -927,31 +932,49 @@ void calculate_chunk_skylight(Chunk* chunk, World* world)
     // For each XZ column in chunk
     for (int z = 0; z < CHUNK_DEPTH; z++) {
         for (int x = 0; x < CHUNK_WIDTH; x++) {
-            // First pass: Find highest solid block in this column
-            int highest_solid_y = -1;
-            for (int y = CHUNK_HEIGHT - 1; y >= 0; y--) {
-                if (chunk->blocks[y][z][x].type != BLOCK_AIR) {
-                    highest_solid_y = y;
+            // Find distance to nearest solid block above (max 15)
+            // Start with "infinity" (no roof yet)
+            int initial_distance = 1000;
+
+            // Check if there are any roofs above this chunk
+            int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+            int top_of_chunk = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT;
+            int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+
+            // Quick scan upward to find if there's a roof
+            for (int check = 1; check <= 15 && top_of_chunk + check < 256; check++) {
+                BlockType above = world_get_block(world, world_x, top_of_chunk + check, world_z);
+                if (above != BLOCK_AIR) {
+                    // Found a roof - distance is how far below it
+                    initial_distance = check;
                     break;
                 }
             }
 
-            // Second pass: Apply lighting based on highest solid
-            for (int y = 0; y < CHUNK_HEIGHT; y++) {
+            // Now scan down this column, using distance from nearest blocking solid
+            int distance_from_blocking = initial_distance;
+
+            for (int y = CHUNK_HEIGHT - 1; y >= 0; y--) {
                 BlockType block = chunk->blocks[y][z][x].type;
 
                 if (block != BLOCK_AIR) {
-                    // Solid blocks have no light
-                    chunk->skylight[y][z][x] = 0;
-                } else if (highest_solid_y >= 0 && y > highest_solid_y) {
-                    // Air block ABOVE the highest solid in column = exposed to sky
-                    chunk->skylight[y][z][x] = 15;
-                } else if (highest_solid_y >= 0 && y <= highest_solid_y) {
-                    // Air block BELOW highest solid = in cave/tunnel, no direct sky = dark
+                    // Solid block - reset distance (it's a new roof), no light
+                    distance_from_blocking = 0;
                     chunk->skylight[y][z][x] = 0;
                 } else {
-                    // No solid blocks in column = fully exposed
-                    chunk->skylight[y][z][x] = 15;
+                    // Air block - calculate light based on distance to nearest roof
+                    if (distance_from_blocking < 1000) {
+                        // We've seen a roof - increase distance as we go down
+                        distance_from_blocking++;
+                        // Light = distance (capped at 15 for max brightness)
+                        // Directly under roof (distance 0): light = 0 (dark)
+                        // Far from roof (distance 15+): light = 15 (bright)
+                        uint8_t light = (distance_from_blocking > 15) ? 15 : (uint8_t)distance_from_blocking;
+                        chunk->skylight[y][z][x] = light;
+                    } else {
+                        // No roof above - fully sky-exposed
+                        chunk->skylight[y][z][x] = 15;
+                    }
                 }
             }
         }

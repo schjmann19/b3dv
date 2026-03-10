@@ -564,3 +564,6 @@ asd
 /noclip enable
 /noclip disable
 /fly disable
+/fly enable
+/setblock -77 10 -1230
+/setblock -77 10 -1230 stone
