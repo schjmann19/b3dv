@@ -1,3 +1,7 @@
+0.0.14:
+    tweak worlds a bit, optimizations:
+        mesh caching
+
 0.0.13:
     improve worlds, terrain (+ caves)
 

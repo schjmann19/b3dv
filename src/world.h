@@ -16,11 +16,18 @@ typedef enum {
     BLOCK_BEDROCK = 6
 } BlockType;
 
+// Cached visible block entry - for mesh caching
+typedef struct {
+    int x, y, z;  // Local chunk coordinates
+    uint8_t exposed_faces;  // Bitmask of which faces are exposed (bits 0-5 = faces 0-5)
+} CachedVisibleBlock;
+
 // Chunk system for infinite worlds
 #define CHUNK_WIDTH 32
 #define CHUNK_HEIGHT 64
 #define CHUNK_DEPTH 32
-#define CHUNK_LOAD_DISTANCE 1  // Load chunks this many chunks away from player
+#define CHUNK_LOAD_DISTANCE 1  // Load chunks 1 chunk away - performance vs visibility tradeoff
+#define MIN_RENDER_DISTANCE 2.0f  // Don't render blocks closer than this (reduces near-field clutter)
 
 // Block structure
 typedef struct {
@@ -47,6 +54,9 @@ typedef struct {
     bool loaded;      // Whether this chunk is currently in memory
     bool generated;   // Whether terrain has been generated
     bool modified;    // Whether this chunk has unsaved changes
+    CachedVisibleBlock* visible_blocks;  // Pre-computed list of blocks with exposed faces
+    int visible_count;  // Number of blocks in visible_blocks
+    int visible_capacity;  // Allocated capacity for visible_blocks
 } Chunk;
 
 // Chunk cache - stores loaded chunks
@@ -88,5 +98,7 @@ void world_chunk_set_block(Chunk* chunk, int x, int y, int z, BlockType type);
 BlockType world_chunk_get_block(Chunk* chunk, int x, int y, int z);
 void world_generate_chunk(Chunk* chunk, uint64_t seed);
 Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
+void chunk_cache_visible_blocks(Chunk* chunk, World* world);  // Pre-compute list of visible blocks
+void chunk_free_visible_blocks(Chunk* chunk);  // Clean up visible blocks cache
 
 #endif

@@ -146,7 +146,7 @@ bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forwa
 }
 
 // draw only the visible faces of a cube (faces pointing toward camera and not occluded by neighbors)
-void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type)
+void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces)
 {
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
@@ -155,142 +155,82 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     Texture2D texture = world_get_block_texture(world, block_type);
     bool has_texture = texture.id > 0;
 
-    // face normals and vertices (in pairs: v1, v2, v3, v4) with texture coordinates
-    // also include neighbor coordinates for occlusion checking
-    struct {
-        Vector3 normal;
-        Vector3 v[4];
-        Vector2 uv[4];
-        int neighbor_x, neighbor_y, neighbor_z;
-        int face_index;  // for lighting calculation
-    } faces[6] = {
-        // right (+X)
-        {
-            {1, 0, 0},
-            {
-                {pos.x + h, pos.y - h, pos.z - h},
-                {pos.x + h, pos.y + h, pos.z - h},
-                {pos.x + h, pos.y + h, pos.z + h},
-                {pos.x + h, pos.y - h, pos.z + h}
-            },
-            {{0, 1}, {0, 0}, {1, 0}, {1, 1}},
-            block_x + 1, block_y, block_z,
-            0
-        },
-        // left (-X)
-        {
-            {-1, 0, 0},
-            {
-                {pos.x - h, pos.y - h, pos.z + h},
-                {pos.x - h, pos.y + h, pos.z + h},
-                {pos.x - h, pos.y + h, pos.z - h},
-                {pos.x - h, pos.y - h, pos.z - h}
-            },
-            {{1, 1}, {1, 0}, {0, 0}, {0, 1}},
-            block_x - 1, block_y, block_z,
-            1
-        },
-        // top (+Y)
-        {
-            {0, 1, 0},
-            {
-                {pos.x - h, pos.y + h, pos.z + h},
-                {pos.x + h, pos.y + h, pos.z + h},
-                {pos.x + h, pos.y + h, pos.z - h},
-                {pos.x - h, pos.y + h, pos.z - h}
-            },
-            {{0, 0}, {1, 0}, {1, 1}, {0, 1}},
-            block_x, block_y + 1, block_z,
-            2
-        },
-        // bottom (-Y)
-        {
-            {0, -1, 0},
-            {
-                {pos.x + h, pos.y - h, pos.z + h},
-                {pos.x - h, pos.y - h, pos.z + h},
-                {pos.x - h, pos.y - h, pos.z - h},
-                {pos.x + h, pos.y - h, pos.z - h}
-            },
-            {{1, 0}, {0, 0}, {0, 1}, {1, 1}},
-            block_x, block_y - 1, block_z,
-            3
-        },
-        // front (+Z)
-        {
-            {0, 0, 1},
-            {
-                {pos.x - h, pos.y - h, pos.z + h},
-                {pos.x + h, pos.y - h, pos.z + h},
-                {pos.x + h, pos.y + h, pos.z + h},
-                {pos.x - h, pos.y + h, pos.z + h}
-            },
-            {{0, 1}, {1, 1}, {1, 0}, {0, 0}},
-            block_x, block_y, block_z + 1,
-            4
-        },
-        // back (-Z)
-        {
-            {0, 0, -1},
-            {
-                {pos.x + h, pos.y - h, pos.z - h},
-                {pos.x - h, pos.y - h, pos.z - h},
-                {pos.x - h, pos.y + h, pos.z - h},
-                {pos.x + h, pos.y + h, pos.z - h}
-            },
-            {{1, 1}, {0, 1}, {0, 0}, {1, 0}},
-            block_x, block_y, block_z - 1,
-            5
-        }
+    // Face normals for backface culling (pointing outward)
+    Vector3 face_normals[6] = {
+        {1, 0, 0},    // +X (right)
+        {-1, 0, 0},   // -X (left)
+        {0, 1, 0},    // +Y (top)
+        {0, -1, 0},   // -Y (bottom)
+        {0, 0, 1},    // +Z (front)
+        {0, 0, -1}    // -Z (back)
     };
 
-    // draw each face only if it points toward camera AND has no solid neighbor blocking it
-    bool texture_set = false;
+    Vector3 face_positions[6][4] = {
+        // right (+X)
+        {{pos.x + h, pos.y - h, pos.z - h}, {pos.x + h, pos.y + h, pos.z - h}, {pos.x + h, pos.y + h, pos.z + h}, {pos.x + h, pos.y - h, pos.z + h}},
+        // left (-X)
+        {{pos.x - h, pos.y - h, pos.z + h}, {pos.x - h, pos.y + h, pos.z + h}, {pos.x - h, pos.y + h, pos.z - h}, {pos.x - h, pos.y - h, pos.z - h}},
+        // top (+Y)
+        {{pos.x - h, pos.y + h, pos.z + h}, {pos.x + h, pos.y + h, pos.z + h}, {pos.x + h, pos.y + h, pos.z - h}, {pos.x - h, pos.y + h, pos.z - h}},
+        // bottom (-Y)
+        {{pos.x + h, pos.y - h, pos.z + h}, {pos.x - h, pos.y - h, pos.z + h}, {pos.x - h, pos.y - h, pos.z - h}, {pos.x + h, pos.y - h, pos.z - h}},
+        // front (+Z)
+        {{pos.x - h, pos.y - h, pos.z + h}, {pos.x + h, pos.y - h, pos.z + h}, {pos.x + h, pos.y + h, pos.z + h}, {pos.x - h, pos.y + h, pos.z + h}},
+        // back (-Z)
+        {{pos.x + h, pos.y - h, pos.z - h}, {pos.x - h, pos.y - h, pos.z - h}, {pos.x - h, pos.y + h, pos.z - h}, {pos.x + h, pos.y + h, pos.z - h}}
+    };
+
+    Vector2 face_uv[6][4] = {
+        {{0, 1}, {0, 0}, {1, 0}, {1, 1}},  // +X
+        {{1, 1}, {1, 0}, {0, 0}, {0, 1}},  // -X
+        {{0, 0}, {1, 0}, {1, 1}, {0, 1}},  // +Y
+        {{1, 0}, {0, 0}, {0, 1}, {1, 1}},  // -Y
+        {{0, 1}, {1, 1}, {1, 0}, {0, 0}},  // +Z
+        {{1, 1}, {0, 1}, {0, 0}, {1, 0}}   // -Z
+    };
+
+    // Apply slight lighting variation based on face orientation
+    Color face_colors[6] = {
+        {color.r, color.g, color.b, color.a},  // +X (right)
+        {color.r, color.g, color.b, color.a},  // -X (left)
+        {color.r, color.g, color.b, color.a},  // +Y (top) - brightest
+        {(unsigned char)(color.r * 0.8), (unsigned char)(color.g * 0.8), (unsigned char)(color.b * 0.8), color.a},  // -Y (bottom) - darker
+        {color.r, color.g, color.b, color.a},  // +Z (front)
+        {color.r, color.g, color.b, color.a}   // -Z (back)
+    };
+
     if (has_texture) {
         rlSetTexture(texture.id);
-        texture_set = true;
     }
 
-    for (int i = 0; i < 6; i++) {
-        float dot = to_cam.x * faces[i].normal.x + to_cam.y * faces[i].normal.y + to_cam.z * faces[i].normal.z;
+    for (int face = 0; face < 6; face++) {
+        // Skip faces that are not exposed or face away from camera
+        if (!(exposed_faces & (1 << face))) {
+            continue;  // Face is occluded by neighbor
+        }
 
-        // face points toward camera
-        if (dot > 0) {
-            // check if neighbor is air (face is exposed)
-            BlockType neighbor = world_get_block(world, faces[i].neighbor_x, faces[i].neighbor_y, faces[i].neighbor_z);
-            if (neighbor == BLOCK_AIR) {
-                // Apply lighting based on adjacent air block's sky access
-                Color lit_color = apply_face_lighting(color, faces[i].face_index, world, faces[i].neighbor_x, faces[i].neighbor_y, faces[i].neighbor_z);
+        // Backface culling: skip faces facing away from camera
+        float dot = to_cam.x * face_normals[face].x + to_cam.y * face_normals[face].y + to_cam.z * face_normals[face].z;
+        if (dot <= 0.0f) {
+            continue;  // Face points away from camera
+        }
 
-                if (has_texture) {
-                    // Draw textured quad with rlgl - minimal overhead
-                    rlBegin(RL_QUADS);
-                    rlColor4ub(lit_color.r, lit_color.g, lit_color.b, lit_color.a);
+        if (has_texture) {
+            rlBegin(RL_QUADS);
+            rlColor4ub(face_colors[face].r, face_colors[face].g, face_colors[face].b, face_colors[face].a);
 
-                    rlTexCoord2f(faces[i].uv[0].x, faces[i].uv[0].y);
-                    rlVertex3f(faces[i].v[0].x, faces[i].v[0].y, faces[i].v[0].z);
-
-                    rlTexCoord2f(faces[i].uv[1].x, faces[i].uv[1].y);
-                    rlVertex3f(faces[i].v[1].x, faces[i].v[1].y, faces[i].v[1].z);
-
-                    rlTexCoord2f(faces[i].uv[2].x, faces[i].uv[2].y);
-                    rlVertex3f(faces[i].v[2].x, faces[i].v[2].y, faces[i].v[2].z);
-
-                    rlTexCoord2f(faces[i].uv[3].x, faces[i].uv[3].y);
-                    rlVertex3f(faces[i].v[3].x, faces[i].v[3].y, faces[i].v[3].z);
-
-                    rlEnd();
-                } else {
-                    // Fallback to colored triangles if texture not loaded
-                    DrawTriangle3D(faces[i].v[0], faces[i].v[1], faces[i].v[2], lit_color);
-                    DrawTriangle3D(faces[i].v[0], faces[i].v[2], faces[i].v[3], lit_color);
-                }
+            for (int v = 0; v < 4; v++) {
+                rlTexCoord2f(face_uv[face][v].x, face_uv[face][v].y);
+                rlVertex3f(face_positions[face][v].x, face_positions[face][v].y, face_positions[face][v].z);
             }
+            rlEnd();
+        } else {
+            DrawTriangle3D(face_positions[face][0], face_positions[face][1], face_positions[face][2], face_colors[face]);
+            DrawTriangle3D(face_positions[face][0], face_positions[face][2], face_positions[face][3], face_colors[face]);
         }
     }
 
-    // Unset texture after drawing all faces
-    if (texture_set) {
+    if (has_texture) {
         rlSetTexture(0);
     }
 }

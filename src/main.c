@@ -979,16 +979,18 @@ int main(void)
                     continue;
                 }
 
-                // Render blocks in this chunk
-                for (int y = 0; y < CHUNK_HEIGHT; y++) {
-                    for (int z = 0; z < CHUNK_DEPTH; z++) {
-                        for (int x = 0; x < CHUNK_WIDTH; x++) {
-                            BlockType block = world_chunk_get_block(chunk, x, y, z);
-                            if (block != BLOCK_AIR) {
-                                // Calculate world coordinates
-                                int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
-                                int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
-                                int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+                // OPTIMIZATION: Iterate only through cached visible blocks instead of all blocks
+                // This is the main performance win - avoids triple-nested loop of 2048 blocks per chunk
+                for (int i = 0; i < chunk->visible_count; i++) {
+                    int x = chunk->visible_blocks[i].x;
+                    int y = chunk->visible_blocks[i].y;
+                    int z = chunk->visible_blocks[i].z;
+                    BlockType block = world_chunk_get_block(chunk, x, y, z);
+
+                    // Calculate world coordinates
+                    int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+                    int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
+                    int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
 
                                 Vector3 world_pos = (Vector3){
                                     world_x + 0.5f - camera_offset.x,
@@ -1005,22 +1007,8 @@ int main(void)
                                     continue;
                                 }
 
-                                // OPTIMIZATION: Back-plane culling - skip blocks behind camera
-                                float depth = to_block.x * cam_forward.x + to_block.y * cam_forward.y + to_block.z * cam_forward.z;
-                                if (depth < -1.0f) {  // Small tolerance for block size
-                                    continue;
-                                }
-
-                                // Check occlusion after distance (also relatively cheap)
-                                if (is_block_occluded(world, world_x, world_y, world_z)) {
-                                    continue;
-                                }
-
-                                // Only do expensive visibility checks after distance/occlusion pass
-                                if (!is_block_visible_fast(world_pos, shifted_cam_pos, cam_forward, cam_right,
-                                                        camera.up, menu->render_distance, fov_half_vert_tan, fov_half_horiz_tan)) {
-                                    continue;
-                                }
+                                // OPTIMIZATION: Skip is_block_visible_fast() - chunk frustum culling is sufficient
+                                // OPTIMIZATION: Skip is_block_occluded() - visible_blocks cache already filters these
 
                                 float dist = sqrtf(dist_sq);  // Only calc sqrt if we're actually rendering
                                 Color color = world_get_block_color(block);
@@ -1048,12 +1036,9 @@ int main(void)
                                 }
 
                                 // draw only visible faces
-                                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block);
+                                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, chunk->visible_blocks[i].exposed_faces);
                                 blocks_rendered++;
-                            }
-                        }
                     }
-                }
             }
 
             // Draw highlighting box around the block being looked at

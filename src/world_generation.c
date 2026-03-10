@@ -314,6 +314,9 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
     new_chunk->loaded = false;
     new_chunk->generated = false;
     new_chunk->modified = false;  // Not modified when first created
+    new_chunk->visible_blocks = NULL;  // Initialize visible blocks cache
+    new_chunk->visible_count = 0;
+    new_chunk->visible_capacity = 0;
 
     // Initialize blocks to air
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -570,6 +573,7 @@ void world_generate_prism(World* world)
     Chunk* chunk = world_load_or_create_chunk(world, 0, 0, 0);
     if (chunk && !chunk->generated) {
         world_generate_chunk(chunk, world->seed);
+        chunk_cache_visible_blocks(chunk, world);  // Cache visible blocks for rendering
         chunk->loaded = true;
         chunk->generated = true;
         chunk->modified = false;  // Freshly generated chunk is not modified
@@ -625,6 +629,7 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
                 if (chunk && !chunk->loaded) {
                     // Generate this chunk procedurally
                     world_generate_chunk(chunk, world->seed);
+                    chunk_cache_visible_blocks(chunk, world);  // Cache visible blocks for rendering
                     chunk->loaded = true;
                     chunk->generated = true;
                     chunk->modified = false;  // Freshly generated chunk is not modified
@@ -793,6 +798,10 @@ bool world_load(World* world, const char* world_name)
 
     // Clear existing chunks first
     if (world->chunk_cache.chunks) {
+        // Free visible blocks cache for each chunk
+        for (int i = 0; i < world->chunk_cache.chunk_count; i++) {
+            chunk_free_visible_blocks(&world->chunk_cache.chunks[i]);
+        }
         free(world->chunk_cache.chunks);
         world->chunk_cache.chunks = NULL;
         world->chunk_cache.chunk_count = 0;
@@ -832,25 +841,92 @@ bool world_load(World* world, const char* world_name)
     }
 
     // Try to load initial chunks from disk
-    // Start from origin chunk and nearby chunks
-    int load_dist = CHUNK_LOAD_DISTANCE;
+    // Only generate minimal spawn area to avoid startup lag
+    int spawn_dist = 1;  // Only load immediate area around spawn
     bool any_chunk_loaded = false;
 
-    for (int cx = -load_dist; cx <= load_dist; cx++) {
+    for (int cx = -spawn_dist; cx <= spawn_dist; cx++) {
         for (int cy = -1; cy <= 1; cy++) {
-            for (int cz = -load_dist; cz <= load_dist; cz++) {
+            for (int cz = -spawn_dist; cz <= spawn_dist; cz++) {
                 Chunk* chunk = world_load_or_create_chunk(world, cx, cy, cz);
                 if (chunk && chunk->loaded) {
                     any_chunk_loaded = true;
+                } else if (chunk && !chunk->generated) {
+                    // Only generate if not yet generated
+                    world_generate_chunk(chunk, world->seed);
+                    chunk_cache_visible_blocks(chunk, world);  // Cache visible blocks for rendering
+                    chunk->loaded = true;
+                    chunk->generated = true;
+                    chunk->modified = false;
                 }
             }
         }
     }
 
-    // If no chunks exist on disk, generate the starting area
-    if (!any_chunk_loaded) {
-        world_generate_prism(world);
-    }
-
     return true;
+}
+
+// Pre-compute and cache all visible blocks in a chunk (blocks with exposed faces)
+// This avoids the per-frame triple-nested loop and massive performance improvement
+void chunk_cache_visible_blocks(Chunk* chunk, World* world)
+{
+    // Initialize visible blocks list
+    if (chunk->visible_blocks == NULL) {
+        chunk->visible_capacity = 1024;  // Start with space for 1024 visible blocks
+        chunk->visible_blocks = (CachedVisibleBlock*)malloc(sizeof(CachedVisibleBlock) * chunk->visible_capacity);
+    }
+    chunk->visible_count = 0;
+
+    // Iterate through all blocks in chunk
+    for (int y = 0; y < CHUNK_HEIGHT; y++) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                BlockType block = world_chunk_get_block(chunk, x, y, z);
+
+                // Skip air blocks
+                if (block == BLOCK_AIR) continue;
+
+                // Get world coordinates
+                int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+                int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
+                int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+
+                // Check which faces are exposed (neighbor is air or out of bounds)
+                uint8_t exposed_faces = 0;
+                if (world_get_block(world, world_x + 1, world_y, world_z) == BLOCK_AIR) exposed_faces |= (1 << 0);  // +X
+                if (world_get_block(world, world_x - 1, world_y, world_z) == BLOCK_AIR) exposed_faces |= (1 << 1);  // -X
+                if (world_get_block(world, world_x, world_y + 1, world_z) == BLOCK_AIR) exposed_faces |= (1 << 2);  // +Y
+                if (world_get_block(world, world_x, world_y - 1, world_z) == BLOCK_AIR) exposed_faces |= (1 << 3);  // -Y
+                if (world_get_block(world, world_x, world_y, world_z + 1) == BLOCK_AIR) exposed_faces |= (1 << 4);  // +Z
+                if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) exposed_faces |= (1 << 5);  // -Z
+
+                if (exposed_faces != 0) {
+                    // Grow array if needed
+                    if (chunk->visible_count >= chunk->visible_capacity) {
+                        chunk->visible_capacity *= 2;
+                        chunk->visible_blocks = (CachedVisibleBlock*)realloc(chunk->visible_blocks,
+                                                                             sizeof(CachedVisibleBlock) * chunk->visible_capacity);
+                    }
+
+                    // Add to visible blocks list with exposed faces bitmask
+                    chunk->visible_blocks[chunk->visible_count].x = x;
+                    chunk->visible_blocks[chunk->visible_count].y = y;
+                    chunk->visible_blocks[chunk->visible_count].z = z;
+                    chunk->visible_blocks[chunk->visible_count].exposed_faces = exposed_faces;
+                    chunk->visible_count++;
+                }
+            }
+        }
+    }
+}
+
+// Free the visible blocks cache
+void chunk_free_visible_blocks(Chunk* chunk)
+{
+    if (chunk->visible_blocks != NULL) {
+        free(chunk->visible_blocks);
+        chunk->visible_blocks = NULL;
+        chunk->visible_count = 0;
+        chunk->visible_capacity = 0;
+    }
 }
