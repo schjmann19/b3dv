@@ -65,6 +65,7 @@ typedef struct {
     int32_t last_loaded_chunk_z;
     char world_name[256];  // Current world name for proper chunk loading
     Vector3 last_player_position;  // Last known player position for saving/loading
+    uint64_t seed;  // World seed for reproducible terrain generation
 } World;
 
 // Function declarations
@@ -85,7 +86,7 @@ void world_set_block(World* world, int x, int y, int z, BlockType type);
 BlockType world_get_block(World* world, int x, int y, int z);
 void world_chunk_set_block(Chunk* chunk, int x, int y, int z, BlockType type);
 BlockType world_chunk_get_block(Chunk* chunk, int x, int y, int z);
-void world_generate_chunk(Chunk* chunk);
+void world_generate_chunk(Chunk* chunk, uint64_t seed);
 Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 
 #endif

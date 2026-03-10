@@ -1,4 +1,4 @@
-Select World
+Play
 Create World
 Credits & Info
 Quit

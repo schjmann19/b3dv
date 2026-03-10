@@ -1,4 +1,4 @@
-Seleccionar Mundo
+Jugar
 Crear Mundo
 Créditos e Info
 Salir

@@ -763,7 +763,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.12b";
+    const char* version = "Basic 3D Visualizer - v0.0.13";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextEx(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
@@ -792,7 +792,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     int center_x = screen_width / 2;
     int center_y = screen_height / 2;
 
-    // Select World button
+    // Play button (formerly "Select World")
     Rectangle world_button = {
         center_x - button_width / 2,
         center_y,
@@ -800,18 +800,10 @@ void menu_draw_main(MenuSystem* menu, Font font)
         button_height
     };
 
-    // Create World button
-    Rectangle create_button = {
-        center_x - button_width / 2,
-        center_y + button_height + button_spacing,
-        button_width,
-        button_height
-    };
-
     // Credits & Info button
     Rectangle credits_button = {
         center_x - button_width / 2,
-        center_y + 2 * (button_height + button_spacing),
+        center_y + button_height + button_spacing,
         button_width,
         button_height
     };
@@ -819,7 +811,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     // Settings button
     Rectangle settings_button = {
         center_x - button_width / 2,
-        center_y + 3 * (button_height + button_spacing),
+        center_y + 2 * (button_height + button_spacing),
         button_width,
         button_height
     };
@@ -827,7 +819,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     // Quit button
     Rectangle quit_button = {
         center_x - button_width / 2,
-        center_y + 4 * (button_height + button_spacing),
+        center_y + 3 * (button_height + button_spacing),
         button_width,
         button_height
     };
@@ -835,12 +827,11 @@ void menu_draw_main(MenuSystem* menu, Font font)
     // Get mouse position
     Vector2 mouse_pos = GetMousePosition();
     bool world_hover = CheckCollisionPointRec(mouse_pos, world_button);
-    bool create_hover = CheckCollisionPointRec(mouse_pos, create_button);
     bool credits_hover = CheckCollisionPointRec(mouse_pos, credits_button);
     bool settings_hover = CheckCollisionPointRec(mouse_pos, settings_button);
     bool quit_hover = CheckCollisionPointRec(mouse_pos, quit_button);
 
-    // Draw Select World button
+    // Draw Play button
     DrawRectangleRec(world_button, world_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(world_button, 2, WHITE);
     Vector2 world_text_size = MeasureTextEx(font, menu->text_select_world, 32, 1);
@@ -848,20 +839,12 @@ void menu_draw_main(MenuSystem* menu, Font font)
                (Vector2){center_x - world_text_size.x / 2, center_y + 14},
                32, 1, BLACK);
 
-    // Draw Create World button
-    DrawRectangleRec(create_button, create_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
-    DrawRectangleLinesEx(create_button, 2, WHITE);
-    Vector2 create_text_size = MeasureTextEx(font, menu->text_create_world, 32, 1);
-    DrawTextEx(font, menu->text_create_world,
-               (Vector2){center_x - create_text_size.x / 2, center_y + button_height + button_spacing + 14},
-               32, 1, BLACK);
-
     // Draw Credits & Info button
     DrawRectangleRec(credits_button, credits_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(credits_button, 2, WHITE);
     Vector2 credits_text_size = MeasureTextEx(font, menu->text_credits_info, 32, 1);
     DrawTextEx(font, menu->text_credits_info,
-               (Vector2){center_x - credits_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 14},
+               (Vector2){center_x - credits_text_size.x / 2, center_y + button_height + button_spacing + 14},
                32, 1, BLACK);
 
     // Draw Settings button
@@ -869,7 +852,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     DrawRectangleLinesEx(settings_button, 2, WHITE);
     Vector2 settings_text_size = MeasureTextEx(font, menu->game_text.settings, 32, 1);
     DrawTextEx(font, menu->game_text.settings,
-               (Vector2){center_x - settings_text_size.x / 2, center_y + 3 * (button_height + button_spacing) + 14},
+               (Vector2){center_x - settings_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 14},
                32, 1, BLACK);
 
     // Draw Quit button
@@ -877,7 +860,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     DrawRectangleLinesEx(quit_button, 2, WHITE);
     Vector2 quit_text_size = MeasureTextEx(font, menu->text_quit, 32, 1);
     DrawTextEx(font, menu->text_quit,
-               (Vector2){center_x - quit_text_size.x / 2, center_y + 4 * (button_height + button_spacing) + 14},
+               (Vector2){center_x - quit_text_size.x / 2, center_y + 3 * (button_height + button_spacing) + 14},
                32, 1, BLACK);
 
     // Handle button clicks
@@ -885,11 +868,6 @@ void menu_draw_main(MenuSystem* menu, Font font)
         if (world_hover) {
             menu_scan_worlds(menu);  // Refresh world list
             menu->current_state = MENU_STATE_WORLD_SELECT;
-        } else if (create_hover) {
-            menu->current_state = MENU_STATE_CREATE_WORLD;
-            strcpy(menu->new_world_name, "");
-            menu->new_world_name_len = 0;
-            menu->create_world_error = false;
         } else if (credits_hover) {
             menu->current_state = MENU_STATE_CREDITS;
         } else if (settings_hover) {
@@ -1005,6 +983,17 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
     int button_width = 150;
     int button_height = 50;
     int button_y = list_start_y + list_height + 30;
+    int button_spacing = 20;
+
+    // Create World button (left)
+    Rectangle create_button = {
+        (float)list_x,
+        (float)button_y,
+        (float)button_width,
+        (float)button_height
+    };
+
+    // Back button (right)
     Rectangle back_button = {
         (float)(list_x + list_width - button_width),
         (float)button_y,
@@ -1012,7 +1001,18 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
         (float)button_height
     };
 
+    bool create_hover = CheckCollisionPointRec(mouse_pos, create_button);
     bool back_hover = CheckCollisionPointRec(mouse_pos, back_button);
+
+    // Draw Create World button
+    DrawRectangleRec(create_button, create_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(create_button, 2, WHITE);
+    Vector2 create_text_size = MeasureTextEx(font, menu->text_create_world, 28, 1);
+    DrawTextEx(font, menu->text_create_world,
+               (Vector2){create_button.x + (button_width - create_text_size.x) / 2, create_button.y + 10},
+               28, 1, BLACK);
+
+    // Draw Back button
     DrawRectangleRec(back_button, back_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(back_button, 2, WHITE);
     Vector2 back_text_size = MeasureTextEx(font, menu->text_back, 28, 1);
@@ -1020,8 +1020,15 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
                (Vector2){back_button.x + (button_width - back_text_size.x) / 2, back_button.y + 10},
                28, 1, BLACK);
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && back_hover) {
-        menu->current_state = MENU_STATE_MAIN;
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (create_hover) {
+            menu->current_state = MENU_STATE_CREATE_WORLD;
+            strcpy(menu->new_world_name, "");
+            menu->new_world_name_len = 0;
+            menu->create_world_error = false;
+        } else if (back_hover) {
+            menu->current_state = MENU_STATE_MAIN;
+        }
     }
 
     // Keyboard navigation
