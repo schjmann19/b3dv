@@ -5,3 +5,7 @@ backups
 todo.txt
 .vscode
 .old
+releases
+*.md
+*.MD
+!README.md

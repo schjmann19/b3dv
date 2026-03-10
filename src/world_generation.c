@@ -497,6 +497,25 @@ void world_set_block(World* world, int x, int y, int z, BlockType type)
     Chunk* chunk = world_load_or_create_chunk(world, chunk_x, chunk_y, chunk_z);
     if (chunk) {
         world_chunk_set_block(chunk, local_x, local_y, local_z, type);
+
+        // OPTIMIZATION: Invalidate visible blocks cache for this chunk and neighbors
+        // This chunk needs regeneration
+        chunk_free_visible_blocks(chunk);
+
+        // Invalidate neighboring chunks that share edges/corners with this block
+        // This is important: if we break/place a block on a chunk boundary,
+        // the adjacent chunk's cache also needs updating (exposed faces changed)
+        int affected_chunks[3][3][3];  // 3x3x3 = 27 possible affected chunks
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    Chunk* neighbor = world_get_chunk(world, chunk_x + dx, chunk_y + dy, chunk_z + dz);
+                    if (neighbor) {
+                        chunk_free_visible_blocks(neighbor);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -866,10 +885,88 @@ bool world_load(World* world, const char* world_name)
     return true;
 }
 
+// Get skylight level at a specific world position
+// Returns 0 if in a solid block or unloaded area
+// OPTIMIZED: Fast path for unloaded chunks (returns 0 immediately)
+uint8_t world_get_skylight(World* world, int x, int y, int z)
+{
+    // Out of bounds?
+    if (y < 0 || y >= 256) return 0;
+
+    // Calculate chunk coordinates
+    int32_t chunk_x = x < 0 ? (x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : x / CHUNK_WIDTH;
+    int32_t chunk_y = y < 0 ? (y - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : y / CHUNK_HEIGHT;
+    int32_t chunk_z = z < 0 ? (z - CHUNK_DEPTH + 1) / CHUNK_DEPTH : z / CHUNK_DEPTH;
+
+    // Calculate position within chunk
+    int local_x = x - (chunk_x * CHUNK_WIDTH);
+    int local_y = y - (chunk_y * CHUNK_HEIGHT);
+    int local_z = z - (chunk_z * CHUNK_DEPTH);
+
+    // Bounds check first (fast)
+    if (local_x < 0 || local_x >= CHUNK_WIDTH || local_y < 0 || local_y >= CHUNK_HEIGHT || local_z < 0 || local_z >= CHUNK_DEPTH) {
+        return 0;  // Out of chunk bounds
+    }
+
+    // Get chunk (linear search - but we return early for out-of-bounds)
+    Chunk* chunk = world_get_chunk(world, chunk_x, chunk_y, chunk_z);
+    if (!chunk) {
+        return 0;  // Unloaded chunks have no skylight
+    }
+
+    return chunk->skylight[local_y][local_z][local_x];
+}
+
+// Calculate skylight levels for a chunk - ULTRA-FAST VERSION NO EXPENSIVE LOOKUPS
+// OPTIMIZED: Only scans within current chunk, zero cross-chunk world_get_block calls
+// Algorithm: for each block, light = 15 if exposed, 0 if under a roof
+void calculate_chunk_skylight(Chunk* chunk, World* world)
+{
+    if (!chunk) return;
+
+    // For each XZ column in chunk
+    for (int z = 0; z < CHUNK_DEPTH; z++) {
+        for (int x = 0; x < CHUNK_WIDTH; x++) {
+            // First pass: Find highest solid block in this column
+            int highest_solid_y = -1;
+            for (int y = CHUNK_HEIGHT - 1; y >= 0; y--) {
+                if (chunk->blocks[y][z][x].type != BLOCK_AIR) {
+                    highest_solid_y = y;
+                    break;
+                }
+            }
+
+            // Second pass: Apply lighting based on highest solid
+            for (int y = 0; y < CHUNK_HEIGHT; y++) {
+                BlockType block = chunk->blocks[y][z][x].type;
+
+                if (block != BLOCK_AIR) {
+                    // Solid blocks have no light
+                    chunk->skylight[y][z][x] = 0;
+                } else if (highest_solid_y >= 0 && y > highest_solid_y) {
+                    // Air block ABOVE the highest solid in column = exposed to sky
+                    chunk->skylight[y][z][x] = 15;
+                } else if (highest_solid_y >= 0 && y <= highest_solid_y) {
+                    // Air block BELOW highest solid = in cave/tunnel, no direct sky = dark
+                    chunk->skylight[y][z][x] = 0;
+                } else {
+                    // No solid blocks in column = fully exposed
+                    chunk->skylight[y][z][x] = 15;
+                }
+            }
+        }
+    }
+}
+
 // Pre-compute and cache all visible blocks in a chunk (blocks with exposed faces)
 // This avoids the per-frame triple-nested loop and massive performance improvement
 void chunk_cache_visible_blocks(Chunk* chunk, World* world)
 {
+    if (!chunk) return;
+
+    // First, calculate skylight levels for this chunk
+    calculate_chunk_skylight(chunk, world);
+
     // Initialize visible blocks list
     if (chunk->visible_blocks == NULL) {
         chunk->visible_capacity = 1024;  // Start with space for 1024 visible blocks
@@ -901,6 +998,13 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
                 if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) exposed_faces |= (1 << 5);  // -Z
 
                 if (exposed_faces != 0) {
+                    // OPTIMIZED: Don't calculate light_level here anymore
+                    // Rendering will calculate per-face lighting on the fly
+                    // This avoids expensive averaging that was giving wrong results
+
+                    // We'll just use a dummy light value (0) - rendering ignores it now
+                    uint8_t light_level = 0;
+
                     // Grow array if needed
                     if (chunk->visible_count >= chunk->visible_capacity) {
                         chunk->visible_capacity *= 2;
@@ -908,11 +1012,12 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
                                                                              sizeof(CachedVisibleBlock) * chunk->visible_capacity);
                     }
 
-                    // Add to visible blocks list with exposed faces bitmask
+                    // Add to visible blocks list with exposed faces
                     chunk->visible_blocks[chunk->visible_count].x = x;
                     chunk->visible_blocks[chunk->visible_count].y = y;
                     chunk->visible_blocks[chunk->visible_count].z = z;
                     chunk->visible_blocks[chunk->visible_count].exposed_faces = exposed_faces;
+                    chunk->visible_blocks[chunk->visible_count].light_level = 0;  // Unused now, rendering calculates per-face
                     chunk->visible_count++;
                 }
             }

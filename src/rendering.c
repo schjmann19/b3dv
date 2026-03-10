@@ -146,7 +146,7 @@ bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forwa
 }
 
 // draw only the visible faces of a cube (faces pointing toward camera and not occluded by neighbors)
-void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces)
+void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces, uint8_t light_level)
 {
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
@@ -189,15 +189,40 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
         {{1, 1}, {0, 1}, {0, 0}, {1, 0}}   // -Z
     };
 
-    // Apply slight lighting variation based on face orientation
-    Color face_colors[6] = {
-        {color.r, color.g, color.b, color.a},  // +X (right)
-        {color.r, color.g, color.b, color.a},  // -X (left)
-        {color.r, color.g, color.b, color.a},  // +Y (top) - brightest
-        {(unsigned char)(color.r * 0.8), (unsigned char)(color.g * 0.8), (unsigned char)(color.b * 0.8), color.a},  // -Y (bottom) - darker
-        {color.r, color.g, color.b, color.a},  // +Z (front)
-        {color.r, color.g, color.b, color.a}   // -Z (back)
+    // Face shading: how bright each face appears based on orientation
+    float face_shading[6] = {
+        0.85f,   // +X (right side) - medium
+        0.85f,   // -X (left side) - medium
+        1.0f,    // +Y (top) - fully lit
+        0.6f,    // -Y (bottom) - dark
+        0.9f,    // +Z (front) - slightly brighter
+        0.8f     // -Z (back) - slightly darker
     };
+
+    // OPTIMIZED: Calculate per-face lighting based on adjacent air block skylight
+    // Instead of averaging all faces, each face gets its own neighbor's light
+    Color face_colors[6];
+    for (int i = 0; i < 6; i++) {
+        // Get neighbor position for this face
+        int neighbor_x = block_x, neighbor_y = block_y, neighbor_z = block_z;
+        if (i == 0) neighbor_x++;        // +X
+        else if (i == 1) neighbor_x--;   // -X
+        else if (i == 2) neighbor_y++;   // +Y (top)
+        else if (i == 3) neighbor_y--;   // -Y (bottom)
+        else if (i == 4) neighbor_z++;   // +Z
+        else if (i == 5) neighbor_z--;   // -Z
+
+        // Get this face's neighbor skylight value
+        uint8_t face_light = world_get_skylight(world, neighbor_x, neighbor_y, neighbor_z);
+
+        // Convert to brightness: 0=dark(0.3), 15=bright(1.0)
+        float face_brightness = face_shading[i] * (0.3f + (face_light / 15.0f) * 0.7f);
+
+        face_colors[i].r = (unsigned char)(color.r * face_brightness);
+        face_colors[i].g = (unsigned char)(color.g * face_brightness);
+        face_colors[i].b = (unsigned char)(color.b * face_brightness);
+        face_colors[i].a = color.a;
+    }
 
     if (has_texture) {
         rlSetTexture(texture.id);

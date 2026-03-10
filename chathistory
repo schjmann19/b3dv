@@ -553,3 +553,14 @@ asd
 /fly enable
 /noclip enable
 /tp 20124 134 1345
+/tp 20124 134 1345
+/tp 20124 134 1345
+/fly enable
+/noclip enable
+/noclip disable
+/fly disable
+/tp 10 200 10
+/fly enable
+/noclip enable
+/noclip disable
+/fly disable

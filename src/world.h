@@ -20,6 +20,7 @@ typedef enum {
 typedef struct {
     int x, y, z;  // Local chunk coordinates
     uint8_t exposed_faces;  // Bitmask of which faces are exposed (bits 0-5 = faces 0-5)
+    uint8_t light_level;  // Sky light level (0-15, like Minecraft)
 } CachedVisibleBlock;
 
 // Chunk system for infinite worlds
@@ -48,6 +49,7 @@ typedef struct {
 // Chunk structure - a 32x64x32 section of the world
 typedef struct {
     Block blocks[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];
+    uint8_t skylight[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];  // Skylight levels (0-15) for each block
     int32_t chunk_x;  // Chunk coordinates
     int32_t chunk_y;
     int32_t chunk_z;
@@ -100,5 +102,7 @@ void world_generate_chunk(Chunk* chunk, uint64_t seed);
 Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 void chunk_cache_visible_blocks(Chunk* chunk, World* world);  // Pre-compute list of visible blocks
 void chunk_free_visible_blocks(Chunk* chunk);  // Clean up visible blocks cache
+void calculate_chunk_skylight(Chunk* chunk, World* world);  // Calculate proper skylight levels for chunk
+uint8_t world_get_skylight(World* world, int x, int y, int z);  // Get skylight level at block position
 
 #endif
