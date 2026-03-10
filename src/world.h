@@ -13,7 +13,8 @@ typedef enum {
     BLOCK_GRASS = 3,
     BLOCK_SAND = 4,
     BLOCK_WOOD = 5,
-    BLOCK_BEDROCK = 6
+    BLOCK_BEDROCK = 6,
+    BLOCK_GLOWSTONE = 7
 } BlockType;
 
 // Cached visible block entry - for mesh caching
@@ -50,6 +51,7 @@ typedef struct {
 typedef struct {
     Block blocks[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];
     uint8_t skylight[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];  // Skylight levels (0-15) for each block
+    uint8_t blocklight[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];  // Blocklight levels (0-15) for each block
     int32_t chunk_x;  // Chunk coordinates
     int32_t chunk_y;
     int32_t chunk_z;
@@ -104,5 +106,7 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world);  // Pre-compute lis
 void chunk_free_visible_blocks(Chunk* chunk);  // Clean up visible blocks cache
 void calculate_chunk_skylight(Chunk* chunk, World* world);  // Calculate proper skylight levels for chunk
 uint8_t world_get_skylight(World* world, int x, int y, int z);  // Get skylight level at block position
+void calculate_chunk_blocklight(Chunk* chunk, World* world);  // Calculate blocklight from emitting blocks
+uint8_t world_get_blocklight(World* world, int x, int y, int z);  // Get blocklight level at block position
 
 #endif

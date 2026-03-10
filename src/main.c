@@ -579,6 +579,11 @@ int main(void)
                             char msg[256];
                             snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "wood");
                             add_chat_message(msg);
+                        } else if (strcmp(block_name, "glowstone") == 0) {
+                            player->selected_block = BLOCK_GLOWSTONE;
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "glowstone");
+                            add_chat_message(msg);
                         } else {
                             char msg[512];
                             snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_block, block_name);
@@ -651,6 +656,7 @@ int main(void)
                                 else if (block_type == BLOCK_GRASS) type_str = "grass";
                                 else if (block_type == BLOCK_SAND) type_str = "sand";
                                 else if (block_type == BLOCK_WOOD) type_str = "wood";
+                                else if (block_type == BLOCK_GLOWSTONE) type_str = "glowstone";
                                 else if (block_type == BLOCK_AIR) type_str = "air";
                             } else {
                                 // Parse explicit block name
@@ -669,6 +675,9 @@ int main(void)
                                 } else if (strcmp(block_name, "grass") == 0) {
                                     block_type = BLOCK_GRASS;
                                     type_str = "grass";
+                                } else if (strcmp(block_name, "glowstone") == 0) {
+                                    block_type = BLOCK_GLOWSTONE;
+                                    type_str = "glowstone";
                                 } else if (strcmp(block_name, "air") == 0) {
                                     block_type = BLOCK_AIR;
                                     type_str = "air";

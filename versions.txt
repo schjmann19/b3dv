@@ -1,3 +1,6 @@
+0.0.15b:
+    forgot to add blocklight :p
+
 0.0.15:
     added proper lighting (and a ""glowstone"" block lol)
 

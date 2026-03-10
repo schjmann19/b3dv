@@ -567,3 +567,12 @@ asd
 /fly enable
 /setblock -77 10 -1230
 /setblock -77 10 -1230 stone
+/select glowstone
+/tp 100 100 100
+/tp 100 31 glowstone
+/setblock 100 31 glowstone
+/setblock 100 31 100 glowstone
+/select
+/select glowstone
+/fly enable
+/noclip enable

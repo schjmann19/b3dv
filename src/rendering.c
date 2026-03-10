@@ -212,8 +212,10 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
         else if (i == 4) neighbor_z++;   // +Z
         else if (i == 5) neighbor_z--;   // -Z
 
-        // Get this face's neighbor skylight value
-        uint8_t face_light = world_get_skylight(world, neighbor_x, neighbor_y, neighbor_z);
+        // Get this face's neighbor light value (combine skylight and blocklight)
+        uint8_t skylight = world_get_skylight(world, neighbor_x, neighbor_y, neighbor_z);
+        uint8_t blocklight = world_get_blocklight(world, neighbor_x, neighbor_y, neighbor_z);
+        uint8_t face_light = (skylight > blocklight) ? skylight : blocklight;
 
         // Convert to brightness: 0=dark(0.3), 15=bright(1.0)
         float face_brightness = face_shading[i] * (0.3f + (face_light / 15.0f) * 0.7f);

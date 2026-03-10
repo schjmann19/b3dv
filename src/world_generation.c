@@ -579,6 +579,8 @@ Color world_get_block_color(BlockType type)
             return (Color){101, 67, 33, 255};  // Dark Brown
         case BLOCK_BEDROCK:
             return (Color){64, 64, 64, 255};  // Dark Grey (Bedrock)
+        case BLOCK_GLOWSTONE:
+            return (Color){255, 255, 200, 255};  // Bright warm white
         case BLOCK_AIR:
         default:
             return (Color){0, 0, 0, 0};  // Transparent
@@ -917,6 +919,134 @@ uint8_t world_get_skylight(World* world, int x, int y, int z)
     return chunk->skylight[local_y][local_z][local_x];
 }
 
+// Get blocklight level at a specific world position
+// Returns 0 if in solid block or unloaded area
+uint8_t world_get_blocklight(World* world, int x, int y, int z)
+{
+    // Out of bounds?
+    if (y < 0 || y >= 256) return 0;
+
+    // Calculate chunk coordinates
+    int32_t chunk_x = x < 0 ? (x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : x / CHUNK_WIDTH;
+    int32_t chunk_y = y < 0 ? (y - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : y / CHUNK_HEIGHT;
+    int32_t chunk_z = z < 0 ? (z - CHUNK_DEPTH + 1) / CHUNK_DEPTH : z / CHUNK_DEPTH;
+
+    // Calculate position within chunk
+    int local_x = x - (chunk_x * CHUNK_WIDTH);
+    int local_y = y - (chunk_y * CHUNK_HEIGHT);
+    int local_z = z - (chunk_z * CHUNK_DEPTH);
+
+    // Bounds check first (fast)
+    if (local_x < 0 || local_x >= CHUNK_WIDTH || local_y < 0 || local_y >= CHUNK_HEIGHT || local_z < 0 || local_z >= CHUNK_DEPTH) {
+        return 0;  // Out of chunk bounds
+    }
+
+    // Get chunk
+    Chunk* chunk = world_get_chunk(world, chunk_x, chunk_y, chunk_z);
+    if (!chunk) {
+        return 0;  // Unloaded chunks have no blocklight
+    }
+
+    return chunk->blocklight[local_y][local_z][local_x];
+}
+
+// Calculate blocklight levels for a chunk using flood-fill from glowstone blocks
+// Glowstone emits light at level 15 and it spreads to adjacent blocks
+void calculate_chunk_blocklight(Chunk* chunk, World* world)
+{
+    if (!chunk) return;
+
+    // Initialize blocklight to 0
+    for (int y = 0; y < CHUNK_HEIGHT; y++) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                chunk->blocklight[y][z][x] = 0;
+            }
+        }
+    }
+
+    // Find all glowstone blocks and mark them with light level 15
+    for (int y = 0; y < CHUNK_HEIGHT; y++) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                if (chunk->blocks[y][z][x].type == BLOCK_GLOWSTONE) {
+                    chunk->blocklight[y][z][x] = 15;  // Glowstone emits full light
+                }
+            }
+        }
+    }
+
+    // Flood-fill light propagation through adjacent air blocks
+    // Multiple passes: light spreads outward, decreasing by 1 per block of distance
+    bool changed = true;
+    int passes = 0;
+    int max_passes = 16;  // Maximum light distance is 15, so 16 passes is enough
+
+    while (changed && passes < max_passes) {
+        changed = false;
+        passes++;
+
+        for (int y = 0; y < CHUNK_HEIGHT; y++) {
+            for (int z = 0; z < CHUNK_DEPTH; z++) {
+                for (int x = 0; x < CHUNK_WIDTH; x++) {
+                    uint8_t current_light = chunk->blocklight[y][z][x];
+
+                    if (current_light == 0) continue;  // No light to spread
+
+                    // Try to spread light to 6 neighbors
+                    int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+                    int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
+                    int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+
+                    // 6 neighbor directions: +/-X, +/-Y, +/-Z
+                    int neighbors[6][3] = {
+                        {1, 0, 0}, {-1, 0, 0},   // X
+                        {0, 1, 0}, {0, -1, 0},   // Y
+                        {0, 0, 1}, {0, 0, -1}    // Z
+                    };
+
+                    for (int i = 0; i < 6; i++) {
+                        int nx = world_x + neighbors[i][0];
+                        int ny = world_y + neighbors[i][1];
+                        int nz = world_z + neighbors[i][2];
+
+                        // Only spread to air blocks
+                        BlockType neighbor_block = world_get_block(world, nx, ny, nz);
+                        if (neighbor_block != BLOCK_AIR) {
+                            continue;  // Block light, don't spread
+                        }
+
+                        // Calculate new light level (decreases by 1)
+                        uint8_t new_light = (current_light > 0) ? (current_light - 1) : 0;
+
+                        // Get neighbor's current light
+                        uint8_t neighbor_light = world_get_blocklight(world, nx, ny, nz);
+
+                        // Update if new light is brighter
+                        if (new_light > neighbor_light) {
+                            // Direct chunk access if possible
+                            int32_t neighbor_chunk_x = nx < 0 ? (nx - CHUNK_WIDTH + 1) / CHUNK_WIDTH : nx / CHUNK_WIDTH;
+                            int32_t neighbor_chunk_y = ny < 0 ? (ny - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : ny / CHUNK_HEIGHT;
+                            int32_t neighbor_chunk_z = nz < 0 ? (nz - CHUNK_DEPTH + 1) / CHUNK_DEPTH : nz / CHUNK_DEPTH;
+
+                            if (neighbor_chunk_x == chunk->chunk_x && neighbor_chunk_y == chunk->chunk_y && neighbor_chunk_z == chunk->chunk_z) {
+                                // Same chunk - direct update
+                                int local_x = nx - (neighbor_chunk_x * CHUNK_WIDTH);
+                                int local_y = ny - (neighbor_chunk_y * CHUNK_HEIGHT);
+                                int local_z = nz - (neighbor_chunk_z * CHUNK_DEPTH);
+                                chunk->blocklight[local_y][local_z][local_x] = new_light;
+                                changed = true;
+                            }
+                            // Note: Cross-chunk light spreading would need world_get_chunk lookup
+                            // For now, we only update within same chunk for performance
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Calculate skylight levels for a chunk - GRADATED LIGHT (0-15 like Minecraft)
 // FIXED: Light based on distance to NEAREST roof above, not count of all roofs
 // Algorithm: Track distance from closest blocking solid above
@@ -989,6 +1119,9 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
 
     // First, calculate skylight levels for this chunk
     calculate_chunk_skylight(chunk, world);
+
+    // Then, calculate blocklight levels from glowstone blocks
+    calculate_chunk_blocklight(chunk, world);
 
     // Initialize visible blocks list
     if (chunk->visible_blocks == NULL) {
