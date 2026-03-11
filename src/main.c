@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
 #include <sys/types.h>
@@ -91,10 +92,13 @@ static Font load_font_by_name(const char* font_name)
 int main(void)
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.14");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.15c");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
+
+    // Disable Raylib logging spam
+    SetTraceLogLevel(LOG_NONE);
 
     // Initialize world save system (needed for menu world scanning)
     world_system_init();
@@ -484,7 +488,7 @@ int main(void)
                                 snprintf(msg, sizeof(msg), "World '%s' created and saved successfully.", world_name);
                                 add_chat_message(msg);
                                 // Reset player position to origin
-                                player->position = (Vector3){ 0, 20, 0 };
+                                player->position = (Vector3){ 0, 105, 0 };
                                 player->velocity = (Vector3){ 0, 0, 0 };
                             } else {
                                 char msg[512];
@@ -534,7 +538,7 @@ int main(void)
 
                             if (world_load(world, world_name)) {
                                 // Reset player position
-                                player->position = (Vector3){ 0, 20, 0 };
+                                player->position = (Vector3){ 0, 105, 0 };
                                 player->velocity = (Vector3){ 0, 0, 0 };
                                 char msg[512];
                                 snprintf(msg, sizeof(msg), menu->game_text.msg_world_loaded, world_name);
@@ -774,7 +778,7 @@ int main(void)
 
         // teleport with R key
         if (IsKeyPressed(KEY_R)) {
-            player->position = (Vector3){ 8.0f, 15.0f, 8.0f };
+            player->position = (Vector3){ 8.0f, 105.0f, 8.0f };
             player->velocity = (Vector3){ 0, 0, 0 };
         }
 
@@ -965,16 +969,27 @@ int main(void)
         // Use shifted camera position for visibility checks
         Vector3 shifted_cam_pos = camera.position;
 
+        int blocks_rendered = 0;  // Declared here so it's accessible after the if block
+
         BeginMode3D(camera);
             // Use the actual camera orientation for rendering/frustum culling
             Vector3 cam_forward = camera_forward;
             Vector3 cam_right = camera_right;
 
-            int blocks_rendered = 0;
+            // CRITICAL: Take a snapshot of chunk pointers while holding cache_mutex
+            // This prevents chunks from being unloaded during rendering
+            pthread_mutex_lock(&world->cache_mutex);
+            int chunk_count_snapshot = world->chunk_cache.chunk_count;
+            // Allocate temporary array for chunk pointers
+            Chunk** chunks_snapshot = (Chunk**)malloc(chunk_count_snapshot * sizeof(Chunk*));
+            for (int i = 0; i < chunk_count_snapshot; i++) {
+                chunks_snapshot[i] = &world->chunk_cache.chunks[i];
+            }
+            pthread_mutex_unlock(&world->cache_mutex);
 
             // draw all chunks and their blocks with frustum culling and face culling
-            for (int c = 0; c < world->chunk_cache.chunk_count; c++) {
-                Chunk* chunk = &world->chunk_cache.chunks[c];
+            for (int c = 0; c < chunk_count_snapshot; c++) {
+                Chunk* chunk = chunks_snapshot[c];
 
                 // Skip unloaded chunks
                 if (!chunk->loaded) continue;
@@ -982,23 +997,52 @@ int main(void)
                 // Skip chunks that haven't been generated yet
                 if (!chunk->generated) continue;
 
+                // Skip chunks that haven't been lit yet - lighting is essential for proper rendering
+                if (chunk->needs_relighting) continue;
+
+                // Try to render even if meshed=false, as long as we have old visible_blocks
+                // This prevents flickering when a chunk is being remeshed
+                // We'll check visible_blocks existence after locking anyway
+
                 // OPTIMIZATION: Chunk-level frustum culling - skips entire chunks at once
                 if (!is_chunk_in_frustum(chunk, shifted_cam_pos, cam_forward, cam_right, camera.up,
                                         menu->render_distance, fov_half_vert_tan, fov_half_horiz_tan, camera_offset)) {
                     continue;
                 }
 
-                // Regenerate visible blocks cache if it was invalidated (e.g., block was broken/placed)
-                if (chunk->visible_blocks == NULL && chunk->generated) {
-                    chunk_cache_visible_blocks(chunk, world);
-                }
-
                 // OPTIMIZATION: Iterate only through cached visible blocks instead of all blocks
                 // This is the main performance win - avoids triple-nested loop of 2048 blocks per chunk
-                for (int i = 0; i < chunk->visible_count; i++) {
-                    int x = chunk->visible_blocks[i].x;
-                    int y = chunk->visible_blocks[i].y;
-                    int z = chunk->visible_blocks[i].z;
+                // Lock chunk while accessing visible_blocks to avoid race with worker thread
+                pthread_mutex_lock(&chunk->mutex);
+
+                // Safety checks after locking
+                if (!chunk->visible_blocks || chunk->visible_count == 0) {
+                    pthread_mutex_unlock(&chunk->mutex);
+                    continue;
+                }
+
+                // CRITICAL FIX: Make a temporary copy of visible_blocks data while holding lock
+                // to prevent use-after-free if worker thread recalculates visible_blocks
+                int visible_count = chunk->visible_count;
+                CachedVisibleBlock* visible_blocks_copy = (CachedVisibleBlock*)malloc(visible_count * sizeof(CachedVisibleBlock));
+                if (!visible_blocks_copy) {
+                    pthread_mutex_unlock(&chunk->mutex);
+                    continue;
+                }
+                memcpy(visible_blocks_copy, chunk->visible_blocks, visible_count * sizeof(CachedVisibleBlock));
+
+                pthread_mutex_unlock(&chunk->mutex);
+
+                // Render blocks with the copied data (no lock held)
+                // Pre-compute render distance thresholds for LOD
+                float aggressive_lod_dist = menu->render_distance * 0.75f;
+                float aggressive_lod_dist_sq = aggressive_lod_dist * aggressive_lod_dist;
+                float render_dist_sq = menu->render_distance * menu->render_distance;
+
+                for (int i = 0; i < visible_count; i++) {
+                    int x = visible_blocks_copy[i].x;
+                    int y = visible_blocks_copy[i].y;
+                    int z = visible_blocks_copy[i].z;
                     BlockType block = world_chunk_get_block(chunk, x, y, z);
 
                     // Calculate world coordinates
@@ -1014,10 +1058,16 @@ int main(void)
                                 // distance-based LOD: use squared distance to avoid sqrt
                                 Vector3 to_block = vec3_sub(world_pos, shifted_cam_pos);
                                 float dist_sq = to_block.x*to_block.x + to_block.y*to_block.y + to_block.z*to_block.z;
-                                float render_dist_sq = menu->render_distance * menu->render_distance;
 
                                 // hard render distance limit
                                 if (dist_sq > render_dist_sq) {
+                                    continue;
+                                }
+
+                                // AGGRESSIVE LOD: Skip blocks beyond 75% of render distance
+                                // This culls ~60% of blocks while maintaining visual quality
+                                // Blocks at render_distance are mostly fog-shrouded anyway
+                                if (dist_sq > aggressive_lod_dist_sq) {
                                     continue;
                                 }
 
@@ -1048,11 +1098,13 @@ int main(void)
                                     wire_color.b = (unsigned char)(wire_color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
                                     wire_color.a = (unsigned char)(255 * (1.0f - fog_factor));  // Fade out alpha too
                                 }
-
-                                // draw only visible faces
-                                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, chunk->visible_blocks[i].exposed_faces, chunk->visible_blocks[i].light_level);
-                                blocks_rendered++;
+                        // draw only visible faces
+                        draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, visible_blocks_copy[i].light_level);
+                        blocks_rendered++;
                     }
+
+                // Free the temporary copy
+                free(visible_blocks_copy);
             }
 
             // Draw highlighting box around the block being looked at
@@ -1069,6 +1121,9 @@ int main(void)
             // Draw clouds
             clouds_draw(clouds, camera.position, camera_offset);
         EndMode3D();
+
+        // Free the chunk snapshot
+        free(chunks_snapshot);
 
         // Restore original camera position
         camera.position = original_camera_pos;
@@ -1135,7 +1190,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.14", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.15c", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1165,14 +1220,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.14", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.15c", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.14", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.15c", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // Draw chat message history (last few messages with fade-out)

@@ -1,3 +1,6 @@
+0.0.15c:
+    better terrain; multithreading
+
 0.0.15b:
     forgot to add blocklight :p
 

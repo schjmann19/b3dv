@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <pthread.h>
 
 #include "world.h"
 #include "raylib.h"
@@ -46,9 +47,11 @@ static float perlin_noise(float x, float z, uint64_t seed)
     float xf = x - xi;
     float zf = z - zi;
 
-    // Smoothstep interpolation
-    float u = xf * xf * (3.0f - 2.0f * xf);
-    float v = zf * zf * (3.0f - 2.0f * zf);
+    // Improved smoothstep (Perlin's version for smoother curves)
+    // Regular smoothstep: 3t^2 - 2t^3
+    // Improved smoothstep: 6t^5 - 15t^4 + 10t^3 (makes terrain much smoother)
+    float u = xf * xf * xf * (xf * (xf * 6.0f - 15.0f) + 10.0f);
+    float v = zf * zf * zf * (zf * (zf * 6.0f - 15.0f) + 10.0f);
 
     // Get corner values
     float n00 = noise_value((float)xi, (float)zi, seed);
@@ -85,29 +88,74 @@ static float fbm_noise(float x, float z, int octaves, uint64_t seed)
 // Generate terrain height at a world position using seeded noise
 static float terrain_height_seeded(float x, float z, uint64_t seed)
 {
-    // Base terrain with multiple scales for smoother transitions
+    // Base terrain with multiple scales for much smoother transitions
     float height = 0.0f;
 
-    // Large scale features (mountains/valleys) with extra octave
-    height += fbm_noise(x * 0.002f, z * 0.002f, 6, seed) * 28.0f;
+    // Very large scale features (continental features) - creates smooth rolling hills
+    height += fbm_noise(x * 0.0008f, z * 0.0008f, 5, seed) * 20.0f;
 
-    // Medium scale features (hills)
-    height += fbm_noise(x * 0.01f, z * 0.01f, 5, seed) * 14.0f;
+    // Large scale features (mountains/valleys) with reduced amplitude for smoother blend
+    height += fbm_noise(x * 0.002f, z * 0.002f, 6, seed + 1) * 16.0f;
 
-    // Medium-small scale features
-    height += fbm_noise(x * 0.04f, z * 0.04f, 4, seed + 50) * 8.0f;
+    // Medium scale features (hills) - smoothly blended
+    height += fbm_noise(x * 0.008f, z * 0.008f, 5, seed + 2) * 10.0f;
 
-    // Small scale features (terrain detail)
-    height += fbm_noise(x * 0.12f, z * 0.12f, 3, seed + 100) * 4.0f;
+    // Medium-small scale features for land relief
+    height += fbm_noise(x * 0.025f, z * 0.025f, 4, seed + 50) * 6.0f;
 
-    // Base level with offset
-    height += 15.0f;
+    // Small scale features (terrain detail) - only subtle variation to avoid 1-block stubs
+    height += fbm_noise(x * 0.06f, z * 0.06f, 3, seed + 100) * 1.0f;
+
+    // Base level at y=100
+    height += 100.0f;
 
     // Clamp to reasonable heights
-    if (height < 3.0f) height = 3.0f;
-    if (height > 32.0f) height = 32.0f;
+    if (height < 85.0f) height = 85.0f;
+    if (height > 120.0f) height = 120.0f;
 
     return height;
+}
+
+// Smooth terrain height to reduce 1-block stubs while preserving land relief
+static int smooth_terrain_height(int x, int z, uint64_t seed)
+{
+    // Sample this position and its 8 neighbors
+    float heights[9];
+    int idx = 0;
+
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dz = -1; dz <= 1; dz++) {
+            heights[idx] = terrain_height_seeded((float)(x + dx), (float)(z + dz), seed);
+            idx++;
+        }
+    }
+
+    // Center is heights[4]
+    float center = heights[4];
+
+    // Count how many neighbors are significantly different (more than 2 blocks away)
+    int isolated_count = 0;
+    for (int i = 0; i < 9; i++) {
+        if (i != 4) {
+            if (fabsf(heights[i] - center) > 2.0f) {
+                isolated_count++;
+            }
+        }
+    }
+
+    // If this position is isolated (8 neighbors different), smooth it toward their average
+    if (isolated_count == 8) {
+        float neighbor_sum = 0.0f;
+        for (int i = 0; i < 9; i++) {
+            if (i != 4) {
+                neighbor_sum += heights[i];
+            }
+        }
+        float neighbor_avg = neighbor_sum / 8.0f;
+        center = center * 0.4f + neighbor_avg * 0.6f;  // Blend 40/60 toward neighbors
+    }
+
+    return (int)(center);
 }
 
 // Ridge-based noise for cave systems (simple 2D representation)
@@ -129,10 +177,10 @@ static float cave_noise_3d(float x, float y, float z, uint64_t seed)
     float yf = y - yi;
     float zf = z - zi;
 
-    // Smoothstep interpolation for smooth cave transitions
-    float u = xf * xf * (3.0f - 2.0f * xf);
-    float v = yf * yf * (3.0f - 2.0f * yf);
-    float w = zf * zf * (3.0f - 2.0f * zf);
+    // Improved smoothstep (Perlin's version for smoother cave surfaces)
+    float u = xf * xf * xf * (xf * (xf * 6.0f - 15.0f) + 10.0f);
+    float v = yf * yf * yf * (yf * (yf * 6.0f - 15.0f) + 10.0f);
+    float w = zf * zf * zf * (zf * (zf * 6.0f - 15.0f) + 10.0f);
 
     // Get 8 corner values (cube corners)
     float c000 = (float)(hash_seed(xi, yi, zi + seed) % 1000) / 1000.0f;
@@ -165,9 +213,11 @@ World* world_create(void)
 {
     World* world = (World*)malloc(sizeof(World));
 
-    world->chunk_cache.chunks = NULL;
+    // Preallocate large chunk cache upfront to avoid realloc during gameplay
+    // This prevents pointer invalidation when worker thread is accessing chunks
+    world->chunk_cache.chunk_capacity = 4096;  // Pre-allocate space for 4096 chunks (very large)
+    world->chunk_cache.chunks = (Chunk*)malloc(sizeof(Chunk) * world->chunk_cache.chunk_capacity);
     world->chunk_cache.chunk_count = 0;
-    world->chunk_cache.chunk_capacity = 0;
     world->last_loaded_chunk_x = INT32_MAX;
     world->last_loaded_chunk_z = INT32_MAX;
 
@@ -183,6 +233,10 @@ World* world_create(void)
     // Initialize seed to a random value if not set later
     world->seed = (uint64_t)time(NULL);
 
+    // Initialize worker thread system
+    pthread_mutex_init(&world->cache_mutex, NULL);  // Initialize cache mutex before worker starts
+    worker_init(world);
+
     return world;
 }
 
@@ -190,6 +244,23 @@ World* world_create(void)
 void world_free(World* world)
 {
     if (world) {
+        // Shutdown worker thread first
+        worker_shutdown(world);
+
+        // Clean up all remaining chunks
+        for (int i = 0; i < world->chunk_cache.chunk_count; i++) {
+            Chunk* chunk = &world->chunk_cache.chunks[i];
+            chunk_free_visible_blocks(chunk);  // Free any cached mesh data
+            // NOTE: Don't destroy mutexes - they're part of preallocated array memory
+            // They'll be reused when chunks are respawned or cleaned up
+        }
+
+        // Free chunk cache array and cache mutex
+        if (world->chunk_cache.chunks) {
+            free(world->chunk_cache.chunks);
+        }
+        pthread_mutex_destroy(&world->cache_mutex);  // Destroy cache access mutex
+
         // Don't unload textures - they're shared across all worlds
         // and will be unloaded when the application closes
         free(world);
@@ -298,12 +369,9 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
 
     // Expand chunk cache if needed
     if (world->chunk_cache.chunk_count >= world->chunk_cache.chunk_capacity) {
-        int new_capacity = (world->chunk_cache.chunk_capacity == 0) ? 16 : world->chunk_cache.chunk_capacity * 2;
-        Chunk* new_chunks = (Chunk*)realloc(world->chunk_cache.chunks, new_capacity * sizeof(Chunk));
-        if (!new_chunks) return NULL;
-
-        world->chunk_cache.chunks = new_chunks;
-        world->chunk_cache.chunk_capacity = new_capacity;
+        fprintf(stderr, "[ERROR] Chunk cache overflow! count=%d, capacity=%d. Preallocated buffer was too small!\n",
+                world->chunk_cache.chunk_count, world->chunk_cache.chunk_capacity);
+        return NULL;  // Fail instead of reallocating - we should have preallocated enough
     }
 
     // Create new chunk
@@ -314,15 +382,20 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
     new_chunk->loaded = false;
     new_chunk->generated = false;
     new_chunk->modified = false;  // Not modified when first created
+    new_chunk->needs_relighting = true;  // New chunks need lighting calculation
+    new_chunk->meshed = false;
     new_chunk->visible_blocks = NULL;  // Initialize visible blocks cache
     new_chunk->visible_count = 0;
     new_chunk->visible_capacity = 0;
+    pthread_mutex_init(&new_chunk->mutex, NULL);  // Initialize chunk mutex
 
-    // Initialize blocks to air
+    // Initialize blocks to air and lighting to 0
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
                 new_chunk->blocks[y][z][x].type = BLOCK_AIR;
+                new_chunk->skylight[y][z][x] = 0;  // Initialize to prevent garbage data
+                new_chunk->blocklight[y][z][x] = 0;  // Initialize to prevent garbage data
             }
         }
     }
@@ -349,7 +422,10 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
         new_chunk->loaded = true;
         new_chunk->generated = true;  // Loaded chunks are already complete
         new_chunk->modified = false;  // Not modified when loaded from disk
+        new_chunk->needs_relighting = true;  // Recalculate lighting - arrays were not saved to disk
         printf("[chunk_load] Loaded chunk from %s\n", filepath);
+        // Queue for lighting and meshing
+        worker_queue_chunk(world, new_chunk);
     } else {
         // Chunk doesn't exist on disk - don't auto-generate, return empty chunk
         // The caller (world_load) will handle generation if needed
@@ -371,102 +447,120 @@ void world_generate_chunk(Chunk* chunk, uint64_t seed)
             int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
             int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
 
-            // Get height at this position using improved noise function
+            // Get height at this position using improved noise function with smoothing
             // Use world seed directly to maintain terrain continuity across chunks
-            float height = terrain_height_seeded((float)world_x, (float)world_z, seed);
-            int terrain_height_blocks = (int)(height + 0.5f);
+            int terrain_height_blocks = smooth_terrain_height(world_x, world_z, seed);
 
             // Generate vertical column
             for (int y = 0; y < CHUNK_HEIGHT; y++) {
                 int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
                 BlockType block_type = BLOCK_AIR;
 
-                // Bedrock layer at y=-20
-                if (world_y == -20) {
+                // Bedrock layer at y=0
+                if (world_y == 0) {
                     block_type = BLOCK_BEDROCK;
                 }
                 // Depth limit: no blocks below bedrock
-                else if (world_y < -20) {
+                else if (world_y < 0) {
                     block_type = BLOCK_AIR;
                 }
                 // Fill blocks below terrain height
                 else if (world_y < terrain_height_blocks) {
                     // Underground cave systems - use 3D noise for connected caverns
-                    // Caves appear deeper underground (Y < terrain - 4) and above bedrock
-                    if (world_y < terrain_height_blocks - 4 && world_y > -18) {
-                        // 3D cave noise for proper connected caverns with FBM
-                        // Use multiple scales for natural-looking caves
+                    // Tiered cave generation for natural progression
+                    bool is_cave = false;
+
+                    // Big caves from y=15 to y=40
+                    if (world_y >= 15 && world_y < 40) {
                         float cave_val = 0.0f;
                         float cave_amp = 1.0f;
-                        float cave_freq = 1.0f;
 
                         // Layer 1: Large cave chambers
+                        cave_val += cave_amp * cave_noise_3d(
+                            (float)world_x * 0.03f,
+                            (float)world_y * 0.03f,
+                            (float)world_z * 0.03f,
+                            seed + 5000
+                        );
+                        cave_amp *= 0.7f;
+
+                        // Layer 2: Medium cave corridors
+                        cave_val += cave_amp * cave_noise_3d(
+                            (float)world_x * 0.1f,
+                            (float)world_y * 0.1f,
+                            (float)world_z * 0.1f,
+                            seed + 5001
+                        );
+                        cave_amp *= 0.6f;
+
+                        // Layer 3: Small cave tunnels
+                        cave_val += cave_amp * cave_noise_3d(
+                            (float)world_x * 0.25f,
+                            (float)world_y * 0.25f,
+                            (float)world_z * 0.25f,
+                            seed + 5002
+                        );
+
+                        cave_val /= 2.3f;
+
+                        // Lower threshold for bigger, more connected caves
+                        is_cave = cave_val < 0.42f;
+                    }
+                    // Smaller caves from y=40 to y=85
+                    else if (world_y >= 40 && world_y < 85) {
+                        float cave_val = 0.0f;
+                        float cave_amp = 1.0f;
+
+                        // Layer 1: Smaller chambers
                         cave_val += cave_amp * cave_noise_3d(
                             (float)world_x * 0.05f,
                             (float)world_y * 0.05f,
                             (float)world_z * 0.05f,
-                            seed + 5000
+                            seed + 5010
                         );
-                        cave_amp *= 0.6f;
+                        cave_amp *= 0.7f;
 
-                        // Layer 2: Medium cave corridors
+                        // Layer 2: Smaller corridors
                         cave_val += cave_amp * cave_noise_3d(
                             (float)world_x * 0.15f,
                             (float)world_y * 0.15f,
                             (float)world_z * 0.15f,
-                            seed + 5001
+                            seed + 5011
                         );
-                        cave_amp *= 0.5f;
+                        cave_amp *= 0.6f;
 
-                        // Layer 3: Small cave tunnels
+                        // Layer 3: Fine tunnels
                         cave_val += cave_amp * cave_noise_3d(
-                            (float)world_x * 0.4f,
-                            (float)world_y * 0.4f,
-                            (float)world_z * 0.4f,
-                            seed + 5002
+                            (float)world_x * 0.35f,
+                            (float)world_y * 0.35f,
+                            (float)world_z * 0.35f,
+                            seed + 5012
                         );
 
-                        cave_val /= 2.1f;  // Normalize
+                        cave_val /= 2.3f;
 
-                        // Create cave systems with threshold - higher=less caves
-                        bool is_cave = cave_val < 0.35f;
+                        // Higher threshold for smaller, more fragmented caves
+                        is_cave = cave_val < 0.45f;
+                    }
 
-                        if (is_cave) {
-                            block_type = BLOCK_AIR;
-                        }
-                        // Top surface block is grass
-                        else if (world_y == terrain_height_blocks - 1) {
-                            block_type = BLOCK_GRASS;
-                        }
-                        // Few blocks below grass are dirt
-                        else if (world_y > terrain_height_blocks - 4 && world_y < terrain_height_blocks - 1) {
-                            block_type = BLOCK_DIRT;
-                        }
-                        // Deep dirt layer
-                        else if (world_y > terrain_height_blocks - 7) {
-                            block_type = BLOCK_DIRT;
-                        }
-                        // Everything else is stone
-                        else {
-                            block_type = BLOCK_STONE;
-                        }
-                    } else {
-                        // Top surface block is grass
-                        if (world_y == terrain_height_blocks - 1) {
-                            block_type = BLOCK_GRASS;
-                        }
-                        // Few blocks below grass are dirt
-                        else if (world_y > terrain_height_blocks - 4 && world_y < terrain_height_blocks - 1) {
-                            block_type = BLOCK_DIRT;
-                        }
-                        // Deep dirt layer
-                        else if (world_y > terrain_height_blocks - 7) {
-                            block_type = BLOCK_DIRT;
-                        }
-                        // Everything else is stone
-                        else {
-                            block_type = BLOCK_STONE;
-                        }
+                    if (is_cave) {
+                        block_type = BLOCK_AIR;
+                    }
+                    // Top surface block is grass
+                    else if (world_y == terrain_height_blocks - 1) {
+                        block_type = BLOCK_GRASS;
+                    }
+                    // Few blocks below grass are dirt
+                    else if (world_y > terrain_height_blocks - 4 && world_y < terrain_height_blocks - 1) {
+                        block_type = BLOCK_DIRT;
+                    }
+                    // Deep dirt layer
+                    else if (world_y > terrain_height_blocks - 7) {
+                        block_type = BLOCK_DIRT;
+                    }
+                    // Everything else is stone
+                    else {
+                        block_type = BLOCK_STONE;
                     }
                 } else {
                     block_type = BLOCK_AIR;
@@ -493,29 +587,103 @@ void world_set_block(World* world, int x, int y, int z, BlockType type)
     int local_y = y - (chunk_y * CHUNK_HEIGHT);
     int local_z = z - (chunk_z * CHUNK_DEPTH);
 
+    // CRITICAL: Lock cache while accessing/modifying chunk cache
+    pthread_mutex_lock(&world->cache_mutex);
+
     // Get or create chunk
     Chunk* chunk = world_load_or_create_chunk(world, chunk_x, chunk_y, chunk_z);
     if (chunk) {
+        // Lock chunk while modifying blocks and invalidating cache
+        pthread_mutex_lock(&chunk->mutex);
+
+        // Get old block to check if lighting is affected
+        BlockType old_block = world_chunk_get_block(chunk, local_x, local_y, local_z);
+        BlockProperties old_props = get_block_properties(old_block);
+        BlockProperties new_props = get_block_properties(type);
+
+        // Check if this block change affects light propagation
+        // Light is affected if: emission changed, opacity changed, or air<->solid transition
+        bool affects_light = (old_props.emission != new_props.emission) ||
+                            (old_props.opacity != new_props.opacity) ||
+                            (old_block == BLOCK_AIR) != (type == BLOCK_AIR);
+
         world_chunk_set_block(chunk, local_x, local_y, local_z, type);
 
-        // OPTIMIZATION: Invalidate visible blocks cache for this chunk and neighbors
-        // This chunk needs regeneration
-        chunk_free_visible_blocks(chunk);
+        // Mark chunk as needing relighting and remeshing if block change affects light
+        // Don't modify visible_count here - let the worker thread handle mesh invalidation
+        // when it rebuilds. This prevents data races with the render thread.
+        if (affects_light) {
+            chunk->needs_relighting = true;
+            chunk->meshed = false;  // CRITICAL: also remesh with new lighting
+        } else {
+            // Just mark for remeshing if only visibility changed
+            chunk->meshed = false;
+        }
+
+        pthread_mutex_unlock(&chunk->mutex);
+        pthread_mutex_unlock(&world->cache_mutex);
+
+        worker_queue_chunk(world, chunk);  // Queue for re-meshing/relighting
 
         // Invalidate neighboring chunks that share edges/corners with this block
-        // This is important: if we break/place a block on a chunk boundary,
-        // the adjacent chunk's cache also needs updating (exposed faces changed)
-        int affected_chunks[3][3][3];  // 3x3x3 = 27 possible affected chunks
+        // OPTIMIZATION: Single lock window for marking + collection, then queue outside lock
+        pthread_mutex_lock(&world->cache_mutex);
+        Chunk* neighbors_to_queue[27] = {NULL};
+        int neighbors_count = 0;
+
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dz = -1; dz <= 1; dz++) {
+                    if (dx == 0 && dy == 0 && dz == 0) continue;  // Skip center
                     Chunk* neighbor = world_get_chunk(world, chunk_x + dx, chunk_y + dy, chunk_z + dz);
                     if (neighbor) {
-                        chunk_free_visible_blocks(neighbor);
+                        // For light-affected blocks, only mark neighbor if light propagates to it
+                        // This implements proper cross-chunk light propagation
+                        if (affects_light) {
+                            // Calculate max emission (old or new block)
+                            int max_emission = (new_props.emission > old_props.emission) ?
+                                               new_props.emission : old_props.emission;
+
+                            // Calculate distance from block to neighbor chunk boundary
+                            int dist_to_boundary = 0;
+                            if (dx < 0) {
+                                dist_to_boundary = local_x + 1;  // Left neighbor: distance to its right edge
+                            } else if (dx > 0) {
+                                dist_to_boundary = CHUNK_WIDTH - local_x;  // Right neighbor: distance to its left edge
+                            } else if (dz < 0) {
+                                dist_to_boundary = local_z + 1;  // Back neighbor: distance to its front edge
+                            } else if (dz > 0) {
+                                dist_to_boundary = CHUNK_DEPTH - local_z;  // Front neighbor: distance to its back edge
+                            } else if (dy < 0) {
+                                dist_to_boundary = local_y + 1;  // Below neighbor: distance to its top edge
+                            } else if (dy > 0) {
+                                dist_to_boundary = CHUNK_HEIGHT - local_y;  // Above neighbor: distance to its bottom edge
+                            }
+
+                            // Mark neighbor for relighting only if light reaches it
+                            if (dist_to_boundary > 0 && dist_to_boundary <= max_emission) {
+                                neighbor->needs_relighting = true;
+                                neighbor->meshed = false;
+                            } else {
+                                // Still remesh for visibility changes even if light doesn't reach
+                                neighbor->meshed = false;
+                            }
+                        } else {
+                            neighbor->meshed = false;  // Remesh only for visibility
+                        }
+                        neighbors_to_queue[neighbors_count++] = neighbor;
                     }
                 }
             }
         }
+        pthread_mutex_unlock(&world->cache_mutex);
+
+        // Queue neighbors without holding lock (reduces contention)
+        for (int i = 0; i < neighbors_count; i++) {
+            worker_queue_chunk(world, neighbors_to_queue[i]);
+        }
+    } else {
+        pthread_mutex_unlock(&world->cache_mutex);
     }
 }
 
@@ -532,13 +700,44 @@ BlockType world_get_block(World* world, int x, int y, int z)
     int local_y = y - (chunk_y * CHUNK_HEIGHT);
     int local_z = z - (chunk_z * CHUNK_DEPTH);
 
-    // Get chunk
+    // CRITICAL: Lock cache before accessing chunk to prevent concurrent unloading
+    pthread_mutex_lock(&world->cache_mutex);
     Chunk* chunk = world_get_chunk(world, chunk_x, chunk_y, chunk_z);
     if (!chunk) {
+        pthread_mutex_unlock(&world->cache_mutex);
         return BLOCK_AIR;  // Unloaded chunks are treated as air
     }
 
-    return world_chunk_get_block(chunk, local_x, local_y, local_z);
+    BlockType result = world_chunk_get_block(chunk, local_x, local_y, local_z);
+    pthread_mutex_unlock(&world->cache_mutex);
+    return result;
+}
+
+// Get block, treating unloaded chunks as STONE (for lighting calculations)
+// This prevents false positives where light penetrates through unloaded chunks
+BlockType world_get_block_or_solid(World* world, int x, int y, int z)
+{
+    // Calculate chunk coordinates
+    int32_t chunk_x = x < 0 ? (x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : x / CHUNK_WIDTH;
+    int32_t chunk_y = y < 0 ? (y - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : y / CHUNK_HEIGHT;
+    int32_t chunk_z = z < 0 ? (z - CHUNK_DEPTH + 1) / CHUNK_DEPTH : z / CHUNK_DEPTH;
+
+    // Calculate position within chunk
+    int local_x = x - (chunk_x * CHUNK_WIDTH);
+    int local_y = y - (chunk_y * CHUNK_HEIGHT);
+    int local_z = z - (chunk_z * CHUNK_DEPTH);
+
+    // Lock cache before accessing chunk
+    pthread_mutex_lock(&world->cache_mutex);
+    Chunk* chunk = world_get_chunk(world, chunk_x, chunk_y, chunk_z);
+    if (!chunk) {
+        pthread_mutex_unlock(&world->cache_mutex);
+        return BLOCK_STONE;  // Unloaded chunks are treated as solid (prevents false light propagation)
+    }
+
+    BlockType result = world_chunk_get_block(chunk, local_x, local_y, local_z);
+    pthread_mutex_unlock(&world->cache_mutex);
+    return result;
 }
 
 // Set block within a chunk
@@ -594,9 +793,9 @@ void world_generate_prism(World* world)
     Chunk* chunk = world_load_or_create_chunk(world, 0, 0, 0);
     if (chunk && !chunk->generated) {
         world_generate_chunk(chunk, world->seed);
-        chunk_cache_visible_blocks(chunk, world);  // Cache visible blocks for rendering
         chunk->loaded = true;
         chunk->generated = true;
+        worker_queue_chunk(world, chunk);  // Queue for worker to calculate lighting and mesh
         chunk->modified = false;  // Freshly generated chunk is not modified
     }
 }
@@ -621,6 +820,9 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     world->last_loaded_chunk_x = player_chunk_x;
     world->last_loaded_chunk_y = player_chunk_y;
     world->last_loaded_chunk_z = player_chunk_z;
+
+    // CRITICAL: Lock cache mutex while loading/creating chunks to prevent races with unload
+    pthread_mutex_lock(&world->cache_mutex);
 
     // Load chunks within load distance, prioritizing forward direction
     int load_dist = CHUNK_LOAD_DISTANCE;
@@ -650,14 +852,37 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
                 if (chunk && !chunk->loaded) {
                     // Generate this chunk procedurally
                     world_generate_chunk(chunk, world->seed);
-                    chunk_cache_visible_blocks(chunk, world);  // Cache visible blocks for rendering
                     chunk->loaded = true;
                     chunk->generated = true;
-                    chunk->modified = false;  // Freshly generated chunk is not modified
+                    // NOTE: Don't queue yet - we'll do it after releasing the lock to avoid holding lock too long
                 }
             }
         }
     }
+
+    pthread_mutex_unlock(&world->cache_mutex);
+
+    // Queue newly generated chunks for lighting/meshing after releasing cache_mutex
+    pthread_mutex_lock(&world->cache_mutex);
+    for (int cx = player_chunk_x - load_dist; cx <= player_chunk_x + load_dist; cx++) {
+        for (int cy = player_chunk_y - 1; cy <= player_chunk_y + 1; cy++) {
+            for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
+                Chunk* chunk = world_get_chunk(world, cx, cy, cz);
+                if (chunk && chunk->generated && chunk->needs_relighting) {
+                    // Queue for worker to calculate lighting and mesh
+                    worker_queue_chunk(world, chunk);
+                }
+            }
+        }
+    }
+    pthread_mutex_unlock(&world->cache_mutex);
+
+    // CRITICAL: Flush worker queue before unloading chunks to prevent worker from
+    // accessing chunks that are about to be removed from the cache
+    worker_flush_queue(world);
+
+    // CRITICAL: Lock cache mutex while modifying chunk array
+    pthread_mutex_lock(&world->cache_mutex);
 
     // Unload chunks that are too far away or behind the player
     int unload_dist = CHUNK_LOAD_DISTANCE + 1;
@@ -689,7 +914,14 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
                 chunk->modified = false;  // Mark as saved
             }
 
+            // Clean up chunk resources
+            // NOTE: Don't lock/unlock here - just remove from active list
+            // The worker thread won't access chunks that aren't in the cache
+            chunk_free_visible_blocks(chunk);  // Free mesh
+
             // Remove chunk from cache (swap with last)
+            // NOTE: Mutexes are NOT destroyed - we reuse the memory slots
+            // Destroying a mutex is expensive and unnecessary since we preallocated the array
             if (i < world->chunk_cache.chunk_count - 1) {
                 world->chunk_cache.chunks[i] = world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
             }
@@ -698,6 +930,8 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
             i++;
         }
     }
+
+    pthread_mutex_unlock(&world->cache_mutex);
 }
 
 // Save a single chunk to disk
@@ -817,17 +1051,22 @@ bool world_load(World* world, const char* world_name)
 {
     if (!world || !world_name) return false;
 
+    // CRITICAL: Flush the worker queue before clearing chunks
+    // This prevents the worker thread from accessing chunks we're about to reset
+    worker_flush_queue(world);
+
     // Clear existing chunks first
+    // NOTE: Don't destroy mutexes - worker thread is still running and might use them
+    // Just clear out the data
     if (world->chunk_cache.chunks) {
-        // Free visible blocks cache for each chunk
         for (int i = 0; i < world->chunk_cache.chunk_count; i++) {
             chunk_free_visible_blocks(&world->chunk_cache.chunks[i]);
+            // Don't destroy mutexes - they'll be reused when new chunks are loaded
         }
-        free(world->chunk_cache.chunks);
-        world->chunk_cache.chunks = NULL;
-        world->chunk_cache.chunk_count = 0;
-        world->chunk_cache.chunk_capacity = 0;
     }
+
+    // Reset the chunk count (keeps pre-allocated memory)
+    world->chunk_cache.chunk_count = 0;
 
     // Set the world name so chunk loading uses the correct directory
     strncpy(world->world_name, world_name, sizeof(world->world_name) - 1);
@@ -872,12 +1111,16 @@ bool world_load(World* world, const char* world_name)
                 Chunk* chunk = world_load_or_create_chunk(world, cx, cy, cz);
                 if (chunk && chunk->loaded) {
                     any_chunk_loaded = true;
+                    // Loaded chunks still need lighting and meshing
+                    if (chunk->needs_relighting || !chunk->meshed) {
+                        worker_queue_chunk(world, chunk);
+                    }
                 } else if (chunk && !chunk->generated) {
                     // Only generate if not yet generated
                     world_generate_chunk(chunk, world->seed);
-                    chunk_cache_visible_blocks(chunk, world);  // Cache visible blocks for rendering
                     chunk->loaded = true;
                     chunk->generated = true;
+                    worker_queue_chunk(world, chunk);  // Queue for worker to calculate lighting and mesh
                     chunk->modified = false;
                 }
             }
@@ -950,8 +1193,15 @@ uint8_t world_get_blocklight(World* world, int x, int y, int z)
     return chunk->blocklight[local_y][local_z][local_x];
 }
 
-// Calculate blocklight levels for a chunk using flood-fill from glowstone blocks
-// Glowstone emits light at level 15 and it spreads to adjacent blocks
+// Simple queue for BFS light propagation (static to avoid allocation per chunk)
+#define LIGHT_QUEUE_SIZE 4096
+typedef struct {
+    int x, y, z;
+    uint8_t light;
+} LightQueueEntry;
+
+// Calculate blocklight levels for a chunk using flood-fill from light-emitting blocks
+// Uses BFS propagation like Minecraft: light spreads from emitters (glowstone)
 void calculate_chunk_blocklight(Chunk* chunk, World* world)
 {
     if (!chunk) return;
@@ -965,81 +1215,70 @@ void calculate_chunk_blocklight(Chunk* chunk, World* world)
         }
     }
 
-    // Find all glowstone blocks and mark them with light level 15
+    // BFS queue for light propagation
+    static LightQueueEntry queue[LIGHT_QUEUE_SIZE];
+    int queue_head = 0, queue_tail = 0;
+
+    // Find all light-emitting blocks and add to queue
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
-                if (chunk->blocks[y][z][x].type == BLOCK_GLOWSTONE) {
-                    chunk->blocklight[y][z][x] = 15;  // Glowstone emits full light
+                BlockProperties props = get_block_properties(chunk->blocks[y][z][x].type);
+                if (props.emission > 0) {
+                    chunk->blocklight[y][z][x] = props.emission;
+                    // Add to queue
+                    if (queue_tail < LIGHT_QUEUE_SIZE) {
+                        queue[queue_tail].x = x;
+                        queue[queue_tail].y = y;
+                        queue[queue_tail].z = z;
+                        queue[queue_tail].light = props.emission;
+                        queue_tail++;
+                    }
                 }
             }
         }
     }
 
-    // Flood-fill light propagation through adjacent air blocks
-    // Multiple passes: light spreads outward, decreasing by 1 per block of distance
-    bool changed = true;
-    int passes = 0;
-    int max_passes = 16;  // Maximum light distance is 15, so 16 passes is enough
+    // BFS flood-fill: propagate light to neighbors
+    while (queue_head < queue_tail) {
+        LightQueueEntry entry = queue[queue_head++];
+        int x = entry.x, y = entry.y, z = entry.z;
+        uint8_t current_light = entry.light;
 
-    while (changed && passes < max_passes) {
-        changed = false;
-        passes++;
+        // Skip if light would be absorbed to 0
+        if (current_light <= 1) continue;
 
-        for (int y = 0; y < CHUNK_HEIGHT; y++) {
-            for (int z = 0; z < CHUNK_DEPTH; z++) {
-                for (int x = 0; x < CHUNK_WIDTH; x++) {
-                    uint8_t current_light = chunk->blocklight[y][z][x];
+        // Propagate to 6 neighbors (±X, ±Y, ±Z)
+        int neighbors[6][3] = {
+            {x+1, y, z}, {x-1, y, z},  // ±X
+            {x, y+1, z}, {x, y-1, z},  // ±Y
+            {x, y, z+1}, {x, y, z-1}   // ±Z
+        };
 
-                    if (current_light == 0) continue;  // No light to spread
+        for (int i = 0; i < 6; i++) {
+            int nx = neighbors[i][0];
+            int ny = neighbors[i][1];
+            int nz = neighbors[i][2];
 
-                    // Try to spread light to 6 neighbors
-                    int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
-                    int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
-                    int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+            // Bounds check
+            if (nx < 0 || nx >= CHUNK_WIDTH || ny < 0 || ny >= CHUNK_HEIGHT || nz < 0 || nz >= CHUNK_DEPTH) {
+                continue;  // Cross-chunk lighting not handled in this pass
+            }
 
-                    // 6 neighbor directions: +/-X, +/-Y, +/-Z
-                    int neighbors[6][3] = {
-                        {1, 0, 0}, {-1, 0, 0},   // X
-                        {0, 1, 0}, {0, -1, 0},   // Y
-                        {0, 0, 1}, {0, 0, -1}    // Z
-                    };
+            BlockProperties neighbor_props = get_block_properties(chunk->blocks[ny][nz][nx].type);
+            uint8_t new_light = current_light - 1;  // Light reduces by 1 for each block distance
 
-                    for (int i = 0; i < 6; i++) {
-                        int nx = world_x + neighbors[i][0];
-                        int ny = world_y + neighbors[i][1];
-                        int nz = world_z + neighbors[i][2];
-
-                        // Only spread to air blocks
-                        BlockType neighbor_block = world_get_block(world, nx, ny, nz);
-                        if (neighbor_block != BLOCK_AIR) {
-                            continue;  // Block light, don't spread
-                        }
-
-                        // Calculate new light level (decreases by 1)
-                        uint8_t new_light = (current_light > 0) ? (current_light - 1) : 0;
-
-                        // Get neighbor's current light
-                        uint8_t neighbor_light = world_get_blocklight(world, nx, ny, nz);
-
-                        // Update if new light is brighter
-                        if (new_light > neighbor_light) {
-                            // Direct chunk access if possible
-                            int32_t neighbor_chunk_x = nx < 0 ? (nx - CHUNK_WIDTH + 1) / CHUNK_WIDTH : nx / CHUNK_WIDTH;
-                            int32_t neighbor_chunk_y = ny < 0 ? (ny - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : ny / CHUNK_HEIGHT;
-                            int32_t neighbor_chunk_z = nz < 0 ? (nz - CHUNK_DEPTH + 1) / CHUNK_DEPTH : nz / CHUNK_DEPTH;
-
-                            if (neighbor_chunk_x == chunk->chunk_x && neighbor_chunk_y == chunk->chunk_y && neighbor_chunk_z == chunk->chunk_z) {
-                                // Same chunk - direct update
-                                int local_x = nx - (neighbor_chunk_x * CHUNK_WIDTH);
-                                int local_y = ny - (neighbor_chunk_y * CHUNK_HEIGHT);
-                                int local_z = nz - (neighbor_chunk_z * CHUNK_DEPTH);
-                                chunk->blocklight[local_y][local_z][local_x] = new_light;
-                                changed = true;
-                            }
-                            // Note: Cross-chunk light spreading would need world_get_chunk lookup
-                            // For now, we only update within same chunk for performance
-                        }
+            // Check if we should update this neighbor
+            if (neighbor_props.opacity < 15) {  // Only propagate through non-opaque blocks
+                if (new_light > chunk->blocklight[ny][nz][nx]) {
+                    chunk->blocklight[ny][nz][nx] = new_light;
+                    // Add to queue if there's still light to propagate
+                    if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
+                        queue[queue_tail].x = nx;
+                        queue[queue_tail].y = ny;
+                        queue[queue_tail].z = nz;
+                        queue[queue_tail].light = new_light;
+                        queue_tail++;
                     }
                 }
             }
@@ -1047,63 +1286,114 @@ void calculate_chunk_blocklight(Chunk* chunk, World* world)
     }
 }
 
-// Calculate skylight levels for a chunk - GRADATED LIGHT (0-15 like Minecraft)
-// FIXED: Light based on distance to NEAREST roof above, not count of all roofs
-// Algorithm: Track distance from closest blocking solid above
-// - Block is at a roof: light = 0 (pitch dark)
-// - 1 block below roof: light = 1 (very dark)
-// - 5 blocks below: light = 5 (moderate shade)
-// - 15+ blocks below: light = 15 (fully exposed to sky)
-// - No roof above: light = 15 (sky exposed)
+// Calculate skylight levels for a chunk using BFS from the sky downward
+// Algorithm:
+// 1. Start from y=top of world, skylight = 15 (fully lit)
+// 2. Propagate downward through air blocks
+// 3. Opaque blocks block skylight completely
+// 4. Result: caves have 0 skylight UNLESS they have direct line to sky
 void calculate_chunk_skylight(Chunk* chunk, World* world)
 {
     if (!chunk) return;
 
-    // For each XZ column in chunk
+    // Initialize skylight to 0 (caves are dark by default)
+    for (int y = 0; y < CHUNK_HEIGHT; y++) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                chunk->skylight[y][z][x] = 0;
+            }
+        }
+    }
+
+    // For each XZ column, trace from top downward
     for (int z = 0; z < CHUNK_DEPTH; z++) {
         for (int x = 0; x < CHUNK_WIDTH; x++) {
-            // Find distance to nearest solid block above (max 15)
-            // Start with "infinity" (no roof yet)
-            int initial_distance = 1000;
-
-            // Check if there are any roofs above this chunk
             int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
-            int top_of_chunk = chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT;
             int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
 
-            // Quick scan upward to find if there's a roof
-            for (int check = 1; check <= 15 && top_of_chunk + check < 256; check++) {
-                BlockType above = world_get_block(world, world_x, top_of_chunk + check, world_z);
-                if (above != BLOCK_AIR) {
-                    // Found a roof - distance is how far below it
-                    initial_distance = check;
-                    break;
+            // Start from top of world, bounded by WORLD_Y_MAX (no light above world limits)
+            uint8_t current_light = 15;
+
+            // Scan downward from world top to world bottom - enforces hard Y limits
+            // This prevents unloaded chunks above from leaking light into caves
+            for (int world_y = WORLD_Y_MAX; world_y >= WORLD_Y_MIN; world_y--) {
+                BlockType block = world_get_block(world, world_x, world_y, world_z);
+                BlockProperties props = get_block_properties(block);
+
+                if (block == BLOCK_AIR) {
+                    // Air transmits skylight fully
+                    if (world_y >= chunk->chunk_y * CHUNK_HEIGHT &&
+                        world_y < chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT) {
+                        int local_y = world_y - (chunk->chunk_y * CHUNK_HEIGHT);
+                        chunk->skylight[local_y][z][x] = current_light;
+                    }
+                } else {
+                    // Solid block blocks skylight and all blocks below until exposed to air again
+                    current_light = 0;  // No more skylight below this block
                 }
             }
+        }
+    }
 
-            // Now scan down this column, using distance from nearest blocking solid
-            int distance_from_blocking = initial_distance;
+    // Second pass: propagate skylight horizontally into cavities from exposed air
+    // This uses BFS to spread light into caves that open to the sky
+    static LightQueueEntry queue[LIGHT_QUEUE_SIZE];
+    int queue_head = 0, queue_tail = 0;
 
-            for (int y = CHUNK_HEIGHT - 1; y >= 0; y--) {
-                BlockType block = chunk->blocks[y][z][x].type;
+    // Find all air blocks with skylight and queue them
+    for (int y = 0; y < CHUNK_HEIGHT; y++) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                if (chunk->blocks[y][z][x].type == BLOCK_AIR && chunk->skylight[y][z][x] > 0) {
+                    if (queue_tail < LIGHT_QUEUE_SIZE) {
+                        queue[queue_tail].x = x;
+                        queue[queue_tail].y = y;
+                        queue[queue_tail].z = z;
+                        queue[queue_tail].light = chunk->skylight[y][z][x];
+                        queue_tail++;
+                    }
+                }
+            }
+        }
+    }
 
-                if (block != BLOCK_AIR) {
-                    // Solid block - reset distance (it's a new roof), no light
-                    distance_from_blocking = 0;
-                    chunk->skylight[y][z][x] = 0;
-                } else {
-                    // Air block - calculate light based on distance to nearest roof
-                    if (distance_from_blocking < 1000) {
-                        // We've seen a roof - increase distance as we go down
-                        distance_from_blocking++;
-                        // Light = distance (capped at 15 for max brightness)
-                        // Directly under roof (distance 0): light = 0 (dark)
-                        // Far from roof (distance 15+): light = 15 (bright)
-                        uint8_t light = (distance_from_blocking > 15) ? 15 : (uint8_t)distance_from_blocking;
-                        chunk->skylight[y][z][x] = light;
-                    } else {
-                        // No roof above - fully sky-exposed
-                        chunk->skylight[y][z][x] = 15;
+    // BFS: propagate skylight horizontally to adjacent air blocks
+    while (queue_head < queue_tail) {
+        LightQueueEntry entry = queue[queue_head++];
+        int x = entry.x, y = entry.y, z = entry.z;
+        uint8_t current_light = entry.light;
+
+        // Skip if light would be absorbed to 0
+        if (current_light <= 1) continue;
+
+        uint8_t new_light = current_light - 1;
+
+        // Check 4 horizontal neighbors and 2 vertical (all 6 directions)
+        int neighbors[6][3] = {
+            {x+1, y, z}, {x-1, y, z},  // ±X
+            {x, y+1, z}, {x, y-1, z},  // ±Y
+            {x, y, z+1}, {x, y, z-1}   // ±Z
+        };
+
+        for (int i = 0; i < 6; i++) {
+            int nx = neighbors[i][0];
+            int ny = neighbors[i][1];
+            int nz = neighbors[i][2];
+
+            // Bounds check
+            if (nx < 0 || nx >= CHUNK_WIDTH || ny < 0 || ny >= CHUNK_HEIGHT || nz < 0 || nz >= CHUNK_DEPTH) {
+                continue;  // Cross-chunk not handled in this pass
+            }
+
+            if (chunk->blocks[ny][nz][nx].type == BLOCK_AIR) {
+                if (new_light > chunk->skylight[ny][nz][nx]) {
+                    chunk->skylight[ny][nz][nx] = new_light;
+                    if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
+                        queue[queue_tail].x = nx;
+                        queue[queue_tail].y = ny;
+                        queue[queue_tail].z = nz;
+                        queue[queue_tail].light = new_light;
+                        queue_tail++;
                     }
                 }
             }
@@ -1112,23 +1402,15 @@ void calculate_chunk_skylight(Chunk* chunk, World* world)
 }
 
 // Pre-compute and cache all visible blocks in a chunk (blocks with exposed faces)
-// This avoids the per-frame triple-nested loop and massive performance improvement
+// This avoids the per-frame triple-nested loop and provides massive performance improvement
 void chunk_cache_visible_blocks(Chunk* chunk, World* world)
 {
     if (!chunk) return;
 
-    // First, calculate skylight levels for this chunk
-    calculate_chunk_skylight(chunk, world);
-
-    // Then, calculate blocklight levels from glowstone blocks
-    calculate_chunk_blocklight(chunk, world);
-
-    // Initialize visible blocks list
-    if (chunk->visible_blocks == NULL) {
-        chunk->visible_capacity = 1024;  // Start with space for 1024 visible blocks
-        chunk->visible_blocks = (CachedVisibleBlock*)malloc(sizeof(CachedVisibleBlock) * chunk->visible_capacity);
-    }
-    chunk->visible_count = 0;
+    // Build into a temporary array to avoid realloc while render thread might use the original
+    int temp_capacity = 1024;  // Start with 1024 blocks
+    int temp_count = 0;
+    CachedVisibleBlock* temp_blocks = (CachedVisibleBlock*)malloc(sizeof(CachedVisibleBlock) * temp_capacity);
 
     // Iterate through all blocks in chunk
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
@@ -1144,40 +1426,78 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
                 int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
                 int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
 
-                // Check which faces are exposed (neighbor is air or out of bounds)
+                // Check which faces are exposed (neighbor is air)
+                // Only mark a face as exposed if the neighbor exists and is air
+                // If neighbor chunk isn't loaded, don't mark face as exposed
                 uint8_t exposed_faces = 0;
-                if (world_get_block(world, world_x + 1, world_y, world_z) == BLOCK_AIR) exposed_faces |= (1 << 0);  // +X
-                if (world_get_block(world, world_x - 1, world_y, world_z) == BLOCK_AIR) exposed_faces |= (1 << 1);  // -X
-                if (world_get_block(world, world_x, world_y + 1, world_z) == BLOCK_AIR) exposed_faces |= (1 << 2);  // +Y
-                if (world_get_block(world, world_x, world_y - 1, world_z) == BLOCK_AIR) exposed_faces |= (1 << 3);  // -Y
-                if (world_get_block(world, world_x, world_y, world_z + 1) == BLOCK_AIR) exposed_faces |= (1 << 4);  // +Z
-                if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) exposed_faces |= (1 << 5);  // -Z
+
+                // Check +X direction
+                if (world_get_block(world, world_x + 1, world_y, world_z) == BLOCK_AIR) {
+                    int32_t adj_chunk_x = (world_x + 1) < 0 ? ((world_x + 1) - CHUNK_WIDTH + 1) / CHUNK_WIDTH : (world_x + 1) / CHUNK_WIDTH;
+                    Chunk* adj_chunk = world_get_chunk(world, adj_chunk_x, chunk->chunk_y, chunk->chunk_z);
+                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 0);
+                }
+                // Check -X direction
+                if (world_get_block(world, world_x - 1, world_y, world_z) == BLOCK_AIR) {
+                    int32_t adj_chunk_x = (world_x - 1) < 0 ? ((world_x - 1) - CHUNK_WIDTH + 1) / CHUNK_WIDTH : (world_x - 1) / CHUNK_WIDTH;
+                    Chunk* adj_chunk = world_get_chunk(world, adj_chunk_x, chunk->chunk_y, chunk->chunk_z);
+                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 1);
+                }
+                // Check +Y direction
+                if (world_get_block(world, world_x, world_y + 1, world_z) == BLOCK_AIR) {
+                    int32_t adj_chunk_y = (world_y + 1) < 0 ? ((world_y + 1) - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : (world_y + 1) / CHUNK_HEIGHT;
+                    Chunk* adj_chunk = world_get_chunk(world, chunk->chunk_x, adj_chunk_y, chunk->chunk_z);
+                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 2);
+                }
+                // Check -Y direction
+                if (world_get_block(world, world_x, world_y - 1, world_z) == BLOCK_AIR) {
+                    int32_t adj_chunk_y = (world_y - 1) < 0 ? ((world_y - 1) - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : (world_y - 1) / CHUNK_HEIGHT;
+                    Chunk* adj_chunk = world_get_chunk(world, chunk->chunk_x, adj_chunk_y, chunk->chunk_z);
+                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 3);
+                }
+                // Check +Z direction
+                if (world_get_block(world, world_x, world_y, world_z + 1) == BLOCK_AIR) {
+                    int32_t adj_chunk_z = (world_z + 1) < 0 ? ((world_z + 1) - CHUNK_DEPTH + 1) / CHUNK_DEPTH : (world_z + 1) / CHUNK_DEPTH;
+                    Chunk* adj_chunk = world_get_chunk(world, chunk->chunk_x, chunk->chunk_y, adj_chunk_z);
+                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 4);
+                }
+                // Check -Z direction
+                if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) {
+                    int32_t adj_chunk_z = (world_z - 1) < 0 ? ((world_z - 1) - CHUNK_DEPTH + 1) / CHUNK_DEPTH : (world_z - 1) / CHUNK_DEPTH;
+                    Chunk* adj_chunk = world_get_chunk(world, chunk->chunk_x, chunk->chunk_y, adj_chunk_z);
+                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 5);
+                }
 
                 if (exposed_faces != 0) {
-                    // OPTIMIZED: Don't calculate light_level here anymore
-                    // Rendering will calculate per-face lighting on the fly
-                    // This avoids expensive averaging that was giving wrong results
-
-                    // We'll just use a dummy light value (0) - rendering ignores it now
-                    uint8_t light_level = 0;
-
-                    // Grow array if needed
-                    if (chunk->visible_count >= chunk->visible_capacity) {
-                        chunk->visible_capacity *= 2;
-                        chunk->visible_blocks = (CachedVisibleBlock*)realloc(chunk->visible_blocks,
-                                                                             sizeof(CachedVisibleBlock) * chunk->visible_capacity);
+                    // Grow temporary array if needed
+                    if (temp_count >= temp_capacity) {
+                        temp_capacity *= 2;
+                        temp_blocks = (CachedVisibleBlock*)realloc(temp_blocks,
+                                                                   sizeof(CachedVisibleBlock) * temp_capacity);
                     }
 
-                    // Add to visible blocks list with exposed faces
-                    chunk->visible_blocks[chunk->visible_count].x = x;
-                    chunk->visible_blocks[chunk->visible_count].y = y;
-                    chunk->visible_blocks[chunk->visible_count].z = z;
-                    chunk->visible_blocks[chunk->visible_count].exposed_faces = exposed_faces;
-                    chunk->visible_blocks[chunk->visible_count].light_level = 0;  // Unused now, rendering calculates per-face
-                    chunk->visible_count++;
+                    // Add to temporary array
+                    temp_blocks[temp_count].x = x;
+                    temp_blocks[temp_count].y = y;
+                    temp_blocks[temp_count].z = z;
+                    temp_blocks[temp_count].exposed_faces = exposed_faces;
+                    temp_blocks[temp_count].light_level = 0;  // Unused, rendering calculates per-face
+                    temp_count++;
                 }
             }
         }
+    }
+
+    // ATOMIC SWAP: Now safely replace the old array with the new one
+    // This is now protected by chunk->mutex (held by worker thread)
+    CachedVisibleBlock* old_blocks = chunk->visible_blocks;
+    chunk->visible_blocks = temp_blocks;
+    chunk->visible_count = temp_count;
+    chunk->visible_capacity = temp_capacity;
+
+    // Free the old blocks if they existed
+    if (old_blocks != NULL) {
+        free(old_blocks);
     }
 }
 
@@ -1190,4 +1510,7 @@ void chunk_free_visible_blocks(Chunk* chunk)
         chunk->visible_count = 0;
         chunk->visible_capacity = 0;
     }
+    // NOTE: Don't set meshed=false here - keep rendering old mesh while worker recalculates
+    // This prevents flickering when blocks are placed/broken
+    // Worker thread will recalculate and update visible_blocks while meshed stays true
 }

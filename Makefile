@@ -6,14 +6,19 @@ CC = clang
 # Aggressive optimization flags for maximum FPS performance (Clang-compatible)
 # ISO C11 standard for portable pure C code
 # Using -O3 + -ffast-math instead of deprecated -Ofast
-CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -O3 -ffast-math -march=native -mtune=native -flto -fno-signed-zeros \
-         -fno-trapping-math -faligned-new -fvectorize -fslp-vectorize \
-         -funroll-loops
-LDFLAGS = -lraylib -lm -lpthread -flto
+# Profile-Guided Optimization (PGO) can be enabled with: make pgo=1
+PGO_LEVEL ?= use
+PGO_FLAGS = $(if $(filter $(pgo),1),-fprofile-$(PGO_LEVEL),)
+CFLAGS = -std=c11 -Wall -Wextra -Wpedantic -O3 -ffast-math -march=native -mtune=native -flto=thin \
+         -fno-signed-zeros -fno-strict-aliasing -fno-trapping-math -faligned-new \
+         -fvectorize -fslp-vectorize -funroll-loops \
+         -ftree-slp-vectorize -fno-math-errno \
+         $(PGO_FLAGS)
+LDFLAGS = -lraylib -lm -lpthread -flto=thin $(PGO_FLAGS)
 
-# No optimization flags - default compilation for performance comparison
-NOOPT_CFLAGS = -std=c11 -Wall -Wextra
-NOOPT_LDFLAGS = -lraylib -lm -lpthread
+# Debug build - no optimization, with debug symbols and sanitizers
+DEBUG_CFLAGS = -std=c11 -Wall -Wextra -g -O0 -fsanitize=thread -fsanitize=undefined
+DEBUG_LDFLAGS = -lraylib -lm -lpthread -fsanitize=thread -fsanitize=undefined
 
 # Local raylib support
 LOCAL_RAYLIB_DIR = external/raylib
@@ -47,11 +52,11 @@ endif
 # Windows cross-compilation with aggressive optimizations
 WIN_CC = x86_64-w64-mingw32-gcc
 WIN_RAYLIB_PATH = ./external/raylib
-WIN_CFLAGS = -std=c11 -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto -fno-signed-zeros \
+WIN_CFLAGS = -std=c11 -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto=thin -fno-signed-zeros \
             -fno-trapping-math -funroll-loops -I$(WIN_RAYLIB_PATH)/src
 WIN_LDFLAGS = -L$(WIN_RAYLIB_PATH)/src -l:libraylib.a -lopengl32 -lgdi32 -lwinmm -lpsapi -lm -static-libgcc -flto
 
-SOURCES = src/main.c src/world_generation.c src/player.c src/vec_math.c src/rendering.c src/utils.c src/menu.c src/clouds.c
+SOURCES = src/main.c src/world_generation.c src/worker.c src/player.c src/vec_math.c src/rendering.c src/utils.c src/menu.c src/clouds.c
 HEADERS = src/world.h src/player.h src/vec_math.h src/rendering.h src/utils.h src/menu.h src/clouds.h
 
 # Default target

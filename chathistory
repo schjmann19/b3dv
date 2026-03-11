@@ -576,3 +576,62 @@ asd
 /select glowstone
 /fly enable
 /noclip enable
+/fly enable
+/noclip enable
+/fly enable
+/noclip enable
+/fly enable
+/noclip enable
+/tp 200 200 200
+/select glowstone
+/fly enable
+/noclip enable
+/select stone
+/tp 200 200 200
+/select grass
+/fly enable
+/noclip enable
+/fly enable
+/noclip enable
+/fly enable
+/noclip enable
+/fly enable
+/fly enable
+/noclip enable
+/fly enable
+/noclip enable
+/fly enable
+/noclip enable
+/fly enable
+/noclip enable
+/select grass
+/tp 200 200 200
+/select grass
+/tp -2000 200 -2000
+/tp -2000 150 -2000
+/select glowsone
+/select glowsotne
+/select glowstone
+/select glowstone
+/tp -2000 150 -2000
+/tp -2000 150 -2000
+/select glowstone
+/select grass
+/select glowstone
+/fly enable
+/noclip enable
+/tp -2000 150 -2000
+/tp -2000 150 -2000
+/select glowstone
+/select glowstone
+/select glowstone
+/select glowstone
+/fly enable
+/noclip enable
+/select glowstone
+/noclip enable
+/fly enable
+/tp -2000 20 -2000
+/noclip disable
+/select glowstone
+/fly enable

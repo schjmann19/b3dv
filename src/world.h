@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <pthread.h>
 #include "raylib.h"
 
 // Block types
@@ -17,6 +18,27 @@ typedef enum {
     BLOCK_GLOWSTONE = 7
 } BlockType;
 
+// Block properties (emission and opacity)
+typedef struct {
+    uint8_t emission;  // Light emitted by this block (0-15)
+    uint8_t opacity;   // How much light is absorbed (1-15, where 15 = opaque, 0 = transparent)
+} BlockProperties;
+
+// Get block properties (emission and opacity)
+static inline BlockProperties get_block_properties(BlockType type) {
+    switch (type) {
+        case BLOCK_GLOWSTONE: return (BlockProperties){15, 0};      // Emits 15 light, transparent
+        case BLOCK_STONE:     return (BlockProperties){0, 15};       // No emission, opaque
+        case BLOCK_DIRT:      return (BlockProperties){0, 15};       // No emission, opaque
+        case BLOCK_GRASS:     return (BlockProperties){0, 15};       // No emission, opaque
+        case BLOCK_SAND:      return (BlockProperties){0, 15};       // No emission, opaque
+        case BLOCK_WOOD:      return (BlockProperties){0, 15};       // No emission, opaque
+        case BLOCK_BEDROCK:   return (BlockProperties){0, 15};       // No emission, opaque
+        case BLOCK_AIR:       return (BlockProperties){0, 0};        // No emission, fully transparent
+        default:              return (BlockProperties){0, 0};        // No emission, translucent; nonexistant(?)
+    }
+}
+
 // Cached visible block entry - for mesh caching
 typedef struct {
     int x, y, z;  // Local chunk coordinates
@@ -30,6 +52,10 @@ typedef struct {
 #define CHUNK_DEPTH 32
 #define CHUNK_LOAD_DISTANCE 1  // Load chunks 1 chunk away - performance vs visibility tradeoff
 #define MIN_RENDER_DISTANCE 2.0f  // Don't render blocks closer than this (reduces near-field clutter)
+
+// World height limits - prevents unloaded chunk light leaks
+#define WORLD_Y_MIN 0
+#define WORLD_Y_MAX 500
 
 // Block structure
 typedef struct {
@@ -58,9 +84,12 @@ typedef struct {
     bool loaded;      // Whether this chunk is currently in memory
     bool generated;   // Whether terrain has been generated
     bool modified;    // Whether this chunk has unsaved changes
+    bool needs_relighting;  // Whether lighting needs recalculation (on block change or load)
+    bool meshed;      // Whether visible blocks have been cached
     CachedVisibleBlock* visible_blocks;  // Pre-computed list of blocks with exposed faces
     int visible_count;  // Number of blocks in visible_blocks
     int visible_capacity;  // Allocated capacity for visible_blocks
+    pthread_mutex_t mutex;  // Protects this chunk during worker processing
 } Chunk;
 
 // Chunk cache - stores loaded chunks
@@ -69,6 +98,24 @@ typedef struct {
     int chunk_count;
     int chunk_capacity;
 } ChunkCache;
+
+// Worker job - stores chunk coordinates to avoid pointer invalidation
+typedef struct {
+    int32_t chunk_x;
+    int32_t chunk_y;
+    int32_t chunk_z;
+} WorkerJob;
+
+// Worker thread job queue
+typedef struct {
+    WorkerJob* queue;  // Array of chunk coordinates, not pointers
+    int count;
+    int capacity;
+    int jobs_in_progress;  // Number of jobs currently being processed by worker
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    bool shutdown;
+} WorkerQueue;
 
 // World structure - infinite world with chunk-based loading
 typedef struct {
@@ -80,6 +127,10 @@ typedef struct {
     char world_name[256];  // Current world name for proper chunk loading
     Vector3 last_player_position;  // Last known player position for saving/loading
     uint64_t seed;  // World seed for reproducible terrain generation
+    WorkerQueue worker_queue;  // Queue of chunks to process
+    pthread_t worker_thread;  // Worker thread handle
+    bool worker_running;  // Whether worker thread is active
+    pthread_mutex_t cache_mutex;  // Protects chunk_cache array from realloc while worker accesses it
 } World;
 
 // Function declarations
@@ -108,5 +159,9 @@ void calculate_chunk_skylight(Chunk* chunk, World* world);  // Calculate proper 
 uint8_t world_get_skylight(World* world, int x, int y, int z);  // Get skylight level at block position
 void calculate_chunk_blocklight(Chunk* chunk, World* world);  // Calculate blocklight from emitting blocks
 uint8_t world_get_blocklight(World* world, int x, int y, int z);  // Get blocklight level at block position
+void worker_queue_chunk(World* world, Chunk* chunk);  // Add chunk to worker queue for processing
+void worker_flush_queue(World* world);  // Wait for all worker queue jobs to complete
+void worker_shutdown(World* world);  // Cleanly shut down worker thread
+void worker_init(World* world);  // Initialize worker thread system
 
 #endif
