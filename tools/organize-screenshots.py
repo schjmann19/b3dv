@@ -7,7 +7,6 @@ Move all files with 'screenshot' in the name to ./Screenshots/
 If a file would overwrite an existing one, add a timestamp to the name instead.
 """
 
-import os
 import shutil
 from pathlib import Path
 from datetime import datetime
