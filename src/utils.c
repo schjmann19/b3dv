@@ -213,9 +213,7 @@ bool get_chat_history_line(int lines_back, char* out_line, size_t max_len)
     while (fgets(line, sizeof(line), file) != NULL) {
         // Remove trailing newline
         size_t len = strlen(line);
-        if (len > 0 && line[len - 1] == '\n') {
-            line[len - 1] = '\0';
-        }
+        if (len > 0 && line[len - 1] == '\n'){line[len - 1] = '\0';}
 
         // Skip empty lines
         if (line[0] == '\0') continue;

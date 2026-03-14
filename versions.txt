@@ -1,3 +1,7 @@
+0.0.16:
+    got tired, just fixed the flickering and clouds (also now there are Minecraft style tall chunks)
+    fix windows build
+
 0.0.15c:
     better terrain; multithreading
 

@@ -92,7 +92,7 @@ static Font load_font_by_name(const char* font_name)
 int main(void)
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.15c");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.16");
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
@@ -997,41 +997,38 @@ int main(void)
                 // Skip chunks that haven't been generated yet
                 if (!chunk->generated) continue;
 
-                // Skip chunks that haven't been lit yet - lighting is essential for proper rendering
-                if (chunk->needs_relighting) continue;
-
-                // Try to render even if meshed=false, as long as we have old visible_blocks
-                // This prevents flickering when a chunk is being remeshed
-                // We'll check visible_blocks existence after locking anyway
-
-                // OPTIMIZATION: Chunk-level frustum culling - skips entire chunks at once
-                if (!is_chunk_in_frustum(chunk, shifted_cam_pos, cam_forward, cam_right, camera.up,
-                                        menu->render_distance, fov_half_vert_tan, fov_half_horiz_tan, camera_offset)) {
-                    continue;
-                }
-
                 // OPTIMIZATION: Iterate only through cached visible blocks instead of all blocks
                 // This is the main performance win - avoids triple-nested loop of 2048 blocks per chunk
                 // Lock chunk while accessing visible_blocks to avoid race with worker thread
-                pthread_mutex_lock(&chunk->mutex);
+                pthread_mutex_lock(&chunk->mesh_swap_mutex);
+
+                // Get active mesh buffer (updated by worker thread via double-buffer swap)
+                // Use atomic load with acquire semantics to ensure we see the latest update
+                int active = __atomic_load_n(&chunk->active_mesh, __ATOMIC_ACQUIRE);
 
                 // Safety checks after locking
-                if (!chunk->visible_blocks || chunk->visible_count == 0) {
-                    pthread_mutex_unlock(&chunk->mutex);
-                    continue;
-                }
-
-                // CRITICAL FIX: Make a temporary copy of visible_blocks data while holding lock
-                // to prevent use-after-free if worker thread recalculates visible_blocks
-                int visible_count = chunk->visible_count;
+                // Render even if worker is updating - we see consistent data from active buffer
+                // to prevent use-after-free if worker thread updates the other buffer
+                int visible_count = chunk->visible_count[active];
                 CachedVisibleBlock* visible_blocks_copy = (CachedVisibleBlock*)malloc(visible_count * sizeof(CachedVisibleBlock));
                 if (!visible_blocks_copy) {
-                    pthread_mutex_unlock(&chunk->mutex);
+                    pthread_mutex_unlock(&chunk->mesh_swap_mutex);
                     continue;
                 }
-                memcpy(visible_blocks_copy, chunk->visible_blocks, visible_count * sizeof(CachedVisibleBlock));
 
-                pthread_mutex_unlock(&chunk->mutex);
+                // CRITICAL: Hold lock during memcpy to prevent another thread from updating
+                // chunk->visible_blocks[active] or visible_count[active] while we're copying
+                // This prevents reading beyond buffer bounds or using freed memory
+                if (chunk->visible_blocks[active] != NULL && visible_count > 0) {
+                    memcpy(visible_blocks_copy, chunk->visible_blocks[active], visible_count * sizeof(CachedVisibleBlock));
+                } else {
+                    // Buffer not ready yet, skip rendering this chunk
+                    free(visible_blocks_copy);
+                    pthread_mutex_unlock(&chunk->mesh_swap_mutex);
+                    continue;
+                }
+
+                pthread_mutex_unlock(&chunk->mesh_swap_mutex);
 
                 // Render blocks with the copied data (no lock held)
                 // Pre-compute render distance thresholds for LOD
@@ -1190,7 +1187,7 @@ int main(void)
                      player->position.x, player->position.y, player->position.z);
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.15c", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.16", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1220,14 +1217,14 @@ int main(void)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.15c", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.16", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.15c", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextEx(custom_font, "b3dv 0.0.16", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // Draw chat message history (last few messages with fade-out)

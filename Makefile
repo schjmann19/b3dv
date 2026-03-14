@@ -52,7 +52,8 @@ endif
 # Windows cross-compilation with aggressive optimizations
 WIN_CC = x86_64-w64-mingw32-gcc
 WIN_RAYLIB_PATH = ./external/raylib
-WIN_CFLAGS = -std=c11 -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto=thin -fno-signed-zeros \
+# Use plain -flto for MinGW; some versions do not support -flto=thin.
+WIN_CFLAGS = -std=c11 -Wall -Wextra -O3 -ffast-math -march=x86-64 -mtune=generic -flto -fno-signed-zeros \
             -fno-trapping-math -funroll-loops -I$(WIN_RAYLIB_PATH)/src
 WIN_LDFLAGS = -L$(WIN_RAYLIB_PATH)/src -l:libraylib.a -lopengl32 -lgdi32 -lwinmm -lpsapi -lm -static-libgcc -flto
 

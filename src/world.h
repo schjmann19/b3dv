@@ -76,8 +76,12 @@ typedef struct {
 // Chunk structure - a 32x64x32 section of the world
 typedef struct {
     Block blocks[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];
-    uint8_t skylight[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];  // Skylight levels (0-15) for each block
-    uint8_t blocklight[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];  // Blocklight levels (0-15) for each block
+    // Double-buffered lighting to avoid tearing when worker updates lighting data
+    uint8_t skylight[2][CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];  // Skylight levels (0-15) for each block
+    uint8_t blocklight[2][CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH];  // Blocklight levels (0-15) for each block
+    volatile int active_light_buffer;  // Index of the active lighting buffer (0 or 1)
+    pthread_mutex_t light_swap_mutex;  // Protects lighting buffer swaps
+
     int32_t chunk_x;  // Chunk coordinates
     int32_t chunk_y;
     int32_t chunk_z;
@@ -86,9 +90,15 @@ typedef struct {
     bool modified;    // Whether this chunk has unsaved changes
     bool needs_relighting;  // Whether lighting needs recalculation (on block change or load)
     bool meshed;      // Whether visible blocks have been cached
-    CachedVisibleBlock* visible_blocks;  // Pre-computed list of blocks with exposed faces
-    int visible_count;  // Number of blocks in visible_blocks
-    int visible_capacity;  // Allocated capacity for visible_blocks
+    bool pending_save; // Whether this chunk is queued to be saved asynchronously
+    bool pending_unload; // Whether this chunk is scheduled for unload after save completes
+    volatile int in_use_count;  // Worker jobs currently processing this chunk
+    // Double-buffered mesh: two buffers so render thread always has valid data
+    CachedVisibleBlock* visible_blocks[2];  // Pre-computed list of blocks with exposed faces (ping-pong buffers)
+    int visible_count[2];  // Number of blocks in each buffer
+    int visible_capacity[2];  // Allocated capacity for each buffer
+    volatile int active_mesh;  // Index of which buffer is currently being rendered (0 or 1), volatile for inter-thread visibility
+    pthread_mutex_t mesh_swap_mutex;  // Protects mesh swap to ensure atomicity
     pthread_mutex_t mutex;  // Protects this chunk during worker processing
 } Chunk;
 
@@ -99,11 +109,18 @@ typedef struct {
     int chunk_capacity;
 } ChunkCache;
 
-// Worker job - stores chunk coordinates to avoid pointer invalidation
+// Worker job types
+typedef enum {
+    WORKER_JOB_LIGHTING_AND_MESH,  // Recalculate lighting and/or mesh for a chunk
+    WORKER_JOB_SAVE_CHUNK          // Save chunk to disk (async)
+} WorkerJobType;
+
+// Worker job - stores chunk coordinates and job type to avoid pointer invalidation
 typedef struct {
     int32_t chunk_x;
     int32_t chunk_y;
     int32_t chunk_z;
+    WorkerJobType type;
 } WorkerJob;
 
 // Worker thread job queue
@@ -155,11 +172,12 @@ void world_generate_chunk(Chunk* chunk, uint64_t seed);
 Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 void chunk_cache_visible_blocks(Chunk* chunk, World* world);  // Pre-compute list of visible blocks
 void chunk_free_visible_blocks(Chunk* chunk);  // Clean up visible blocks cache
-void calculate_chunk_skylight(Chunk* chunk, World* world);  // Calculate proper skylight levels for chunk
+void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer);  // Calculate proper skylight levels for chunk
 uint8_t world_get_skylight(World* world, int x, int y, int z);  // Get skylight level at block position
-void calculate_chunk_blocklight(Chunk* chunk, World* world);  // Calculate blocklight from emitting blocks
+void calculate_chunk_blocklight(Chunk* chunk, World* world, int target_buffer);  // Calculate blocklight from emitting blocks
 uint8_t world_get_blocklight(World* world, int x, int y, int z);  // Get blocklight level at block position
-void worker_queue_chunk(World* world, Chunk* chunk);  // Add chunk to worker queue for processing
+void worker_queue_chunk(World* world, Chunk* chunk);  // Add chunk to worker queue for lighting/meshing
+void worker_queue_chunk_save(World* world, Chunk* chunk);  // Add chunk to worker queue for saving
 void worker_flush_queue(World* world);  // Wait for all worker queue jobs to complete
 void worker_shutdown(World* world);  // Cleanly shut down worker thread
 void worker_init(World* world);  // Initialize worker thread system

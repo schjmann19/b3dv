@@ -635,3 +635,10 @@ asd
 /noclip disable
 /select glowstone
 /fly enable
+/select glowstone
+/select grass
+/select glowstone
+/fly enable
+/noclip enable
+/select stone
+/select glowstone

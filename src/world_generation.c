@@ -384,9 +384,22 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
     new_chunk->modified = false;  // Not modified when first created
     new_chunk->needs_relighting = true;  // New chunks need lighting calculation
     new_chunk->meshed = false;
-    new_chunk->visible_blocks = NULL;  // Initialize visible blocks cache
-    new_chunk->visible_count = 0;
-    new_chunk->visible_capacity = 0;
+    new_chunk->pending_save = false;
+    new_chunk->pending_unload = false;
+    new_chunk->in_use_count = 0;
+    // Initialize double-buffered lighting (avoid tearing during worker updates)
+    new_chunk->active_light_buffer = 0;
+    pthread_mutex_init(&new_chunk->light_swap_mutex, NULL);
+
+    // Initialize double-buffered visible blocks cache
+    new_chunk->visible_blocks[0] = NULL;
+    new_chunk->visible_blocks[1] = NULL;
+    new_chunk->visible_count[0] = 0;
+    new_chunk->visible_count[1] = 0;
+    new_chunk->visible_capacity[0] = 0;
+    new_chunk->visible_capacity[1] = 0;
+    new_chunk->active_mesh = 0;  // Start with buffer 0
+    pthread_mutex_init(&new_chunk->mesh_swap_mutex, NULL);  // Mutex for atomic mesh swaps
     pthread_mutex_init(&new_chunk->mutex, NULL);  // Initialize chunk mutex
 
     // Initialize blocks to air and lighting to 0
@@ -394,8 +407,11 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
                 new_chunk->blocks[y][z][x].type = BLOCK_AIR;
-                new_chunk->skylight[y][z][x] = 0;  // Initialize to prevent garbage data
-                new_chunk->blocklight[y][z][x] = 0;  // Initialize to prevent garbage data
+                // Initialize both lighting buffers to prevent garbage data
+                new_chunk->skylight[0][y][z][x] = 0;
+                new_chunk->skylight[1][y][z][x] = 0;
+                new_chunk->blocklight[0][y][z][x] = 0;
+                new_chunk->blocklight[1][y][z][x] = 0;
             }
         }
     }
@@ -609,78 +625,69 @@ void world_set_block(World* world, int x, int y, int z, BlockType type)
 
         world_chunk_set_block(chunk, local_x, local_y, local_z, type);
 
-        // Mark chunk as needing relighting and remeshing if block change affects light
-        // Don't modify visible_count here - let the worker thread handle mesh invalidation
-        // when it rebuilds. This prevents data races with the render thread.
+        // Mark chunk as needing relighting if block change affects light
         if (affects_light) {
             chunk->needs_relighting = true;
-            chunk->meshed = false;  // CRITICAL: also remesh with new lighting
-        } else {
-            // Just mark for remeshing if only visibility changed
-            chunk->meshed = false;
         }
+        // Always mark meshed=false so worker knows to skip the expensive mesh rebuild
+        // (we're doing it immediately below)
+        chunk->meshed = false;
 
         pthread_mutex_unlock(&chunk->mutex);
         pthread_mutex_unlock(&world->cache_mutex);
 
-        worker_queue_chunk(world, chunk);  // Queue for re-meshing/relighting
+        // INSTANT MESH UPDATE: Rebuild visible blocks immediately on main thread
+        // This gives instant visual feedback for block changes without waiting for worker
+        // The visible block list doesn't depend on lighting (lighting calculated at render time)
+        // chunk_cache_visible_blocks calls world_get_block which locks world->cache_mutex,
+        // so we call it WITHOUT holding any locks
+        chunk_cache_visible_blocks(chunk, world);
 
-        // Invalidate neighboring chunks that share edges/corners with this block
-        // OPTIMIZATION: Single lock window for marking + collection, then queue outside lock
-        pthread_mutex_lock(&world->cache_mutex);
-        Chunk* neighbors_to_queue[27] = {NULL};
-        int neighbors_count = 0;
+        // Update mesh flag to mark it as done (worker will skip mesh rebuild and only do lighting)
+        pthread_mutex_lock(&chunk->mutex);
+        chunk->meshed = true;  // Mark mesh as already rebuilt
+        pthread_mutex_unlock(&chunk->mutex);
 
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (dx == 0 && dy == 0 && dz == 0) continue;  // Skip center
-                    Chunk* neighbor = world_get_chunk(world, chunk_x + dx, chunk_y + dy, chunk_z + dz);
-                    if (neighbor) {
-                        // For light-affected blocks, only mark neighbor if light propagates to it
-                        // This implements proper cross-chunk light propagation
-                        if (affects_light) {
-                            // Calculate max emission (old or new block)
-                            int max_emission = (new_props.emission > old_props.emission) ?
-                                               new_props.emission : old_props.emission;
+        // Queue worker for lighting recalculation (mesh already updated)
+        worker_queue_chunk(world, chunk);
 
-                            // Calculate distance from block to neighbor chunk boundary
-                            int dist_to_boundary = 0;
-                            if (dx < 0) {
-                                dist_to_boundary = local_x + 1;  // Left neighbor: distance to its right edge
-                            } else if (dx > 0) {
-                                dist_to_boundary = CHUNK_WIDTH - local_x;  // Right neighbor: distance to its left edge
-                            } else if (dz < 0) {
-                                dist_to_boundary = local_z + 1;  // Back neighbor: distance to its front edge
-                            } else if (dz > 0) {
-                                dist_to_boundary = CHUNK_DEPTH - local_z;  // Front neighbor: distance to its back edge
-                            } else if (dy < 0) {
-                                dist_to_boundary = local_y + 1;  // Below neighbor: distance to its top edge
-                            } else if (dy > 0) {
-                                dist_to_boundary = CHUNK_HEIGHT - local_y;  // Above neighbor: distance to its bottom edge
-                            }
+        // Also update neighbor chunk meshes immediately to avoid temporary holes at chunk boundaries.
+        // Only do this for neighbors that are adjacent to the modified block (i.e. block is on a chunk edge).
+        // This avoids unnecessary work when editing blocks away from chunk boundaries.
+        const int neighbor_offsets[6][3] = {
+            { 1, 0, 0 }, {-1, 0, 0},
+            { 0, 1, 0 }, { 0,-1, 0},
+            { 0, 0, 1 }, { 0, 0,-1}
+        };
 
-                            // Mark neighbor for relighting only if light reaches it
-                            if (dist_to_boundary > 0 && dist_to_boundary <= max_emission) {
-                                neighbor->needs_relighting = true;
-                                neighbor->meshed = false;
-                            } else {
-                                // Still remesh for visibility changes even if light doesn't reach
-                                neighbor->meshed = false;
-                            }
-                        } else {
-                            neighbor->meshed = false;  // Remesh only for visibility
-                        }
-                        neighbors_to_queue[neighbors_count++] = neighbor;
-                    }
-                }
+        for (int ni = 0; ni < 6; ni++) {
+            // Only rebuild neighbor chunk if the changed block lies on the shared face
+            if ((ni == 0 && local_x != CHUNK_WIDTH - 1) || (ni == 1 && local_x != 0) ||
+                (ni == 2 && local_y != CHUNK_HEIGHT - 1) || (ni == 3 && local_y != 0) ||
+                (ni == 4 && local_z != CHUNK_DEPTH - 1) || (ni == 5 && local_z != 0)) {
+                continue;
             }
-        }
-        pthread_mutex_unlock(&world->cache_mutex);
 
-        // Queue neighbors without holding lock (reduces contention)
-        for (int i = 0; i < neighbors_count; i++) {
-            worker_queue_chunk(world, neighbors_to_queue[i]);
+            int32_t nx = chunk_x + neighbor_offsets[ni][0];
+            int32_t ny = chunk_y + neighbor_offsets[ni][1];
+            int32_t nz = chunk_z + neighbor_offsets[ni][2];
+
+            Chunk* neighbor = world_get_chunk(world, nx, ny, nz);
+            if (!neighbor || !neighbor->loaded || !neighbor->generated) continue;
+
+            // Invalidate neighbor mesh and rebuild it immediately to prevent flicker
+            pthread_mutex_lock(&neighbor->mutex);
+            neighbor->meshed = false;
+            pthread_mutex_unlock(&neighbor->mutex);
+
+            chunk_cache_visible_blocks(neighbor, world);
+
+            pthread_mutex_lock(&neighbor->mutex);
+            neighbor->meshed = true;
+            pthread_mutex_unlock(&neighbor->mutex);
+
+            // Recalculate lighting for the neighbor chunk as well
+            worker_queue_chunk(world, neighbor);
         }
     } else {
         pthread_mutex_unlock(&world->cache_mutex);
@@ -850,10 +857,17 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
 
                 Chunk* chunk = world_load_or_create_chunk(world, cx, cy, cz);
                 if (chunk && !chunk->loaded) {
-                    // Generate this chunk procedurally
-                    world_generate_chunk(chunk, world->seed);
+                    if (!chunk->generated) {
+                        // Generate this chunk procedurally
+                        world_generate_chunk(chunk, world->seed);
+                        chunk->generated = true;
+                    }
+                    // Mark as loaded again (this chunk was previously unloaded)
                     chunk->loaded = true;
-                    chunk->generated = true;
+                    chunk->pending_unload = false;
+                    // Mark lighting/mesh dirty so the worker will rebuild.
+                    chunk->needs_relighting = true;
+                    chunk->meshed = false;
                     // NOTE: Don't queue yet - we'll do it after releasing the lock to avoid holding lock too long
                 }
             }
@@ -868,7 +882,7 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
         for (int cy = player_chunk_y - 1; cy <= player_chunk_y + 1; cy++) {
             for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
                 Chunk* chunk = world_get_chunk(world, cx, cy, cz);
-                if (chunk && chunk->generated && chunk->needs_relighting) {
+                if (chunk && chunk->generated && chunk->loaded && chunk->needs_relighting) {
                     // Queue for worker to calculate lighting and mesh
                     worker_queue_chunk(world, chunk);
                 }
@@ -877,9 +891,9 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     }
     pthread_mutex_unlock(&world->cache_mutex);
 
-    // CRITICAL: Flush worker queue before unloading chunks to prevent worker from
-    // accessing chunks that are about to be removed from the cache
-    worker_flush_queue(world);
+    // Note: We no longer flush the worker queue here to avoid stalling the main thread.
+    // Chunks that are in-use by the worker (in_use_count > 0) will not be unloaded until
+    // their jobs complete.
 
     // CRITICAL: Lock cache mutex while modifying chunk array
     pthread_mutex_lock(&world->cache_mutex);
@@ -887,7 +901,18 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     // Unload chunks that are too far away or behind the player
     int unload_dist = CHUNK_LOAD_DISTANCE + 1;
     int i = 0;
+
+    // Throttle unloads to avoid stuttering when crossing chunk boundaries.
+    // We only unload a small number of chunks per frame, spreading work across frames.
+    const int max_unloads_per_frame = 1;
+    int unloads_this_frame = 0;
+
     while (i < world->chunk_cache.chunk_count) {
+        // If we already unloaded enough chunks this frame, stop here.
+        if (unloads_this_frame >= max_unloads_per_frame) {
+            break;
+        }
+
         Chunk* chunk = &world->chunk_cache.chunks[i];
         int dx = chunk->chunk_x - player_chunk_x;
         int dy = chunk->chunk_y - player_chunk_y;
@@ -907,25 +932,37 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
         bool too_far = dx*dx + dz*dz > unload_dist*unload_dist || dy > unload_dist || dy < -unload_dist;
 
         if (too_far || behind_player) {
-            // Save chunk to disk before unloading if it was modified
-            if (chunk->modified) {
-                world_save_chunk(chunk, world->world_name);
-                printf("[chunk_unload] Saved modified chunk %d,%d,%d\n", chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
-                chunk->modified = false;  // Mark as saved
+            // Avoid unloading while a worker is still processing this chunk
+            if (__atomic_load_n(&chunk->in_use_count, __ATOMIC_ACQUIRE) > 0) {
+                i++;
+                continue;
             }
 
-            // Clean up chunk resources
-            // NOTE: Don't lock/unlock here - just remove from active list
-            // The worker thread won't access chunks that aren't in the cache
-            chunk_free_visible_blocks(chunk);  // Free mesh
-
-            // Remove chunk from cache (swap with last)
-            // NOTE: Mutexes are NOT destroyed - we reuse the memory slots
-            // Destroying a mutex is expensive and unnecessary since we preallocated the array
-            if (i < world->chunk_cache.chunk_count - 1) {
-                world->chunk_cache.chunks[i] = world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
+            // If modified, queue async save and mark for unload after save completes.
+            // This prevents main-thread stalls due to disk I/O during unloading.
+            if (chunk->modified && !chunk->pending_save) {
+                chunk->pending_unload = true;
+                // We can mark the chunk as unloaded for rendering purposes while we save it.
+                // This keeps it in memory until save completes, but removes it from active rendering.
+                chunk->loaded = false;
+                worker_queue_chunk_save(world, chunk);
             }
-            world->chunk_cache.chunk_count--;
+
+            // If chunk is not pending save, we can unload it immediately
+            if (!chunk->pending_save) {
+                // Clean up chunk resources
+                chunk_free_visible_blocks(chunk);  // Free mesh
+
+                // Remove chunk from cache (swap with last)
+                if (i < world->chunk_cache.chunk_count - 1) {
+                    world->chunk_cache.chunks[i] = world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
+                }
+                world->chunk_cache.chunk_count--;
+                unloads_this_frame++;
+            } else {
+                // Skip this chunk for now; it will be removed once the save completes
+                i++;
+            }
         } else {
             i++;
         }
@@ -1136,7 +1173,7 @@ bool world_load(World* world, const char* world_name)
 uint8_t world_get_skylight(World* world, int x, int y, int z)
 {
     // Out of bounds?
-    if (y < 0 || y >= 256) return 0;
+    if (y < WORLD_Y_MIN || y > WORLD_Y_MAX) return 0;
 
     // Calculate chunk coordinates
     int32_t chunk_x = x < 0 ? (x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : x / CHUNK_WIDTH;
@@ -1159,7 +1196,8 @@ uint8_t world_get_skylight(World* world, int x, int y, int z)
         return 0;  // Unloaded chunks have no skylight
     }
 
-    return chunk->skylight[local_y][local_z][local_x];
+    int active = __atomic_load_n(&chunk->active_light_buffer, __ATOMIC_ACQUIRE);
+    return chunk->skylight[active][local_y][local_z][local_x];
 }
 
 // Get blocklight level at a specific world position
@@ -1167,7 +1205,7 @@ uint8_t world_get_skylight(World* world, int x, int y, int z)
 uint8_t world_get_blocklight(World* world, int x, int y, int z)
 {
     // Out of bounds?
-    if (y < 0 || y >= 256) return 0;
+    if (y < WORLD_Y_MIN || y > WORLD_Y_MAX) return 0;
 
     // Calculate chunk coordinates
     int32_t chunk_x = x < 0 ? (x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : x / CHUNK_WIDTH;
@@ -1190,7 +1228,8 @@ uint8_t world_get_blocklight(World* world, int x, int y, int z)
         return 0;  // Unloaded chunks have no blocklight
     }
 
-    return chunk->blocklight[local_y][local_z][local_x];
+    int active = __atomic_load_n(&chunk->active_light_buffer, __ATOMIC_ACQUIRE);
+    return chunk->blocklight[active][local_y][local_z][local_x];
 }
 
 // Simple queue for BFS light propagation (static to avoid allocation per chunk)
@@ -1202,15 +1241,18 @@ typedef struct {
 
 // Calculate blocklight levels for a chunk using flood-fill from light-emitting blocks
 // Uses BFS propagation like Minecraft: light spreads from emitters (glowstone)
-void calculate_chunk_blocklight(Chunk* chunk, World* world)
+// Note: uses double-buffering so render thread never reads partially-updated lighting data.
+void calculate_chunk_blocklight(Chunk* chunk, World* world, int target_buffer)
 {
     if (!chunk) return;
 
-    // Initialize blocklight to 0
+    uint8_t (*blocklight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->blocklight[target_buffer];
+
+    // Initialize blocklight to 0 in the target buffer
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
-                chunk->blocklight[y][z][x] = 0;
+                blocklight_buf[y][z][x] = 0;
             }
         }
     }
@@ -1225,7 +1267,7 @@ void calculate_chunk_blocklight(Chunk* chunk, World* world)
             for (int x = 0; x < CHUNK_WIDTH; x++) {
                 BlockProperties props = get_block_properties(chunk->blocks[y][z][x].type);
                 if (props.emission > 0) {
-                    chunk->blocklight[y][z][x] = props.emission;
+                    blocklight_buf[y][z][x] = props.emission;
                     // Add to queue
                     if (queue_tail < LIGHT_QUEUE_SIZE) {
                         queue[queue_tail].x = x;
@@ -1270,8 +1312,8 @@ void calculate_chunk_blocklight(Chunk* chunk, World* world)
 
             // Check if we should update this neighbor
             if (neighbor_props.opacity < 15) {  // Only propagate through non-opaque blocks
-                if (new_light > chunk->blocklight[ny][nz][nx]) {
-                    chunk->blocklight[ny][nz][nx] = new_light;
+                if (new_light > blocklight_buf[ny][nz][nx]) {
+                    blocklight_buf[ny][nz][nx] = new_light;
                     // Add to queue if there's still light to propagate
                     if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
                         queue[queue_tail].x = nx;
@@ -1284,6 +1326,9 @@ void calculate_chunk_blocklight(Chunk* chunk, World* world)
             }
         }
     }
+
+    // Note: the caller (worker thread) swaps the active lighting buffer after
+    // both skylight + blocklight are computed to avoid intermediate states.
 }
 
 // Calculate skylight levels for a chunk using BFS from the sky downward
@@ -1292,15 +1337,18 @@ void calculate_chunk_blocklight(Chunk* chunk, World* world)
 // 2. Propagate downward through air blocks
 // 3. Opaque blocks block skylight completely
 // 4. Result: caves have 0 skylight UNLESS they have direct line to sky
-void calculate_chunk_skylight(Chunk* chunk, World* world)
+// Note: uses double-buffering so render thread never reads partially-updated lighting data.
+void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer)
 {
     if (!chunk) return;
+
+    uint8_t (*skylight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->skylight[target_buffer];
 
     // Initialize skylight to 0 (caves are dark by default)
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
-                chunk->skylight[y][z][x] = 0;
+                skylight_buf[y][z][x] = 0;
             }
         }
     }
@@ -1318,14 +1366,13 @@ void calculate_chunk_skylight(Chunk* chunk, World* world)
             // This prevents unloaded chunks above from leaking light into caves
             for (int world_y = WORLD_Y_MAX; world_y >= WORLD_Y_MIN; world_y--) {
                 BlockType block = world_get_block(world, world_x, world_y, world_z);
-                BlockProperties props = get_block_properties(block);
 
                 if (block == BLOCK_AIR) {
                     // Air transmits skylight fully
                     if (world_y >= chunk->chunk_y * CHUNK_HEIGHT &&
                         world_y < chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT) {
                         int local_y = world_y - (chunk->chunk_y * CHUNK_HEIGHT);
-                        chunk->skylight[local_y][z][x] = current_light;
+                        skylight_buf[local_y][z][x] = current_light;
                     }
                 } else {
                     // Solid block blocks skylight and all blocks below until exposed to air again
@@ -1344,12 +1391,12 @@ void calculate_chunk_skylight(Chunk* chunk, World* world)
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
-                if (chunk->blocks[y][z][x].type == BLOCK_AIR && chunk->skylight[y][z][x] > 0) {
+                if (chunk->blocks[y][z][x].type == BLOCK_AIR && skylight_buf[y][z][x] > 0) {
                     if (queue_tail < LIGHT_QUEUE_SIZE) {
                         queue[queue_tail].x = x;
                         queue[queue_tail].y = y;
                         queue[queue_tail].z = z;
-                        queue[queue_tail].light = chunk->skylight[y][z][x];
+                        queue[queue_tail].light = skylight_buf[y][z][x];
                         queue_tail++;
                     }
                 }
@@ -1386,8 +1433,8 @@ void calculate_chunk_skylight(Chunk* chunk, World* world)
             }
 
             if (chunk->blocks[ny][nz][nx].type == BLOCK_AIR) {
-                if (new_light > chunk->skylight[ny][nz][nx]) {
-                    chunk->skylight[ny][nz][nx] = new_light;
+                if (new_light > skylight_buf[ny][nz][nx]) {
+                    skylight_buf[ny][nz][nx] = new_light;
                     if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
                         queue[queue_tail].x = nx;
                         queue[queue_tail].y = ny;
@@ -1399,6 +1446,9 @@ void calculate_chunk_skylight(Chunk* chunk, World* world)
             }
         }
     }
+
+    // Note: the caller (worker thread) swaps the active lighting buffer after
+    // both skylight + blocklight are computed to avoid intermediate states.
 }
 
 // Pre-compute and cache all visible blocks in a chunk (blocks with exposed faces)
@@ -1489,26 +1539,45 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
     }
 
     // ATOMIC SWAP: Now safely replace the old array with the new one
-    // This is now protected by chunk->mutex (held by worker thread)
-    CachedVisibleBlock* old_blocks = chunk->visible_blocks;
-    chunk->visible_blocks = temp_blocks;
-    chunk->visible_count = temp_count;
-    chunk->visible_capacity = temp_capacity;
+    // Using double-buffering: build into inactive buffer, then atomically swap active_mesh index
+    // This ensures render thread always sees consistent data (no partial updates)
 
-    // Free the old blocks if they existed
-    if (old_blocks != NULL) {
-        free(old_blocks);
+    // Lock mutex during swap to prevent render thread from reading between buffer updates
+    // This ensures the render thread never sees an inconsistent state
+    pthread_mutex_lock(&chunk->mesh_swap_mutex);
+
+    int current_active = __atomic_load_n(&chunk->active_mesh, __ATOMIC_ACQUIRE);
+    int inactive_buffer = 1 - current_active;  // Opposite of currently active buffer
+
+    // Free old data in the inactive buffer if it exists
+    if (chunk->visible_blocks[inactive_buffer] != NULL) {
+        free(chunk->visible_blocks[inactive_buffer]);
     }
+
+    // Store new mesh into inactive buffer
+    chunk->visible_blocks[inactive_buffer] = temp_blocks;
+    chunk->visible_count[inactive_buffer] = temp_count;
+    chunk->visible_capacity[inactive_buffer] = temp_capacity;
+
+    // ATOMIC SWAP: Use atomic operation with memory barrier
+    // This ensures the updated mesh is fully visible before we flip the active buffer switch
+    // Render thread will see the new mesh on the next inspection
+    __atomic_store_n(&chunk->active_mesh, inactive_buffer, __ATOMIC_RELEASE);
+
+    pthread_mutex_unlock(&chunk->mesh_swap_mutex);
 }
 
-// Free the visible blocks cache
+// Free the visible blocks cache (both buffers)
 void chunk_free_visible_blocks(Chunk* chunk)
 {
-    if (chunk->visible_blocks != NULL) {
-        free(chunk->visible_blocks);
-        chunk->visible_blocks = NULL;
-        chunk->visible_count = 0;
-        chunk->visible_capacity = 0;
+    // Free both buffers
+    for (int i = 0; i < 2; i++) {
+        if (chunk->visible_blocks[i] != NULL) {
+            free(chunk->visible_blocks[i]);
+            chunk->visible_blocks[i] = NULL;
+        }
+        chunk->visible_count[i] = 0;
+        chunk->visible_capacity[i] = 0;
     }
     // NOTE: Don't set meshed=false here - keep rendering old mesh while worker recalculates
     // This prevents flickering when blocks are placed/broken
