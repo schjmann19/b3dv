@@ -7,7 +7,7 @@ CloudSystem* clouds_create(const char* cloud_image_path) {
     CloudSystem* clouds = (CloudSystem*)malloc(sizeof(CloudSystem));
     if (clouds) {
         clouds->grid_size = 12;           // 12x12 grid of cloud segments
-        clouds->cloud_height = 80.0f;     // Lower than before for better visibility
+        clouds->cloud_height = 300.0f;    // Higher clouds at block height 300
         clouds->cloud_spacing = 64.0f;    // Space between cloud centers
         clouds->cloud_size = 64.0f;       // Same as spacing so clouds touch seamlessly
         clouds->grid_offset = (Vector2){0.0f, 0.0f};

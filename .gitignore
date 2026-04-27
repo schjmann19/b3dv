@@ -9,3 +9,6 @@ releases
 *.md
 *.MD
 !README.md
+*.log
+zig-out/
+.zig-cache/

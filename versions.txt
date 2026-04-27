@@ -1,3 +1,12 @@
+0.0.17-beta:
+    drop windows support
+    use semantic versioning
+    use zig build system
+
+0.0.16b:
+    just chuck libwinpthread.dll in there
+    optimization to optimally optimize the game so it runs more optimally
+
 0.0.16:
     got tired, just fixed the flickering and clouds (also now there are Minecraft style tall chunks)
     fix windows build
@@ -207,4 +216,4 @@
 0.0.2:
     bad optimization
     FEATURES:
-    simple and very small slab world you can walk
+    simple and very small slab world you can walk on

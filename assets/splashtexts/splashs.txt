@@ -25,3 +25,6 @@ Entropy not yet implemented.
 I did all the work!
 Time not yet implemented.
 Just use HTML.
+Now uses proper semantic versioning!
+Zig it!
+Did I say twice? Make it thrice

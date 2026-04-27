@@ -3,17 +3,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Create a release archive (.zip) containing:
-- Executables (b3dv and b3dv.exe)
+Create a release archive (.tar.gz) containing:
+- Executable (b3dv)
 - assets folder
 - LICENSE file
 
-Release file is named b3dv-{version}.zip and placed in ./releases/
-Version is read from ./versions.txt (first line)
+Release file is named b3dv-{version}.tar.gz and placed in ./releases/
+Version is read from ./versions.txt (first line, semantic versioning format)
 """
 
 import sys
-import zipfile
+import tarfile
 from pathlib import Path
 
 
@@ -31,7 +31,7 @@ def get_latest_version(versions_file):
 
 
 def create_release():
-    """create release archive with executables, assets, and LICENSE"""
+    """create release archive with executable, assets, and LICENSE"""
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
 
@@ -45,36 +45,28 @@ def create_release():
     assets_dir = project_root / "assets"
     license_file = project_root / "LICENSE"
     exe_linux = project_root / "b3dv"
-    exe_windows = project_root / "b3dv.exe"
 
     # create releases directory if it doesn't exist
     releases_dir.mkdir(exist_ok=True)
 
-    # define output zip file
-    zip_filename = f"b3dv-{version}.zip"
-    zip_path = releases_dir / zip_filename
+    # define output tar file
+    tar_filename = f"b3dv-{version}.tar.gz"
+    tar_path = releases_dir / tar_filename
 
-    print(f"Creating archive: {zip_path}")
+    print(f"Creating archive: {tar_path}")
 
-    # create the zip file
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+    # create the tar.gz file
+    with tarfile.open(tar_path, 'w:gz') as tf:
         # add linux executable
         if exe_linux.exists():
-            zf.write(exe_linux, arcname="b3dv")
+            tf.add(exe_linux, arcname="b3dv")
             print(f"  Added: b3dv")
         else:
             print(f"  Warning: {exe_linux} not found")
 
-        # add windows executable
-        if exe_windows.exists():
-            zf.write(exe_windows, arcname="b3dv.exe")
-            print(f"  Added: b3dv.exe")
-        else:
-            print(f"  Warning: {exe_windows} not found")
-
         # add LICENSE
         if license_file.exists():
-            zf.write(license_file, arcname="LICENSE")
+            tf.add(license_file, arcname="LICENSE")
             print(f"  Added: LICENSE")
         else:
             print(f"  Warning: {license_file} not found")
@@ -84,18 +76,18 @@ def create_release():
             for file_path in assets_dir.rglob('*'):
                 if file_path.is_file():
                     arcname = file_path.relative_to(project_root)
-                    zf.write(file_path, arcname=arcname)
+                    tf.add(file_path, arcname=arcname)
             print(f"  Added: assets/ (recursively)")
         else:
             print(f"  Warning: {assets_dir} not found")
 
     # verify file was created
-    if zip_path.exists():
-        size_mb = zip_path.stat().st_size / (1024 * 1024)
+    if tar_path.exists():
+        size_mb = tar_path.stat().st_size / (1024 * 1024)
         print(f"\nRelease created successfully!")
-        print(f"  File: {zip_filename}")
+        print(f"  File: {tar_filename}")
         print(f"  Size: {size_mb:.2f} MB")
-        print(f"  Location: {zip_path}")
+        print(f"  Location: {tar_path}")
     else:
         print(f"\nError: Failed to create release file")
         sys.exit(1)

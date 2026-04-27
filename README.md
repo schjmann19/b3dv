@@ -3,10 +3,10 @@
 Copyright (c) 2026 Jimena Neumann,
 SPDX-License-Identifier: BSD-3-Clause
 
-simple 3D visualizer of a ~~small slab made of cubes~~ basic world featuring:
+Simple 3D visualizer of a basic world featuring:
 simple terrain, multiple blocks, a worlds (with chunks) system, optimized rendering.
-heavily inspired in early iterations of Minecraft by Markus Persson.
-uses Raylib
+Heavily inspired in early iterations of Minecraft by Markus Persson.
+Uses Raylib and Zig build system.
 
 ## directory structure
 
@@ -14,63 +14,56 @@ uses Raylib
 ./external/         - raylib (submodule)
 ./Screenshots/      - Screenshots
 ./src/              - source code
-./tools             - convenient tools
-./Makefile          - build configuration
-./build.sh          - Unix-like build script
-./build-windows.bat - Windows batch build script
-./b3dv              - executable (linux)
-./b3dv.exe          - Windows executable
+./tools/            - convenient tools
+./run.sh            - build script (zig build + copy)
+./b3dv              - executable (Linux)
 ./LICENSE           - license text
+./zig-out/          - zig build output
 ```
 
 ## Building and Running
 
-### Linux, macOS, FreeBSD, and other Unix-like systems
+### Linux
 
 ```bash
-$ make
-$ ./b3dv             # Run existing executable
+./run.sh
+./b3dv
 ```
 
-### Windows
+Or manually:
 
 ```bash
-$ make windows
+zig build -Drelease-safe
+cp zig-out/bin/b3dv ./b3dv
+./b3dv
 ```
 
 ## Dependencies
 
-### Linux/macOS/BSD
+### Linux
 
-- GCC or Clang compiler
-- GNU Make
+- Zig (latest)
 - raylib development libraries
-
-### Windows
-
-- MinGW-w64 (or MSVC)
-- GNU Make
-- raylib libraries compiled for Windows
 
 ### Install Dependencies
 
 **Arch Linux:**
 
 ```bash
-pacman -S base-devel raylib
+pacman -S zig raylib
 ```
 
 **Ubuntu/Debian:**
 
 ```bash
 sudo apt-get update
-sudo apt-get install build-essential libraylib-dev
+sudo apt-get install raylib-dev
 ```
 
 **Fedora/RHEL:**
 
 ```bash
-sudo dnf install gcc make raylib-devel
+sudo dnf install raylib-devel
 ```
 
 **macOS:**
@@ -79,18 +72,8 @@ sudo dnf install gcc make raylib-devel
 brew install raylib
 ```
 
-**FreeBSD:**
-
-```bash
-sudo pkg install raylib
-```
-
-**Windows (with MinGW-w64):**
-
-Download from https://www.mingw-w64.org/ or use MSYS2/Cygwin package managers.
-
 # NOTES
 
-As of right now, it has been only tested in linux (raylib 5.5)
-If you use other system, kindly test it and tell me if it works - I have tried my best at compatibilitymaxxing, but I don't promise anything.
+- Windows support has been dropped. This is a Linux household.
+- Tested on Linux with raylib 5.5. and 6.0
 
