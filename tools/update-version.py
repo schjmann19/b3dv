@@ -25,7 +25,15 @@ def get_latest_version(versions_file):
 
 def find_version_pattern(content):
     """Find all version patterns in content (e.g., 0.0.7, 0.0.7b)"""
-    pattern = r'\d+\.\d+\.\d+[a-z]?'
+    # Match semantic-version-like tokens such as:
+    #  - 0.0.16
+    #  - 0.0.16b
+    #  - 0.0.18-beta
+    #  - 0.0.9i-2
+    #  - 1.2.3-alpha.1+build
+    # We match the core "X.Y.Z" then any optional trailing identifier made of
+    # letters, digits, dots or hyphens (but not whitespace or colons).
+    pattern = r"\d+\.\d+\.\d+[A-Za-z0-9.-]*"
     return re.findall(pattern, content)
 
 def update_file(filepath, old_version, new_version):

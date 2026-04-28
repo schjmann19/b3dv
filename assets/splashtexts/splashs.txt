@@ -12,7 +12,6 @@ Very graphically demanding.
 Undocumented commands!
 Yes I tried to learn C++.
 sudo pacman -Sybau
-*should* run on Windows.
 sudo apt install opsec
 I use Arch, btw.
 There can only be one!
