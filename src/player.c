@@ -18,6 +18,7 @@ Player* player_create(float x, float y, float z)
     player->is_flying = false;
     player->no_clip = false;
     player->space_press_time = 1.0f;  // Initialize to high value so first press isn't a double-tap
+    inventory_init(player);  // Initialize inventory
     return player;
 }
 
@@ -311,4 +312,227 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
             player->jump_used = false;
         }
     }
+}
+
+// Initialize player inventory
+void inventory_init(Player* player)
+{
+    // Initialize hotbar
+    for (int i = 0; i < INVENTORY_SIZE; i++) {
+        player->inventory[i].type = BLOCK_AIR;
+        player->inventory[i].count = 0;
+    }
+    // Initialize big inventory
+    for (int i = 0; i < BIG_INVENTORY_SIZE; i++) {
+        player->big_inventory[i].type = BLOCK_AIR;
+        player->big_inventory[i].count = 0;
+    }
+    player->selected_slot = 0;
+    player->inventory_open = false;
+    player->holding_item = false;
+    player->held_slot.type = BLOCK_AIR;
+    player->held_slot.count = 0;
+}
+
+// Add a block to inventory
+// Returns true if successful, false if inventory is full
+bool inventory_add_block(Player* player, BlockType block_type)
+{
+    if (block_type == BLOCK_AIR || block_type == BLOCK_BEDROCK) {
+        return false;  // Can't collect air or bedrock
+    }
+
+    // First, try to add to existing stack in hotbar
+    for (int i = 0; i < INVENTORY_SIZE; i++) {
+        if (player->inventory[i].type == block_type && player->inventory[i].count < INVENTORY_MAX_STACK) {
+            player->inventory[i].count++;
+            return true;
+        }
+    }
+
+    // Second, try to add to existing stack in big inventory
+    for (int i = 0; i < BIG_INVENTORY_SIZE; i++) {
+        if (player->big_inventory[i].type == block_type && player->big_inventory[i].count < INVENTORY_MAX_STACK) {
+            player->big_inventory[i].count++;
+            return true;
+        }
+    }
+
+    // Find empty slot in hotbar first
+    for (int i = 0; i < INVENTORY_SIZE; i++) {
+        if (player->inventory[i].type == BLOCK_AIR) {
+            player->inventory[i].type = block_type;
+            player->inventory[i].count = 1;
+            return true;
+        }
+    }
+
+    // Then find empty slot in big inventory
+    for (int i = 0; i < BIG_INVENTORY_SIZE; i++) {
+        if (player->big_inventory[i].type == BLOCK_AIR) {
+            player->big_inventory[i].type = block_type;
+            player->big_inventory[i].count = 1;
+            return true;
+        }
+    }
+
+    return false;  // Inventory full
+}
+
+// Remove a block from inventory (for placing)
+// Returns true if successful, false if block not available
+bool inventory_remove_block(Player* player, BlockType block_type)
+{
+    // First try hotbar
+    for (int i = 0; i < INVENTORY_SIZE; i++) {
+        if (player->inventory[i].type == block_type && player->inventory[i].count > 0) {
+            player->inventory[i].count--;
+            if (player->inventory[i].count <= 0) {
+                player->inventory[i].type = BLOCK_AIR;
+            }
+            return true;
+        }
+    }
+    // Then try big inventory
+    for (int i = 0; i < BIG_INVENTORY_SIZE; i++) {
+        if (player->big_inventory[i].type == block_type && player->big_inventory[i].count > 0) {
+            player->big_inventory[i].count--;
+            if (player->big_inventory[i].count <= 0) {
+                player->big_inventory[i].type = BLOCK_AIR;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+// Get count of a specific block type in inventory
+int inventory_get_count(Player* player, BlockType block_type)
+{
+    int total = 0;
+    for (int i = 0; i < INVENTORY_SIZE; i++) {
+        if (player->inventory[i].type == block_type) {
+            total += player->inventory[i].count;
+        }
+    }
+    return total;
+}
+
+// Get the currently selected block type based on selected slot
+// Only returns block if selected slot has items - otherwise returns BLOCK_AIR (no placement)
+BlockType inventory_get_selected_block(Player* player)
+{
+    InventorySlot* slot = &player->inventory[player->selected_slot];
+    if (slot->count > 0) {
+        return slot->type;
+    }
+    // Selected slot is empty - don't place anything
+    return BLOCK_AIR;
+}
+
+// Toggle big inventory open/closed
+void inventory_toggle_big(Player* player)
+{
+    player->inventory_open = !player->inventory_open;
+}
+
+// Check if big inventory is open
+bool inventory_is_big_open(Player* player)
+{
+    return player->inventory_open;
+}
+
+// Helper: compute total free capacity for a block type across hotbar+big inventory
+static int inventory_total_free_capacity(Player* player, BlockType block_type)
+{
+    int total = 0;
+    // existing stacks of same type
+    for (int i = 0; i < INVENTORY_SIZE; i++) {
+        if (player->inventory[i].type == block_type) {
+            total += (INVENTORY_MAX_STACK - player->inventory[i].count);
+        }
+    }
+    for (int i = 0; i < BIG_INVENTORY_SIZE; i++) {
+        if (player->big_inventory[i].type == block_type) {
+            total += (INVENTORY_MAX_STACK - player->big_inventory[i].count);
+        }
+    }
+    // empty slots
+    for (int i = 0; i < INVENTORY_SIZE; i++) {
+        if (player->inventory[i].type == BLOCK_AIR) total += INVENTORY_MAX_STACK;
+    }
+    for (int i = 0; i < BIG_INVENTORY_SIZE; i++) {
+        if (player->big_inventory[i].type == BLOCK_AIR) total += INVENTORY_MAX_STACK;
+    }
+    return total;
+}
+
+// Give items to player: returns true on success
+bool inventory_give(Player* player, BlockType block_type, int count)
+{
+    if (count <= 0) return false;
+    if (block_type == BLOCK_AIR || block_type == BLOCK_BEDROCK) return false;
+
+    int capacity = inventory_total_free_capacity(player, block_type);
+    if (capacity < count) return false; // not enough room
+
+    int remaining = count;
+
+    // Preferred: selected hotbar slot
+    int pref = player->selected_slot;
+    // If same type, fill into it
+    if (player->inventory[pref].type == block_type) {
+        int can = INVENTORY_MAX_STACK - player->inventory[pref].count;
+        int take = (remaining <= can) ? remaining : can;
+        player->inventory[pref].count += take;
+        remaining -= take;
+    } else if (player->inventory[pref].type == BLOCK_AIR) {
+        int take = (remaining <= INVENTORY_MAX_STACK) ? remaining : INVENTORY_MAX_STACK;
+        player->inventory[pref].type = block_type;
+        player->inventory[pref].count = take;
+        remaining -= take;
+    }
+
+    // Next: try to fill other existing stacks of same type in hotbar
+    for (int i = 0; remaining > 0 && i < INVENTORY_SIZE; i++) {
+        if (i == pref) continue;
+        if (player->inventory[i].type == block_type && player->inventory[i].count < INVENTORY_MAX_STACK) {
+            int can = INVENTORY_MAX_STACK - player->inventory[i].count;
+            int take = (remaining <= can) ? remaining : can;
+            player->inventory[i].count += take;
+            remaining -= take;
+        }
+    }
+
+    // Then: existing stacks in big inventory
+    for (int i = 0; remaining > 0 && i < BIG_INVENTORY_SIZE; i++) {
+        if (player->big_inventory[i].type == block_type && player->big_inventory[i].count < INVENTORY_MAX_STACK) {
+            int can = INVENTORY_MAX_STACK - player->big_inventory[i].count;
+            int take = (remaining <= can) ? remaining : can;
+            player->big_inventory[i].count += take;
+            remaining -= take;
+        }
+    }
+
+    // Then: empty hotbar slots (left-to-right)
+    for (int i = 0; remaining > 0 && i < INVENTORY_SIZE; i++) {
+        if (player->inventory[i].type == BLOCK_AIR) {
+            int take = (remaining <= INVENTORY_MAX_STACK) ? remaining : INVENTORY_MAX_STACK;
+            player->inventory[i].type = block_type;
+            player->inventory[i].count = take;
+            remaining -= take;
+        }
+    }
+
+    // Finally: empty big inventory slots
+    for (int i = 0; remaining > 0 && i < BIG_INVENTORY_SIZE; i++) {
+        if (player->big_inventory[i].type == BLOCK_AIR) {
+            int take = (remaining <= INVENTORY_MAX_STACK) ? remaining : INVENTORY_MAX_STACK;
+            player->big_inventory[i].type = block_type;
+            player->big_inventory[i].count = take;
+            remaining -= take;
+        }
+    }
+
+    return (remaining == 0);
 }

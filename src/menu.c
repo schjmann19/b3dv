@@ -160,7 +160,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
     if (file) {
         char line[512];
         int line_count = 0;
-        while (fgets(line, sizeof(line), file) && line_count < 36) {
+        while (fgets(line, sizeof(line), file) && line_count < 38) {
             // Remove newline
             line[strcspn(line, "\n")] = '\0';
 
@@ -201,6 +201,8 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 menu->game_text.uncapped,
                 menu->game_text.press_esc_to_return,
                 menu->game_text.see_full_info,
+                menu->game_text.inventory_title,
+                menu->game_text.inventory_close,
                 menu->game_text.msg_quitting,
                 menu->game_text.msg_teleported,
                 menu->game_text.msg_teleport_usage,
@@ -256,6 +258,8 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->game_text.uncapped),
                 sizeof(menu->game_text.press_esc_to_return),
                 sizeof(menu->game_text.see_full_info),
+                sizeof(menu->game_text.inventory_title),
+                sizeof(menu->game_text.inventory_close),
                 sizeof(menu->game_text.msg_quitting),
                 sizeof(menu->game_text.msg_teleported),
                 sizeof(menu->game_text.msg_teleport_usage),

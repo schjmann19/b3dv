@@ -706,10 +706,50 @@ int b3dv_main(void)
                             add_chat_message(menu->game_text.msg_setblock_usage);
                         }
                     } else {
+                        // New: /give <item> [<count>]
+                        if (strncmp(chat_input, "/give ", 6) == 0) {
+                            char item_buf[64] = {0};
+                            int count = 1;
+                            // Try to parse with optional count
+                            // Supports: /give stone 10  OR /give stone
+                            int parsed = sscanf(chat_input + 6, "%63s %d", item_buf, &count);
+                            if (parsed >= 1) {
+                                trim_string(item_buf);
+                                if (parsed == 1) count = 1;
+
+                                BlockType bt = BLOCK_AIR;
+                                if (strcmp(item_buf, "stone") == 0) bt = BLOCK_STONE;
+                                else if (strcmp(item_buf, "dirt") == 0) bt = BLOCK_DIRT;
+                                else if (strcmp(item_buf, "grass") == 0) bt = BLOCK_GRASS;
+                                else if (strcmp(item_buf, "sand") == 0) bt = BLOCK_SAND;
+                                else if (strcmp(item_buf, "wood") == 0) bt = BLOCK_WOOD;
+                                else if (strcmp(item_buf, "glowstone") == 0) bt = BLOCK_GLOWSTONE;
+
+                                if (bt == BLOCK_AIR) {
+                                    char msg[256];
+                                    snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_block, item_buf);
+                                    add_chat_message(msg);
+                                } else {
+                                    if (inventory_give(player, bt, count)) {
+                                        char msg[256];
+                                        if (count == 1)
+                                            snprintf(msg, sizeof(msg), "Gave 1 %s.", item_buf);
+                                        else
+                                            snprintf(msg, sizeof(msg), "Gave %d %s.", count, item_buf);
+                                        add_chat_message(msg);
+                                    } else {
+                                        add_chat_message("Not enough inventory space to give items.");
+                                    }
+                                }
+                            } else {
+                                add_chat_message("Usage: /give <item> [count]");
+                            }
+                        } else {
                         // Unknown command
                         char msg[512];
                         snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_command, chat_input);
                         add_chat_message(msg);
+                        }
                     }
                 }
 
@@ -749,24 +789,40 @@ int b3dv_main(void)
         }
         prev_hud_mode = hud_mode;
 
-        // toggle pause with P key or ESC
-        if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
-            paused = !paused;
-            // Automatically uncapture mouse when pausing, recapture when resuming
-            if (paused) {
+        // If inventory is open and ESC pressed, close inventory (don't toggle pause)
+        if (IsKeyPressed(KEY_ESCAPE) && inventory_is_big_open(player)) {
+            inventory_toggle_big(player);
+            // When closing inventory, recapture mouse if gameplay had it captured
+            if (inventory_is_big_open(player)) {
+                // still open -> ensure cursor enabled
                 mouse_captured = false;
                 EnableCursor();
-            } else if (mouse_captured) {
-                DisableCursor();
+            } else {
+                // closed -> restore capture state
+                if (!paused && mouse_captured) DisableCursor();
+            }
+        } else {
+            // toggle pause with P key or ESC (only if inventory wasn't handled above)
+            if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
+                paused = !paused;
+                // Automatically uncapture mouse when pausing, recapture when resuming
+                if (paused) {
+                    mouse_captured = false;
+                    EnableCursor();
+                } else if (mouse_captured) {
+                    DisableCursor();
+                }
             }
         }
 
-        // toggle mouse capture with F7
-        if (IsKeyPressed(KEY_F7)) {
-            mouse_captured = !mouse_captured;
-            if (mouse_captured) {
+        // Auto-manage mouse capture: captured only when gameplay (not paused/chat/inventory)
+        {
+            bool should_capture = (!paused && !chat_active && !inventory_is_big_open(player));
+            if (should_capture && !mouse_captured) {
+                mouse_captured = true;
                 DisableCursor();
-            } else {
+            } else if (!should_capture && mouse_captured) {
+                mouse_captured = false;
                 EnableCursor();
             }
         }
@@ -860,8 +916,8 @@ int b3dv_main(void)
             clouds_update(clouds, player->position);  // Update cloud positions
         }
 
-        // Handle player input only if chat is not active
-        if (!paused && !chat_active) {
+        // Handle player input only if chat is not active and inventory is not open
+        if (!paused && !chat_active && !inventory_is_big_open(player)) {
             player_move_input(player, forward, right, flight_enabled);
 
             // Handle block breaking (left click)
@@ -869,7 +925,10 @@ int b3dv_main(void)
                 int hit_x, hit_y, hit_z;
                 int adj_x, adj_y, adj_z;
                 if (raycast_block(world, camera, 10.0f, &hit_x, &hit_y, &hit_z, &adj_x, &adj_y, &adj_z)) {
-                    if (world_get_block(world, hit_x, hit_y, hit_z) != BLOCK_BEDROCK) {
+                    BlockType broken_block = world_get_block(world, hit_x, hit_y, hit_z);
+                    if (broken_block != BLOCK_BEDROCK && broken_block != BLOCK_AIR) {
+                        // Add broken block to inventory
+                        inventory_add_block(player, broken_block);
                         world_set_block(world, hit_x, hit_y, hit_z, BLOCK_AIR);
                     }
                 }
@@ -907,7 +966,12 @@ int b3dv_main(void)
 
                         // Only place if it doesn't intersect with player
                         if (!(vertical_overlap && horizontal_overlap)) {
-                            world_set_block(world, adj_x, adj_y, adj_z, player->selected_block);
+                            // Get block type from selected inventory slot only
+                            BlockType block_to_place = inventory_get_selected_block(player);
+                            // Only place if selected slot has blocks (not BLOCK_AIR)
+                            if (block_to_place != BLOCK_AIR && inventory_remove_block(player, block_to_place)) {
+                                world_set_block(world, adj_x, adj_y, adj_z, block_to_place);
+                            }
                         }
                     }
                 }
@@ -926,6 +990,30 @@ int b3dv_main(void)
                     has_highlighted_block = true;
                 } else {
                     has_highlighted_block = false;
+                }
+            }
+
+            // Handle inventory slot selection (keys 1-9)
+            if (IsKeyPressed(KEY_ONE)) player->selected_slot = 0;
+            if (IsKeyPressed(KEY_TWO)) player->selected_slot = 1;
+            if (IsKeyPressed(KEY_THREE)) player->selected_slot = 2;
+            if (IsKeyPressed(KEY_FOUR)) player->selected_slot = 3;
+            if (IsKeyPressed(KEY_FIVE)) player->selected_slot = 4;
+            if (IsKeyPressed(KEY_SIX)) player->selected_slot = 5;
+            if (IsKeyPressed(KEY_SEVEN)) player->selected_slot = 6;
+            if (IsKeyPressed(KEY_EIGHT)) player->selected_slot = 7;
+            if (IsKeyPressed(KEY_NINE)) player->selected_slot = 8;
+
+            // Handle big inventory toggle (I key)
+            if (IsKeyPressed(KEY_I)) {
+                inventory_toggle_big(player);
+                if (inventory_is_big_open(player)) {
+                    // Opened inventory: show cursor and stop mouse-look
+                    mouse_captured = false;
+                    EnableCursor();
+                } else {
+                    // Closed inventory: restore capture if gameplay expects it
+                    if (!paused && mouse_captured) DisableCursor();
                 }
             }
         }
@@ -1141,6 +1229,259 @@ int b3dv_main(void)
         DrawLineEx((Vector2){center_x, center_y - crosshair_size},
                    (Vector2){center_x, center_y + crosshair_size},
                    crosshair_thickness, BLACK);
+
+        // Draw inventory UI at bottom of screen
+        {
+            int slot_size = 50;
+            int slot_spacing = 10;
+            int inv_width = INVENTORY_SIZE * slot_size + (INVENTORY_SIZE - 1) * slot_spacing;
+            int inv_x = (GetScreenWidth() - inv_width) / 2;
+            int inv_y = GetScreenHeight() - slot_size - 30;
+
+            // Draw inventory background
+            DrawRectangle(inv_x - 5, inv_y - 5, inv_width + 10, slot_size + 10, (Color){0, 0, 0, 150});
+
+            // Draw each inventory slot
+            for (int i = 0; i < INVENTORY_SIZE; i++) {
+                int x = inv_x + i * (slot_size + slot_spacing);
+                int y = inv_y;
+
+                // Slot background
+                Color slot_bg = (Color){80, 80, 80, 200};
+                if (i == player->selected_slot) {
+                    slot_bg = (Color){100, 100, 100, 255};  // Highlight selected slot
+                }
+                DrawRectangle(x, y, slot_size, slot_size, slot_bg);
+
+                // Draw slot border
+                Color border_color = (i == player->selected_slot) ? (Color){255, 255, 255, 255} : (Color){100, 100, 100, 255};
+                DrawRectangleLines(x, y, slot_size, slot_size, border_color);
+
+                // Draw block indicator (colored square representing block type)
+                InventorySlot* slot = &player->inventory[i];
+                if (slot->count > 0) {
+                    // Map block type to color
+                    Color block_color;
+                    switch (slot->type) {
+                        case BLOCK_STONE: block_color = (Color){128, 128, 128, 255}; break;
+                        case BLOCK_DIRT: block_color = (Color){139, 69, 19, 255}; break;
+                        case BLOCK_GRASS: block_color = (Color){34, 139, 34, 255}; break;
+                        case BLOCK_SAND: block_color = (Color){194, 178, 128, 255}; break;
+                        case BLOCK_WOOD: block_color = (Color){139, 90, 43, 255}; break;
+                        case BLOCK_BEDROCK: block_color = (Color){64, 64, 64, 255}; break;
+                        case BLOCK_GLOWSTONE: block_color = (Color){255, 255, 0, 255}; break;
+                        default: block_color = (Color){200, 200, 200, 255}; break;
+                    }
+
+                    // Draw colored block indicator (smaller than slot)
+                    int block_indent = 10;
+                    DrawRectangle(x + block_indent, y + block_indent, slot_size - 2*block_indent, slot_size - 2*block_indent, block_color);
+
+                    // Draw item count
+                    char count_str[8];
+                    snprintf(count_str, sizeof(count_str), "%d", slot->count);
+                    int text_x = x + slot_size - MeasureTextEx(custom_font, count_str, 20, 1).x - 5;
+                    int text_y = y + slot_size - 20;
+                    DrawTextEx(custom_font, count_str, (Vector2){text_x, text_y}, 20, 1, WHITE);
+                }
+
+                // Draw slot number
+                char slot_num[4];
+                snprintf(slot_num, sizeof(slot_num), "%d", i + 1);
+                DrawTextEx(custom_font, slot_num, (Vector2){x + 3, y + 3}, 16, 1, (Color){150, 150, 150, 255});
+            }
+        }
+
+        // Draw big inventory UI when open
+        if (inventory_is_big_open(player)) {
+            int slot_size = 40;
+            int slot_spacing = 4;
+            int inv_width = BIG_INVENTORY_COLS * slot_size + (BIG_INVENTORY_COLS - 1) * slot_spacing;
+            int inv_height = (BIG_INVENTORY_ROWS + 1) * slot_size + (BIG_INVENTORY_ROWS) * slot_spacing;
+            int inv_x = (GetScreenWidth() - inv_width) / 2;
+            int inv_y = (GetScreenHeight() - inv_height) / 2;
+
+            // Draw background panel
+            DrawRectangle(inv_x - 10, inv_y - 10, inv_width + 20, inv_height + 20, (Color){50, 50, 50, 220});
+            DrawRectangleLines(inv_x - 10, inv_y - 10, inv_width + 20, inv_height + 20, (Color){100, 100, 100, 255});
+
+            // Draw title
+            DrawTextEx(custom_font, "Inventory", (Vector2){inv_x, inv_y - 35}, 24, 1, WHITE);
+
+            // Draw big inventory slots (4 rows x 9 columns)
+            for (int row = 0; row < BIG_INVENTORY_ROWS; row++) {
+                for (int col = 0; col < BIG_INVENTORY_COLS; col++) {
+                    int idx = row * BIG_INVENTORY_COLS + col;
+                    int x = inv_x + col * (slot_size + slot_spacing);
+                    int y = inv_y + row * (slot_size + slot_spacing);
+
+                    // Slot background
+                    DrawRectangle(x, y, slot_size, slot_size, (Color){80, 80, 80, 200});
+                    DrawRectangleLines(x, y, slot_size, slot_size, (Color){100, 100, 100, 255});
+
+                    // Draw block indicator
+                    InventorySlot* slot = &player->big_inventory[idx];
+                    if (slot->count > 0) {
+                        Color block_color;
+                        switch (slot->type) {
+                            case BLOCK_STONE: block_color = (Color){128, 128, 128, 255}; break;
+                            case BLOCK_DIRT: block_color = (Color){139, 69, 19, 255}; break;
+                            case BLOCK_GRASS: block_color = (Color){34, 139, 34, 255}; break;
+                            case BLOCK_SAND: block_color = (Color){194, 178, 128, 255}; break;
+                            case BLOCK_WOOD: block_color = (Color){139, 90, 43, 255}; break;
+                            case BLOCK_BEDROCK: block_color = (Color){64, 64, 64, 255}; break;
+                            case BLOCK_GLOWSTONE: block_color = (Color){255, 255, 0, 255}; break;
+                            default: block_color = (Color){200, 200, 200, 255}; break;
+                        }
+
+                        int block_indent = 8;
+                        DrawRectangle(x + block_indent, y + block_indent, slot_size - 2*block_indent, slot_size - 2*block_indent, block_color);
+
+                        // Draw item count
+                        char count_str[8];
+                        snprintf(count_str, sizeof(count_str), "%d", slot->count);
+                        int text_x = x + slot_size - MeasureTextEx(custom_font, count_str, 16, 1).x - 3;
+                        int text_y = y + slot_size - 16;
+                        DrawTextEx(custom_font, count_str, (Vector2){text_x, text_y}, 16, 1, WHITE);
+                    }
+                    // Handle mouse interaction for big inventory
+                    Vector2 mouse_pos = GetMousePosition();
+                    Rectangle slot_rect = (Rectangle){ (float)x, (float)y, (float)slot_size, (float)slot_size };
+                    if (CheckCollisionPointRec(mouse_pos, slot_rect)) {
+                        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                            // Click handling: pick up or place
+                            if (!player->holding_item) {
+                                // pick up entire stack
+                                if (slot->count > 0) {
+                                    player->held_slot = *slot;
+                                    player->holding_item = true;
+                                    slot->type = BLOCK_AIR;
+                                    slot->count = 0;
+                                }
+                            } else {
+                                // place or combine
+                                if (slot->count == 0) {
+                                    // place held into this slot
+                                    *slot = player->held_slot;
+                                    player->held_slot.type = BLOCK_AIR;
+                                    player->held_slot.count = 0;
+                                    player->holding_item = false;
+                                } else if (slot->type == player->held_slot.type) {
+                                    // merge as much as possible
+                                    int can_add = INVENTORY_MAX_STACK - slot->count;
+                                    int moved = (player->held_slot.count <= can_add) ? player->held_slot.count : can_add;
+                                    slot->count += moved;
+                                    player->held_slot.count -= moved;
+                                    if (player->held_slot.count <= 0) {
+                                        player->held_slot.type = BLOCK_AIR;
+                                        player->holding_item = false;
+                                    }
+                                } else {
+                                    // swap
+                                    InventorySlot tmp = *slot;
+                                    *slot = player->held_slot;
+                                    player->held_slot = tmp;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Draw hotbar at bottom of big inventory
+            int hotbar_y = inv_y + (BIG_INVENTORY_ROWS + 1) * (slot_size + slot_spacing) + 20;
+            for (int i = 0; i < INVENTORY_SIZE; i++) {
+                int x = inv_x + i * (slot_size + slot_spacing);
+                int y = hotbar_y;
+
+                // Slot background
+                Color slot_bg = (Color){80, 80, 80, 200};
+                if (i == player->selected_slot) {
+                    slot_bg = (Color){100, 100, 100, 255};
+                }
+                DrawRectangle(x, y, slot_size, slot_size, slot_bg);
+
+                // Draw slot border
+                Color border_color = (i == player->selected_slot) ? (Color){255, 255, 255, 255} : (Color){100, 100, 100, 255};
+                DrawRectangleLines(x, y, slot_size, slot_size, border_color);
+
+                // Draw block indicator
+                InventorySlot* slot = &player->inventory[i];
+                if (slot->count > 0) {
+                    Color block_color;
+                    switch (slot->type) {
+                        case BLOCK_STONE: block_color = (Color){128, 128, 128, 255}; break;
+                        case BLOCK_DIRT: block_color = (Color){139, 69, 19, 255}; break;
+                        case BLOCK_GRASS: block_color = (Color){34, 139, 34, 255}; break;
+                        case BLOCK_SAND: block_color = (Color){194, 178, 128, 255}; break;
+                        case BLOCK_WOOD: block_color = (Color){139, 90, 43, 255}; break;
+                        case BLOCK_BEDROCK: block_color = (Color){64, 64, 64, 255}; break;
+                        case BLOCK_GLOWSTONE: block_color = (Color){255, 255, 0, 255}; break;
+                        default: block_color = (Color){200, 200, 200, 255}; break;
+                    }
+
+                    int block_indent = 8;
+                    DrawRectangle(x + block_indent, y + block_indent, slot_size - 2*block_indent, slot_size - 2*block_indent, block_color);
+
+                    // Draw item count
+                    char count_str[8];
+                    snprintf(count_str, sizeof(count_str), "%d", slot->count);
+                    int text_x = x + slot_size - MeasureTextEx(custom_font, count_str, 16, 1).x - 3;
+                    int text_y = y + slot_size - 16;
+                    DrawTextEx(custom_font, count_str, (Vector2){text_x, text_y}, 16, 1, WHITE);
+                }
+
+                // Draw slot number
+                char slot_num[4];
+                snprintf(slot_num, sizeof(slot_num), "%d", i + 1);
+                DrawTextEx(custom_font, slot_num, (Vector2){x + 3, y + 3}, 14, 1, (Color){150, 150, 150, 255});
+            }
+
+            // Handle hotbar mouse interaction
+            {
+                Vector2 mouse_pos = GetMousePosition();
+                for (int i = 0; i < INVENTORY_SIZE; i++) {
+                    int x = inv_x + i * (slot_size + slot_spacing);
+                    int y = hotbar_y;
+                    Rectangle slot_rect = (Rectangle){ (float)x, (float)y, (float)slot_size, (float)slot_size };
+                    InventorySlot* slot = &player->inventory[i];
+                    if (CheckCollisionPointRec(mouse_pos, slot_rect) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        if (!player->holding_item) {
+                            if (slot->count > 0) {
+                                player->held_slot = *slot;
+                                player->holding_item = true;
+                                slot->type = BLOCK_AIR;
+                                slot->count = 0;
+                            }
+                        } else {
+                            if (slot->count == 0) {
+                                *slot = player->held_slot;
+                                player->held_slot.type = BLOCK_AIR;
+                                player->held_slot.count = 0;
+                                player->holding_item = false;
+                            } else if (slot->type == player->held_slot.type) {
+                                int can_add = INVENTORY_MAX_STACK - slot->count;
+                                int moved = (player->held_slot.count <= can_add) ? player->held_slot.count : can_add;
+                                slot->count += moved;
+                                player->held_slot.count -= moved;
+                                if (player->held_slot.count <= 0) {
+                                    player->held_slot.type = BLOCK_AIR;
+                                    player->holding_item = false;
+                                }
+                            } else {
+                                InventorySlot tmp = *slot;
+                                *slot = player->held_slot;
+                                player->held_slot = tmp;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Draw help text
+            // localized close help
+            DrawTextEx(custom_font, menu->game_text.inventory_close, (Vector2){inv_x, hotbar_y + slot_size + 10}, 16, 1, (Color){150, 150, 150, 255});
+        }
 
         // draw HUD based on mode
         if (hud_mode == 0) {
@@ -1411,7 +1752,7 @@ int b3dv_main(void)
                 // draw title
                 DrawTextEx(custom_font, menu->game_text.paused,
                            (Vector2){(screen_width - paused_size.x) / 2, screen_height / 2 - 120},
-                           64, 2, RED);
+                           64, 2, /*RED*/WHITE);
 
                 // button dimensions
                 int button_width = 450;

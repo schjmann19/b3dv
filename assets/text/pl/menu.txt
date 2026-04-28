@@ -15,6 +15,8 @@ Ostatni: %s | Fragmenty: %d
 WASD – poruszanie się, spacja – skakanie
 F3 – metryki wydajności, F2 – to, F4 – statystyki gracza
 F5 – informacje o systemie, F7 – przełączanie przechwytywania myszy
+Ekwipunek
+Naciśnij I, aby zamknąć
 Mysz – rozglądanie się
 ESC lub P – pauza
 WSTRZYMANO

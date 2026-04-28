@@ -68,6 +68,8 @@ typedef struct {
     char msg_out_of_bounds[256];
     char msg_setblock_usage[256];
     char msg_unknown_command[256];
+    char inventory_title[64];
+    char inventory_close[128];
 } GameText;
 
 // Menu system state

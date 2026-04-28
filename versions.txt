@@ -1,3 +1,6 @@
+0.0.18-beta:
+    inventory; /give command
+
 0.0.17-beta:
     drop windows support
     use semantic versioning

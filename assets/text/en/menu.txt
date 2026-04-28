@@ -34,3 +34,5 @@ Variant:
 Uncapped
 Press ESC to return to main menu
 See full info
+Inventory
+Press I to close

@@ -34,3 +34,5 @@ Variante:
 Unbegrenzt
 Drücke ESC, um zum Hauptmenü zurückzukehren
 Vollständige Info anzeigen
+Inventar
+Drücke I zum Schließen

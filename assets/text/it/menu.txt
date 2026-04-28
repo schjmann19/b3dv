@@ -15,7 +15,8 @@ Ultimo: %s | Frammenti: %d
 WASD per muoversi, Barra spaziatrice per saltare
 F3 per le metriche delle prestazioni, F2 per questo, f4 per le statistiche del giocatore
 F5 per le informazioni di sistema, F7 per attivare/disattivare l'acquisizione del mouse
-Mouse per guardarsi intorno
+ Inventario
+ Premi I per chiudere
 ESC o P per mettere in pausa
 IN PAUSA
 Riprendi
