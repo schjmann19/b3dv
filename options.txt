@@ -1,5 +1,5 @@
 # B3DV Game Settings
-render_distance=52.5
+render_distance=99.8
 max_fps=0 # 0 means unlimited
 language=en
 # do not change fonts manually i made a nice little interface for that :c

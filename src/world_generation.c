@@ -808,7 +808,7 @@ void world_generate_prism(World* world)
 }
 
 // Update loaded chunks based on player position and camera direction
-void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forward)
+void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forward, float render_distance_blocks)
 {
     if (!world) return;
 
@@ -832,7 +832,9 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     pthread_mutex_lock(&world->cache_mutex);
 
     // Load chunks within load distance, prioritizing forward direction
-    int load_dist = CHUNK_LOAD_DISTANCE;
+    // Compute chunk load distance from desired render distance in blocks
+    int load_dist = (int)ceilf(render_distance_blocks / (float)CHUNK_WIDTH);
+    if (load_dist < 1) load_dist = 1;
     for (int cx = player_chunk_x - load_dist; cx <= player_chunk_x + load_dist; cx++) {
         for (int cy = player_chunk_y - 1; cy <= player_chunk_y + 1; cy++) {
             for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
@@ -899,7 +901,7 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     pthread_mutex_lock(&world->cache_mutex);
 
     // Unload chunks that are too far away or behind the player
-    int unload_dist = CHUNK_LOAD_DISTANCE + 1;
+    int unload_dist = load_dist + 1;
     int i = 0;
 
     // Throttle unloads to avoid stuttering when crossing chunk boundaries.
@@ -1531,7 +1533,69 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
                     temp_blocks[temp_count].y = y;
                     temp_blocks[temp_count].z = z;
                     temp_blocks[temp_count].exposed_faces = exposed_faces;
-                    temp_blocks[temp_count].light_level = 0;  // Unused, rendering calculates per-face
+                    temp_blocks[temp_count].light_level = 0;  // preserved for compatibility
+
+                    // Compute per-face baked lighting (use max of skylight and blocklight at adjacent air block)
+                    for (int face = 0; face < 6; face++) {
+                        // default to zero light
+                        temp_blocks[temp_count].face_light[face] = 0;
+                    }
+
+                    // +X
+                    if (exposed_faces & (1 << 0)) {
+                        int nx = world_x + 1;
+                        int ny = world_y;
+                        int nz = world_z;
+                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
+                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
+                        temp_blocks[temp_count].face_light[0] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    // -X
+                    if (exposed_faces & (1 << 1)) {
+                        int nx = world_x - 1;
+                        int ny = world_y;
+                        int nz = world_z;
+                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
+                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
+                        temp_blocks[temp_count].face_light[1] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    // +Y
+                    if (exposed_faces & (1 << 2)) {
+                        int nx = world_x;
+                        int ny = world_y + 1;
+                        int nz = world_z;
+                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
+                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
+                        temp_blocks[temp_count].face_light[2] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    // -Y
+                    if (exposed_faces & (1 << 3)) {
+                        int nx = world_x;
+                        int ny = world_y - 1;
+                        int nz = world_z;
+                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
+                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
+                        temp_blocks[temp_count].face_light[3] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    // +Z
+                    if (exposed_faces & (1 << 4)) {
+                        int nx = world_x;
+                        int ny = world_y;
+                        int nz = world_z + 1;
+                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
+                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
+                        temp_blocks[temp_count].face_light[4] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    // -Z
+                    if (exposed_faces & (1 << 5)) {
+                        int nx = world_x;
+                        int ny = world_y;
+                        int nz = world_z - 1;
+                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
+                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
+                        temp_blocks[temp_count].face_light[5] = (skyl > blockl) ? skyl : blockl;
+                    }
+
                     temp_count++;
                 }
             }

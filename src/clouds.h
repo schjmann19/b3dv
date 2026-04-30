@@ -10,6 +10,7 @@ typedef struct {
     float cloud_spacing;  // Distance between cloud blocks
     float cloud_size;     // Size of each cloud segment
     Vector2 grid_offset;  // Offset for smooth scrolling
+    Vector2 anchor_pos;   // World X/Z position clouds are anchored to (player)
     Texture2D cloud_texture;  // Cloud image texture
     bool texture_loaded;  // Whether texture was successfully loaded
 } CloudSystem;

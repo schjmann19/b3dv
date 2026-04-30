@@ -693,3 +693,11 @@ asdsadsa
 /give stone 60
 /give wood 65
 /give wood 64
+/tp 200 70 200
+/tp 200 200 200
+/fly
+/fly enable
+/give glowstone 10
+/fly enable
+/fly enable
+/fly enable

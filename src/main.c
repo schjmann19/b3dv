@@ -912,7 +912,8 @@ int b3dv_main(void)
         // Update physics and world always (unless game is paused), even if chat is active
         if (!paused) {
             player_update(player, world, dt, flight_enabled);
-            world_update_chunks(world, player->position, camera_forward);  // Load/unload chunks based on player position and camera direction
+            // Pass current render distance (in blocks) so chunk loading scales with it
+            world_update_chunks(world, player->position, camera_forward, menu->render_distance);  // Load/unload chunks based on player position and camera direction
             clouds_update(clouds, player->position);  // Update cloud positions
         }
 
@@ -1184,7 +1185,7 @@ int b3dv_main(void)
                                     wire_color.a = (unsigned char)(255 * (1.0f - fog_factor));  // Fade out alpha too
                                 }
                         // draw only visible faces
-                        draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, visible_blocks_copy[i].light_level);
+                        draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, visible_blocks_copy[i].face_light);
                         blocks_rendered++;
                     }
 

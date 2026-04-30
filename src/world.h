@@ -44,6 +44,7 @@ typedef struct {
     int x, y, z;  // Local chunk coordinates
     uint8_t exposed_faces;  // Bitmask of which faces are exposed (bits 0-5 = faces 0-5)
     uint8_t light_level;  // Sky light level (0-15, like Minecraft)
+    uint8_t face_light[6]; // Per-face light levels (0-15) baked at meshing time
 } CachedVisibleBlock;
 
 // Chunk system for infinite worlds
@@ -162,7 +163,7 @@ void world_system_init(void);
 bool world_save(World* world, const char* world_name);
 bool world_load(World* world, const char* world_name);
 bool world_save_chunk(Chunk* chunk, const char* world_name);  // Save a single chunk to disk
-void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forward);
+void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forward, float render_distance_blocks);
 Chunk* world_get_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 void world_set_block(World* world, int x, int y, int z, BlockType type);
 BlockType world_get_block(World* world, int x, int y, int z);

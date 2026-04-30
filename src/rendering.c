@@ -146,7 +146,7 @@ bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forwa
 }
 
 // draw only the visible faces of a cube (faces pointing toward camera and not occluded by neighbors)
-void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces, uint8_t light_level)
+void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces, uint8_t face_light[6])
 {
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
@@ -203,22 +203,10 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     // Instead of averaging all faces, each face gets its own neighbor's light
     Color face_colors[6];
     for (int i = 0; i < 6; i++) {
-        // Get neighbor position for this face
-        int neighbor_x = block_x, neighbor_y = block_y, neighbor_z = block_z;
-        if (i == 0) neighbor_x++;        // +X
-        else if (i == 1) neighbor_x--;   // -X
-        else if (i == 2) neighbor_y++;   // +Y (top)
-        else if (i == 3) neighbor_y--;   // -Y (bottom)
-        else if (i == 4) neighbor_z++;   // +Z
-        else if (i == 5) neighbor_z--;   // -Z
-
-        // Get this face's neighbor light value (combine skylight and blocklight)
-        uint8_t skylight = world_get_skylight(world, neighbor_x, neighbor_y, neighbor_z);
-        uint8_t blocklight = world_get_blocklight(world, neighbor_x, neighbor_y, neighbor_z);
-        uint8_t face_light = (skylight > blocklight) ? skylight : blocklight;
-
+        // Use pre-baked per-face light provided by meshing step
+        uint8_t fl = face_light[i];
         // Convert to brightness: 0=dark(0.3), 15=bright(1.0)
-        float face_brightness = face_shading[i] * (0.3f + (face_light / 15.0f) * 0.7f);
+        float face_brightness = face_shading[i] * (0.3f + (fl / 15.0f) * 0.7f);
 
         face_colors[i].r = (unsigned char)(color.r * face_brightness);
         face_colors[i].g = (unsigned char)(color.g * face_brightness);

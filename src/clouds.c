@@ -11,6 +11,7 @@ CloudSystem* clouds_create(const char* cloud_image_path) {
         clouds->cloud_spacing = 64.0f;    // Space between cloud centers
         clouds->cloud_size = 64.0f;       // Same as spacing so clouds touch seamlessly
         clouds->grid_offset = (Vector2){0.0f, 0.0f};
+        clouds->anchor_pos = (Vector2){0.0f, 0.0f};
         clouds->texture_loaded = false;
 
         // Try to load cloud image
@@ -34,10 +35,11 @@ void clouds_free(CloudSystem* clouds) {
 }
 
 void clouds_update(CloudSystem* clouds, Vector3 player_pos) {
-    // Move clouds relative to player for Minecraft-like parallax effect
-    // Clouds move at 1/10th the player speed for a subtle drift
-    clouds->grid_offset.x = (player_pos.x / clouds->cloud_spacing) * 0.1f;
-    clouds->grid_offset.y = (player_pos.z / clouds->cloud_spacing) * 0.1f;
+    // Anchor clouds to the player's world X/Z so they appear static above the player
+    if (clouds) {
+        clouds->anchor_pos.x = player_pos.x;
+        clouds->anchor_pos.y = player_pos.z;
+    }
 }
 
 void clouds_draw(CloudSystem* clouds, Vector3 camera_pos, Vector3 camera_offset) {
@@ -50,10 +52,10 @@ void clouds_draw(CloudSystem* clouds, Vector3 camera_pos, Vector3 camera_offset)
 
     BeginBlendMode(BLEND_ALPHA);
 
-    // Calculate which tiles to render based on camera position
+    // Calculate which tiles to render based on anchored position (player)
     float tile_size = 512.0f;  // Size of each cloud texture tile in world units
-    int center_tile_x = (int)floorf(camera_pos.x / tile_size);
-    int center_tile_z = (int)floorf(camera_pos.z / tile_size);
+    int center_tile_x = (int)floorf(clouds->anchor_pos.x / tile_size);
+    int center_tile_z = (int)floorf(clouds->anchor_pos.y / tile_size);
 
     // Render a 3x3 grid of tiles around the camera
     for (int tile_dx = -1; tile_dx <= 1; tile_dx++) {
@@ -120,5 +122,6 @@ void clouds_draw(CloudSystem* clouds, Vector3 camera_pos, Vector3 camera_offset)
 void clouds_reset(CloudSystem* clouds) {
     if (clouds) {
         clouds->grid_offset = (Vector2){0.0f, 0.0f};
+        clouds->anchor_pos = (Vector2){0.0f, 0.0f};
     }
 }
