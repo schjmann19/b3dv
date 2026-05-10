@@ -29,35 +29,33 @@ pub fn build(b: *std.Build) void {
         "src/clouds.c",
     };
 
-    exe.addCSourceFiles(.{
-        .root = b.path("."),
+    mod.addCSourceFiles(.{
         .files = sources,
         .flags = getCFlags(optimize),
     });
 
-    exe.addIncludePath(b.path("src"));
+    mod.addIncludePath(b.path("src"));
 
-    exe.linkLibC();
-    exe.linkSystemLibrary("raylib");
+    mod.linkSystemLibrary("raylib", .{});
 
     switch (target.result.os.tag) {
         .linux => {
-            exe.linkSystemLibrary("GL");
-            exe.linkSystemLibrary("X11");
-            exe.linkSystemLibrary("pthread");
-            exe.linkSystemLibrary("dl");
-            exe.linkSystemLibrary("rt");
+            mod.linkSystemLibrary("GL", .{});
+            mod.linkSystemLibrary("X11", .{});
+            mod.linkSystemLibrary("pthread", .{});
+            mod.linkSystemLibrary("dl", .{});
+            mod.linkSystemLibrary("rt", .{});
         },
         .macos => {
-            exe.linkFramework("OpenGL");
-            exe.linkFramework("Cocoa");
-            exe.linkFramework("IOKit");
-            exe.linkFramework("CoreVideo");
+            mod.linkFramework("OpenGL", .{});
+            mod.linkFramework("Cocoa", .{});
+            mod.linkFramework("IOKit", .{});
+            mod.linkFramework("CoreVideo", .{});
         },
         else => {},
     }
 
-    exe.linkSystemLibrary("m");
+    mod.linkSystemLibrary("m", .{});
 
     b.installArtifact(exe);
 

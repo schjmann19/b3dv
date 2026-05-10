@@ -47,6 +47,22 @@ typedef struct {
     uint8_t face_light[6]; // Per-face light levels (0-15) baked at meshing time
 } CachedVisibleBlock;
 
+// Merged quad from greedy meshing - represents a rectangular face region
+typedef struct {
+    int x, y, z;        // World position of one corner of the quad
+    int w, h;           // Width and height in blocks
+    int face;           // Face direction (0-5)
+    uint8_t light;      // Light level for this quad
+    BlockType type;     // Block type (for color/texture)
+} MergedQuad;
+
+// Chunk mesh data - holds merged quads per face direction
+typedef struct {
+    MergedQuad* quads[6];       // Merged quads for each face direction
+    int quad_count[6];          // Number of quads per face
+    int quad_capacity[6];       // Allocated capacity per face
+} MergedMesh;
+
 // Chunk system for infinite worlds
 #define CHUNK_WIDTH 32
 #define CHUNK_HEIGHT 64
@@ -99,6 +115,9 @@ typedef struct {
     int visible_count[2];  // Number of blocks in each buffer
     int visible_capacity[2];  // Allocated capacity for each buffer
     volatile int active_mesh;  // Index of which buffer is currently being rendered (0 or 1), volatile for inter-thread visibility
+    // Greedy meshed geometry - merged quads instead of individual blocks
+    MergedMesh* merged_mesh[2];  // Double-buffered merged quads (0 or 1)
+    volatile int active_merged_mesh;  // Which merged mesh buffer is active
     pthread_mutex_t mesh_swap_mutex;  // Protects mesh swap to ensure atomicity
     pthread_mutex_t mutex;  // Protects this chunk during worker processing
 } Chunk;

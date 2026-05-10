@@ -142,6 +142,9 @@ int b3dv_main(void)
     char cached_gpu[128] = {0};
     char cached_kernel[128] = {0};
 
+    // Wireframe rendering mode (toggled with F7)
+    bool show_wireframe = false;
+
     // Flight system
     bool flight_enabled = false;
 
@@ -787,6 +790,9 @@ int b3dv_main(void)
                 get_kernel_info(cached_kernel, sizeof(cached_kernel));
             }
         }
+        if (IsKeyPressed(KEY_F7)) {
+            show_wireframe = !show_wireframe;  // Toggle wireframe rendering
+        }
         prev_hud_mode = hud_mode;
 
         // If inventory is open and ESC pressed, close inventory (don't toggle pause)
@@ -1185,7 +1191,7 @@ int b3dv_main(void)
                                     wire_color.a = (unsigned char)(255 * (1.0f - fog_factor));  // Fade out alpha too
                                 }
                         // draw only visible faces
-                        draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, visible_blocks_copy[i].face_light);
+                        draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, visible_blocks_copy[i].face_light, show_wireframe);
                         blocks_rendered++;
                     }
 

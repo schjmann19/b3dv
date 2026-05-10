@@ -146,7 +146,7 @@ bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forwa
 }
 
 // draw only the visible faces of a cube (faces pointing toward camera and not occluded by neighbors)
-void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces, uint8_t face_light[6])
+void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World* world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces, uint8_t face_light[6], bool show_wireframe)
 {
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
@@ -247,6 +247,34 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
 
     if (has_texture) {
         rlSetTexture(0);
+    }
+
+    // Draw wireframe if enabled
+    if (show_wireframe) {
+        for (int face = 0; face < 6; face++) {
+            // Skip faces that are not exposed or face away from camera
+            if (!(exposed_faces & (1 << face))) {
+                continue;  // Face is occluded by neighbor
+            }
+
+            // Backface culling: skip faces facing away from camera
+            float dot = to_cam.x * face_normals[face].x + to_cam.y * face_normals[face].y + to_cam.z * face_normals[face].z;
+            if (dot <= 0.0f) {
+                continue;  // Face points away from camera
+            }
+
+            // Draw wireframe edges for this face (quad outline)
+            // Draw 4 edges of the quad
+            Vector3* verts = face_positions[face];
+            // Edge 0-1
+            DrawLine3D(verts[0], verts[1], wire_color);
+            // Edge 1-2
+            DrawLine3D(verts[1], verts[2], wire_color);
+            // Edge 2-3
+            DrawLine3D(verts[2], verts[3], wire_color);
+            // Edge 3-0
+            DrawLine3D(verts[3], verts[0], wire_color);
+        }
     }
 }
 
