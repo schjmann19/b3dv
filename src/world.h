@@ -6,6 +6,9 @@
 #include <pthread.h>
 #include "raylib.h"
 
+// Forward declare Player so World can reference the active player without including player.h
+struct Player;
+
 // Block types
 typedef enum {
     BLOCK_AIR = 0,
@@ -168,6 +171,10 @@ typedef struct {
     pthread_t worker_thread;  // Worker thread handle
     bool worker_running;  // Whether worker thread is active
     pthread_mutex_t cache_mutex;  // Protects chunk_cache array from realloc while worker accesses it
+    // Pointer to the active player when in-game (used for saving player data)
+    void* current_player;
+    // Cached player nickname (from players.txt); used for chat display
+    char player_nickname[64];
 } World;
 
 // Function declarations
@@ -201,5 +208,7 @@ void worker_queue_chunk_save(World* world, Chunk* chunk);  // Add chunk to worke
 void worker_flush_queue(World* world);  // Wait for all worker queue jobs to complete
 void worker_shutdown(World* world);  // Cleanly shut down worker thread
 void worker_init(World* world);  // Initialize worker thread system
+// Apply saved player data from world players file into a runtime Player instance
+bool world_apply_players_to(World* world, void* player);
 
 #endif

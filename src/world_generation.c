@@ -7,6 +7,10 @@
 
 #include "world.h"
 #include "raylib.h"
+#include "player.h"
+
+// forward declare helper to write players file (defined later)
+static void write_players_file(World* world, void* player_ptr, const char* world_name);
 
 // ============================================================================
 // IMPROVED SEEDED RANDOM NUMBER GENERATION & NOISE FUNCTIONS
@@ -236,6 +240,12 @@ World* world_create(void)
     // Initialize worker thread system
     pthread_mutex_init(&world->cache_mutex, NULL);  // Initialize cache mutex before worker starts
     worker_init(world);
+
+    // No player attached initially
+    world->current_player = NULL;
+    // Default player nickname
+    strncpy(world->player_nickname, "Player", sizeof(world->player_nickname)-1);
+    world->player_nickname[sizeof(world->player_nickname)-1] = '\0';
 
     return world;
 }
@@ -1058,11 +1068,12 @@ bool world_save(World* world, const char* world_name)
         fprintf(metadata_file, "seed=%lu\n", world->seed);
         fprintf(metadata_file, "last_saved=%s\n", time_str);
         fprintf(metadata_file, "chunk_count=%d\n", world->chunk_cache.chunk_count);
-        fprintf(metadata_file, "player_x=%.6f\n", world->last_player_position.x);
-        fprintf(metadata_file, "player_y=%.6f\n", world->last_player_position.y);
-        fprintf(metadata_file, "player_z=%.6f\n", world->last_player_position.z);
+        // Player position is stored per-world in players.txt (TOML) now
         fclose(metadata_file);
     }
+
+    // Prefer player position from players.txt (players file supersedes world.txt)
+    world_apply_players_to(world, NULL);
 
     // Save each loaded chunk
     for (int i = 0; i < world->chunk_cache.chunk_count; i++) {
@@ -1086,6 +1097,269 @@ bool world_save(World* world, const char* world_name)
 
         fclose(file);
         chunk->modified = false;  // Mark chunk as saved
+    }
+
+    // Always write players.txt for this world (store last position and inventory if available)
+    write_players_file(world, world->current_player, world_name);
+
+    return true;
+}
+
+// Helper: map BlockType to string id used in players file
+static const char* block_type_to_id(BlockType t)
+{
+    switch (t) {
+        case BLOCK_STONE: return "block_stone";
+        case BLOCK_DIRT: return "block_dirt";
+        case BLOCK_GRASS: return "block_grass";
+        case BLOCK_SAND: return "block_sand";
+        case BLOCK_WOOD: return "block_wood";
+        case BLOCK_BEDROCK: return "block_bedrock";
+        case BLOCK_GLOWSTONE: return "block_glowstone";
+        case BLOCK_AIR: default: return "block_air";
+    }
+}
+
+// Helper: map id string to BlockType
+static BlockType block_id_to_type(const char* id)
+{
+    if (!id) return BLOCK_AIR;
+    if (strcmp(id, "block_stone") == 0) return BLOCK_STONE;
+    if (strcmp(id, "block_dirt") == 0) return BLOCK_DIRT;
+    if (strcmp(id, "block_grass") == 0) return BLOCK_GRASS;
+    if (strcmp(id, "block_sand") == 0) return BLOCK_SAND;
+    if (strcmp(id, "block_wood") == 0) return BLOCK_WOOD;
+    if (strcmp(id, "block_bedrock") == 0) return BLOCK_BEDROCK;
+    if (strcmp(id, "block_glowstone") == 0) return BLOCK_GLOWSTONE;
+    return BLOCK_AIR;
+}
+
+// Write the current player's data (position + inventory) into players.txt in the world folder
+static void write_players_file(World* world, void* player_ptr, const char* world_name)
+{
+    if (!world || !world_name) return;
+    Player* player = (Player*)player_ptr;
+    char path[512];
+    snprintf(path, sizeof(path), "./worlds/%s/players.txt", world_name);
+    FILE* f = fopen(path, "w");
+    if (!f) return;
+
+    // Use a simple fixed UID for single-player for now
+    const char* uid = "00000001";
+    time_t now = time(NULL);
+    fprintf(f, "[player.%s]\n", uid);
+    // Write nickname from world if set, otherwise default to "Player"
+    const char* nick_to_write = (world->player_nickname[0] != '\0') ? world->player_nickname : "Player";
+    fprintf(f, "nickname = \"%s\"\n", nick_to_write);
+    fprintf(f, "last_ip = \"127.0.0.1\"\n");
+    fprintf(f, "last_login = %lu\n", (unsigned long)now);
+    // Save position: prefer live player's position if available, otherwise use world's last_player_position
+    Vector3 pos = player ? player->position : world->last_player_position;
+    fprintf(f, "x = %.6f\n", pos.x);
+    fprintf(f, "y = %.6f\n", pos.y);
+    fprintf(f, "z = %.6f\n", pos.z);
+
+    fprintf(f, "\n[slots]\n\n");
+    // Total 45 slots: 0-8 hotbar, 9-44 big inventory
+    if (player) {
+        for (int i = 0; i < 45; i++) {
+            InventorySlot slot;
+            if (i < 9) slot = player->inventory[i];
+            else slot = player->big_inventory[i - 9];
+            if (slot.type != BLOCK_AIR && slot.count > 0) {
+                fprintf(f, "[slots.%d]\n", i);
+                fprintf(f, "id = \"%s\"\n", block_type_to_id(slot.type));
+                fprintf(f, "count = %d\n\n", slot.count);
+            }
+        }
+    }
+
+    fclose(f);
+}
+
+// Read players.txt and apply found player's position into world->last_player_position
+// and (optionally) apply inventory into a provided Player* when not NULL.
+bool world_apply_players_to(World* world, void* player_ptr)
+{
+    if (!world) return false;
+    Player* player = (Player*)player_ptr;
+    char path[512];
+    snprintf(path, sizeof(path), "./worlds/%s/players.txt", world->world_name);
+    FILE* f = fopen(path, "r");
+    if (!f) return false;
+
+    char line[512];
+    int current_slot = -1;
+    bool in_player_section = false;
+    while (fgets(line, sizeof(line), f)) {
+        // Trim leading whitespace
+        char* p = line;
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+        if (*p == '\0' || *p == '\n' || *p == '#') continue;
+
+        if (p[0] == '[') {
+            // Section header
+            if (strncmp(p, "[player.", 8) == 0) {
+                in_player_section = true;
+                current_slot = -1;
+                continue;
+            }
+            // entering any other section clears player section flag
+            in_player_section = false;
+            // Slots header like [slots] or [slots.N]
+            if (strncmp(p, "[slots.", 7) == 0) {
+                // parse number between '.' and ']'
+                char* dot = strchr(p, '.');
+                char* endb = strchr(p, ']');
+                if (dot && endb && endb > dot+1) {
+                    char numbuf[16] = {0};
+                    int len = endb - (dot+1);
+                    if (len > 0 && len < (int)sizeof(numbuf)) {
+                        strncpy(numbuf, dot+1, len);
+                        numbuf[len] = '\0';
+                        int idx = atoi(numbuf);
+                        current_slot = idx;
+                    } else current_slot = -1;
+                } else current_slot = -1;
+                continue;
+            }
+            // other sections - ignore
+            current_slot = -1;
+            continue;
+        }
+
+        // Parse key = value
+        char key[128];
+        char val[256];
+        // If in player section, look for nickname
+        if (in_player_section) {
+            // look for nickname = "..."
+            const char* nick_key = "nickname";
+            if (strncmp(p, nick_key, strlen(nick_key)) == 0) {
+                char* q1 = strchr(p, '"');
+                if (q1) {
+                    char* q2 = strchr(q1 + 1, '"');
+                    if (q2) {
+                        size_t len = q2 - (q1 + 1);
+                        if (len >= sizeof(world->player_nickname)) len = sizeof(world->player_nickname)-1;
+                        memcpy(world->player_nickname, q1 + 1, len);
+                        world->player_nickname[len] = '\0';
+                    }
+                }
+                continue;
+            }
+        }
+        if (sscanf(p, "x = %f", &world->last_player_position.x) == 1) continue;
+        if (sscanf(p, "y = %f", &world->last_player_position.y) == 1) continue;
+        if (sscanf(p, "z = %f", &world->last_player_position.z) == 1) continue;
+
+        if (current_slot >= 0) {
+            // parse id (quoted string) or count
+            char* q1 = strchr(p, '"');
+            if (q1) {
+                char* q2 = strchr(q1 + 1, '"');
+                if (q2) {
+                    size_t len = q2 - (q1 + 1);
+                    if (len < sizeof(val)) {
+                        memcpy(val, q1 + 1, len);
+                        val[len] = '\0';
+                        BlockType t = block_id_to_type(val);
+                        if (player) {
+                            if (current_slot < 9) {
+                                player->inventory[current_slot].type = t;
+                            } else if (current_slot < 45) {
+                                player->big_inventory[current_slot - 9].type = t;
+                            }
+                        }
+                    }
+                }
+            } else {
+                // try parse count
+                int count_val;
+                if (sscanf(p, "count = %d", &count_val) == 1) {
+                    if (player) {
+                        if (current_slot < 9) player->inventory[current_slot].count = count_val;
+                        else if (current_slot < 45) player->big_inventory[current_slot - 9].count = count_val;
+                    }
+                }
+            }
+        }
+    }
+
+    // Reparse to read slot counts properly (two-pass: first set types, second set counts)
+    rewind(f);
+    current_slot = -1;
+    while (fgets(line, sizeof(line), f)) {
+        char* p = line;
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+        if (*p == '\0' || *p == '\n' || *p == '#') continue;
+        if (p[0] == '[') {
+            if (strncmp(p, "[player.", 8) == 0) { current_slot = -1; continue; }
+            if (strncmp(p, "[slots.", 7) == 0) {
+                char* dot = strchr(p, '.');
+                char* endb = strchr(p, ']');
+                if (dot && endb && endb > dot+1) {
+                    char numbuf[16] = {0};
+                    int len = endb - (dot+1);
+                    if (len > 0 && len < (int)sizeof(numbuf)) {
+                        strncpy(numbuf, dot+1, len);
+                        numbuf[len] = '\0';
+                        current_slot = atoi(numbuf);
+                    } else current_slot = -1;
+                } else current_slot = -1;
+                continue;
+            }
+            current_slot = -1; continue;
+        }
+
+        if (current_slot >= 0) {
+            char idbuf[256];
+            // parse quoted id first
+            char* q1 = strchr(p, '"');
+            if (q1) {
+                char* q2 = strchr(q1 + 1, '"');
+                if (q2) {
+                    int len = (int)(q2 - (q1 + 1));
+                    if (len < (int)sizeof(idbuf)) {
+                        memcpy(idbuf, q1 + 1, len);
+                        idbuf[len] = '\0';
+                        BlockType t = block_id_to_type(idbuf);
+                        if (current_slot < 9) {
+                            if (player) player->inventory[current_slot].type = t;
+                        } else if (current_slot < 45) {
+                            if (player) player->big_inventory[current_slot - 9].type = t;
+                        }
+                    }
+                }
+            } else {
+                int countv;
+                if (sscanf(p, "count = %d", &countv) == 1) {
+                    if (current_slot < 9) {
+                        if (player) player->inventory[current_slot].count = countv;
+                    } else if (current_slot < 45) {
+                        if (player) player->big_inventory[current_slot - 9].count = countv;
+                    }
+                }
+            }
+        } else {
+            // parse top-level x y z again
+            float fx, fy, fz;
+            if (sscanf(p, "x = %f", &fx) == 1) world->last_player_position.x = fx;
+            if (sscanf(p, "y = %f", &fy) == 1) world->last_player_position.y = fy;
+            if (sscanf(p, "z = %f", &fz) == 1) world->last_player_position.z = fz;
+        }
+    }
+
+    fclose(f);
+
+    // Ensure player arrays have defaults for empty slots
+    if (player) {
+        for (int i = 0; i < INVENTORY_SIZE; i++) {
+            if (player->inventory[i].count <= 0) player->inventory[i].type = BLOCK_AIR;
+        }
+        for (int i = 0; i < BIG_INVENTORY_SIZE; i++) {
+            if (player->big_inventory[i].count <= 0) player->big_inventory[i].type = BLOCK_AIR;
+        }
     }
 
     return true;
@@ -1122,7 +1396,7 @@ bool world_load(World* world, const char* world_name)
     world->last_loaded_chunk_y = INT32_MAX;
     world->last_loaded_chunk_z = INT32_MAX;
 
-    // Load player position from metadata if it exists
+    // Default player position (used only if players.txt missing)
     world->last_player_position = (Vector3){8.0f, 20.0f, 8.0f};  // Default position
     char metadata_path[512];
     snprintf(metadata_path, sizeof(metadata_path), "./worlds/%s/world.txt", world_name);
@@ -1130,20 +1404,16 @@ bool world_load(World* world, const char* world_name)
     if (metadata_file) {
         char line[256];
         while (fgets(line, sizeof(line), metadata_file)) {
-            float x, y, z;
             uint64_t seed_val;
-            if (sscanf(line, "player_x=%f", &x) == 1) {
-                world->last_player_position.x = x;
-            } else if (sscanf(line, "player_y=%f", &y) == 1) {
-                world->last_player_position.y = y;
-            } else if (sscanf(line, "player_z=%f", &z) == 1) {
-                world->last_player_position.z = z;
-            } else if (sscanf(line, "seed=%lu", &seed_val) == 1) {
+            if (sscanf(line, "seed=%lu", &seed_val) == 1) {
                 world->seed = seed_val;
             }
         }
         fclose(metadata_file);
     }
+
+    // If players.txt exists, prefer player position from there (players file supersedes world.txt)
+    world_apply_players_to(world, NULL);
 
     // Try to load initial chunks from disk
     // Only generate minimal spawn area to avoid startup lag
