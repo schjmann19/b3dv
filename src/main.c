@@ -90,12 +90,42 @@ static Font load_font_by_name(const char* font_name)
 }
 
 int b3dv_main(int argc, char **argv)
-{
-    if (argc > 1 && strcmp(argv[1], "--help") == 0 ||
-       (argc > 1 && strcmp(argv[1], "-h") == 0)) {
-            puts("help asked"); // now we have arguments
+{   
+    // if no args, print version and help
+    if (argc == 1) {
+        puts("b3dv version 0.0.18-beta");
+        puts("Usage: b3dv [--help|-h] - help");
+        puts("       b3dv [--version|-v] - version info");
+        puts("       b3dv run - launch game");
         return 0;
     }
+
+    // help argument
+    if (argc > 1 && strcmp(argv[1], "--help") == 0 ||
+       (argc > 1 && strcmp(argv[1], "-h") == 0)) {
+            puts("help asked");
+        return 0;
+    }
+
+    // version argument
+    if (argc > 1 && strcmp(argv[1], "--version") == 0 ||
+       (argc > 1 && strcmp(argv[1], "-v") == 0)) {
+            puts("b3dv version 0.0.18-beta");
+            puts("By Jimena Neumann; BSD-3-Clause License");
+            #ifdef DEBUG
+            puts("compiled on " __DATE__ " at " __TIME__);
+            #endif
+        return 0;
+    }
+
+    // run
+    if (argc > 1 && strcmp(argv[1], "run") == 0) {
+        // continue to launch game
+    } else {
+        fprintf(stderr, "Unknown argument: %s\n", argv[1]);
+        return 1;
+    }
+
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.18-beta");
 

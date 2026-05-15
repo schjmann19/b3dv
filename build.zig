@@ -74,6 +74,7 @@ fn getCFlags(optimize: std.builtin.OptimizeMode) []const []const u8 {
             "-Wpedantic",
             "-O0",
             "-g",
+            "-DDEBUG",
         },
         .ReleaseSafe => &.{
             "-std=c11",
