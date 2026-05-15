@@ -166,6 +166,7 @@ int b3dv_main(int argc, char **argv)
     // HUD mode (0 = default, 1 = performance metrics 2 = player, 3 = system info)
     int hud_mode = 0;
     int prev_hud_mode = -1;  // Track previous mode to detect changes
+    bool hud_visible = true;  // Toggle HUD visibility with F1
     char cached_cpu[128] = {0};
     char cached_gpu[128] = {0};
     char cached_kernel[128] = {0};
@@ -799,6 +800,10 @@ int b3dv_main(int argc, char **argv)
             }
         } else {
             // Only process game keys when chat is not active
+        // HUD visibility toggle with F1
+        if (IsKeyPressed(KEY_F1)) {
+            hud_visible = !hud_visible;  // Toggle HUD on/off
+        }
             // HUD mode toggle with F2/F3/F4/F5
         if (IsKeyPressed(KEY_F2)) {
             hud_mode = 0;  // default HUD
@@ -1519,7 +1524,7 @@ int b3dv_main(int argc, char **argv)
         }
 
         // draw HUD based on mode
-        if (hud_mode == 0) {
+        if (hud_visible && hud_mode == 0) {
             // default HUD
             DrawTextEx(custom_font, menu->game_text.move_controls, (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, menu->game_text.metrics_help, (Vector2){10, 50}, 32, 1, BLACK);
@@ -1537,7 +1542,7 @@ int b3dv_main(int argc, char **argv)
             DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
             DrawTextEx(custom_font, menu->game_text.version, (Vector2){10, 290}, 32, 1, DARKGRAY);
-        } else if (hud_mode == 1) {
+        } else if (hud_visible && hud_mode == 1) {
             // performance metrics HUD
             DrawTextEx(custom_font, menu->game_text.perf_metrics, (Vector2){10, 10}, 32, 1, BLACK);
 
@@ -1564,7 +1569,7 @@ int b3dv_main(int argc, char **argv)
             DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
             DrawTextEx(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
-        } else if (hud_mode == 2) {
+        } else if (hud_visible && hud_mode == 2) {
             // player stats HUD
             DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
 
@@ -1594,7 +1599,7 @@ int b3dv_main(int argc, char **argv)
             DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
             DrawTextEx(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
-        } else if (hud_mode == 3) {
+        } else if (hud_visible && hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
