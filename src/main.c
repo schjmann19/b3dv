@@ -89,8 +89,13 @@ static Font load_font_by_name(const char* font_name)
     return GetFontDefault();
 }
 
-int b3dv_main(void)
+int b3dv_main(int argc, char **argv)
 {
+    if (argc > 1 && strcmp(argv[1], "--help") == 0 ||
+       (argc > 1 && strcmp(argv[1], "-h") == 0)) {
+            puts("help asked"); // now we have arguments
+        return 0;
+    }
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.18-beta");
 
