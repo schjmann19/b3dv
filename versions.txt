@@ -1,3 +1,6 @@
+0.0.19-beta:
+    localization fixes, !!world save optimization (smaller now)
+
 0.0.18-beta:
     inventory; /give command
 

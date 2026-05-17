@@ -4,6 +4,7 @@ Credits & Info
 Beenden
 Zurück
 Weltname (alphanumerisch + Unterstrich):
+Weltdateien komprimieren
 Erstellen
 Abbrechen
 Der Weltname darf nicht leer sein

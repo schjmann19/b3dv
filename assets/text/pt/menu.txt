@@ -4,6 +4,7 @@ Créditos e Informações
 Sair
 Voltar
 Nome do Mundo (alfanumérico + sublinhado):
+Comprimir arquivos do mundo
 Criar
 Cancelar
 O nome do mundo não pode estar vazio

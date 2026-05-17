@@ -4,10 +4,14 @@
 #include <string.h>
 #include <time.h>
 #include <pthread.h>
+#include <zlib.h>
 
 #include "world.h"
 #include "raylib.h"
 #include "player.h"
+
+// Chunk loader helper declaration needed before use in world_load_or_create_chunk.
+static bool load_chunk_from_file(FILE* file, Chunk* chunk);
 
 // forward declare helper to write players file (defined later)
 static void write_players_file(World* world, void* player_ptr, const char* world_name);
@@ -236,6 +240,7 @@ World* world_create(void)
 
     // Initialize seed to a random value if not set later
     world->seed = (uint64_t)time(NULL);
+    world->compress_chunk_files = true;
 
     // Initialize worker thread system
     pthread_mutex_init(&world->cache_mutex, NULL);  // Initialize cache mutex before worker starts
@@ -439,25 +444,52 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
 
     FILE* file = fopen(filepath, "rb");
     if (file) {
-        // Load chunk data from disk
-        for (int y = 0; y < CHUNK_HEIGHT; y++) {
-            for (int z = 0; z < CHUNK_DEPTH; z++) {
-                for (int x = 0; x < CHUNK_WIDTH; x++) {
-                    BlockType block_type;
-                    if (fread(&block_type, sizeof(BlockType), 1, file) == 1) {
-                        new_chunk->blocks[y][z][x].type = block_type;
+        bool load_success = true;
+
+        // Detect file format and load accordingly, preserving compatibility with legacy raw format.
+        if (fseek(file, 0, SEEK_SET) != 0) {
+            load_success = false;
+        } else {
+            uint8_t magic[4];
+            if (fread(magic, 1, sizeof(magic), file) == sizeof(magic) &&
+                memcmp(magic, "B3DV", sizeof(magic)) == 0) {
+                if (!load_chunk_from_file(file, new_chunk)) {
+                    load_success = false;
+                }
+            } else {
+                // Legacy raw format: rewind and read BlockType values directly.
+                if (fseek(file, 0, SEEK_SET) != 0) {
+                    load_success = false;
+                } else {
+                    for (int y = 0; y < CHUNK_HEIGHT && load_success; y++) {
+                        for (int z = 0; z < CHUNK_DEPTH && load_success; z++) {
+                            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                                BlockType block_type;
+                                if (fread(&block_type, sizeof(BlockType), 1, file) == 1) {
+                                    new_chunk->blocks[y][z][x].type = block_type;
+                                } else {
+                                    load_success = false;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+
         fclose(file);
-        new_chunk->loaded = true;
-        new_chunk->generated = true;  // Loaded chunks are already complete
-        new_chunk->modified = false;  // Not modified when loaded from disk
-        new_chunk->needs_relighting = true;  // Recalculate lighting - arrays were not saved to disk
-        printf("[chunk_load] Loaded chunk from %s\n", filepath);
-        // Queue for lighting and meshing
-        worker_queue_chunk(world, new_chunk);
+        if (load_success) {
+            new_chunk->loaded = true;
+            new_chunk->generated = true;  // Loaded chunks are already complete
+            new_chunk->modified = false;  // Not modified when loaded from disk
+            new_chunk->needs_relighting = true;  // Recalculate lighting - arrays were not saved to disk
+            printf("[chunk_load] Loaded chunk from %s\n", filepath);
+            // Queue for lighting and meshing
+            worker_queue_chunk(world, new_chunk);
+        } else {
+            printf("[chunk_load] Failed to parse chunk file: %s\n", filepath);
+        }
     } else {
         // Chunk doesn't exist on disk - don't auto-generate, return empty chunk
         // The caller (world_load) will handle generation if needed
@@ -989,8 +1021,280 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     pthread_mutex_unlock(&world->cache_mutex);
 }
 
+// Chunk file format header
+static const char CHUNK_FILE_MAGIC[4] = {'B', '3', 'D', 'V'};
+static const uint8_t CHUNK_FILE_VERSION = 1;
+
+enum ChunkFileMethod {
+    CHUNK_METHOD_RAW = 0,
+    CHUNK_METHOD_RLE = 1,
+    CHUNK_METHOD_RAW_COMPRESSED = 2,
+    CHUNK_METHOD_RLE_COMPRESSED = 3,
+};
+
+static bool write_le32(FILE* file, uint32_t value)
+{
+    uint8_t bytes[4] = {
+        (uint8_t)(value & 0xFF),
+        (uint8_t)((value >> 8) & 0xFF),
+        (uint8_t)((value >> 16) & 0xFF),
+        (uint8_t)((value >> 24) & 0xFF),
+    };
+    return fwrite(bytes, 1, sizeof(bytes), file) == sizeof(bytes);
+}
+
+static bool read_le32(FILE* file, uint32_t* out_value)
+{
+    uint8_t bytes[4];
+    if (fread(bytes, 1, sizeof(bytes), file) != sizeof(bytes)) return false;
+    *out_value = (uint32_t)bytes[0] |
+                 ((uint32_t)bytes[1] << 8) |
+                 ((uint32_t)bytes[2] << 16) |
+                 ((uint32_t)bytes[3] << 24);
+    return true;
+}
+
+static uint8_t* serialize_chunk_raw(Chunk* chunk, size_t* out_size)
+{
+    const int total_blocks = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH;
+    uint8_t* buffer = (uint8_t*)malloc(total_blocks);
+    if (!buffer) return NULL;
+
+    int offset = 0;
+    for (int y = 0; y < CHUNK_HEIGHT; y++) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                buffer[offset++] = (uint8_t)chunk->blocks[y][z][x].type;
+            }
+        }
+    }
+
+    *out_size = total_blocks;
+    return buffer;
+}
+
+static uint8_t* serialize_chunk_rle(Chunk* chunk, size_t* out_size)
+{
+    const int total_blocks = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH;
+    size_t max_size = (size_t)total_blocks * 3;
+    uint8_t* buffer = (uint8_t*)malloc(max_size);
+    if (!buffer) return NULL;
+
+    uint8_t current_type = (uint8_t)chunk->blocks[0][0][0].type;
+    uint16_t run_length = 1;
+    size_t offset = 0;
+
+    for (int block_index = 1; block_index < total_blocks; block_index++) {
+        int y = block_index / (CHUNK_WIDTH * CHUNK_DEPTH);
+        int rem = block_index % (CHUNK_WIDTH * CHUNK_DEPTH);
+        int z = rem / CHUNK_WIDTH;
+        int x = rem % CHUNK_WIDTH;
+        uint8_t next_type = (uint8_t)chunk->blocks[y][z][x].type;
+
+        if (next_type == current_type && run_length < UINT16_MAX) {
+            run_length++;
+        } else {
+            memcpy(buffer + offset, &run_length, sizeof(run_length));
+            offset += sizeof(run_length);
+            buffer[offset++] = current_type;
+            current_type = next_type;
+            run_length = 1;
+        }
+    }
+
+    memcpy(buffer + offset, &run_length, sizeof(run_length));
+    offset += sizeof(run_length);
+    buffer[offset++] = current_type;
+
+    *out_size = offset;
+    return buffer;
+}
+
+static uint8_t* compress_buffer(const uint8_t* source, size_t source_size, size_t* out_compressed_size)
+{
+    uLong bound = compressBound(source_size);
+    uint8_t* compressed = (uint8_t*)malloc(bound);
+    if (!compressed) return NULL;
+
+    uLongf compressed_size = bound;
+    int result = compress2(compressed, &compressed_size, source, source_size, Z_BEST_SPEED);
+    if (result != Z_OK) {
+        free(compressed);
+        return NULL;
+    }
+
+    *out_compressed_size = (size_t)compressed_size;
+    return compressed;
+}
+
+static bool write_chunk_file(FILE* file, Chunk* chunk, bool allow_compression)
+{
+    if (!file || !chunk) return false;
+
+    size_t raw_size = 0;
+    uint8_t* raw_buffer = serialize_chunk_raw(chunk, &raw_size);
+    if (!raw_buffer) return false;
+
+    size_t rle_size = 0;
+    uint8_t* rle_buffer = serialize_chunk_rle(chunk, &rle_size);
+    if (!rle_buffer) {
+        free(raw_buffer);
+        return false;
+    }
+
+    size_t raw_comp_size = 0;
+    uint8_t* raw_comp = NULL;
+    size_t rle_comp_size = 0;
+    uint8_t* rle_comp = NULL;
+    if (allow_compression) {
+        raw_comp = compress_buffer(raw_buffer, raw_size, &raw_comp_size);
+        rle_comp = compress_buffer(rle_buffer, rle_size, &rle_comp_size);
+    }
+
+    uint8_t method = CHUNK_METHOD_RLE;
+    const uint8_t* payload = rle_buffer;
+    size_t payload_size = rle_size;
+    uint32_t uncompressed_size = (uint32_t)rle_size;
+
+    if (raw_size < payload_size) {
+        method = CHUNK_METHOD_RAW;
+        payload = raw_buffer;
+        payload_size = raw_size;
+        uncompressed_size = (uint32_t)raw_size;
+    }
+
+    if (allow_compression && raw_comp && raw_comp_size < payload_size) {
+        method = CHUNK_METHOD_RAW_COMPRESSED;
+        payload = raw_comp;
+        payload_size = raw_comp_size;
+        uncompressed_size = (uint32_t)raw_size;
+    }
+
+    if (allow_compression && rle_comp && rle_comp_size < payload_size) {
+        method = CHUNK_METHOD_RLE_COMPRESSED;
+        payload = rle_comp;
+        payload_size = rle_comp_size;
+        uncompressed_size = (uint32_t)rle_size;
+    }
+
+    bool success = true;
+    if (fwrite(CHUNK_FILE_MAGIC, 1, sizeof(CHUNK_FILE_MAGIC), file) != sizeof(CHUNK_FILE_MAGIC) ||
+        fwrite(&CHUNK_FILE_VERSION, 1, 1, file) != 1 ||
+        fwrite(&method, 1, 1, file) != 1 ||
+        !write_le32(file, (uint32_t)payload_size) ||
+        !write_le32(file, uncompressed_size) ||
+        fwrite(payload, 1, payload_size, file) != payload_size) {
+        success = false;
+    }
+
+    free(raw_buffer);
+    free(rle_buffer);
+    if (raw_comp) free(raw_comp);
+    if (rle_comp) free(rle_comp);
+    return success;
+}
+
+static bool parse_rle_payload(uint8_t* buffer, size_t buffer_size, Chunk* chunk)
+{
+    const int total_blocks = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH;
+    int loaded_blocks = 0;
+    size_t offset = 0;
+
+    while (loaded_blocks < total_blocks && offset + sizeof(uint16_t) + 1 <= buffer_size) {
+        uint16_t run_length;
+        memcpy(&run_length, buffer + offset, sizeof(run_length));
+        offset += sizeof(run_length);
+        uint8_t block_type = buffer[offset++];
+
+        if (run_length == 0 || loaded_blocks + run_length > total_blocks) {
+            return false;
+        }
+
+        for (int i = 0; i < run_length; i++) {
+            int flat_index = loaded_blocks + i;
+            int y = flat_index / (CHUNK_WIDTH * CHUNK_DEPTH);
+            int rem = flat_index % (CHUNK_WIDTH * CHUNK_DEPTH);
+            int z = rem / CHUNK_WIDTH;
+            int x = rem % CHUNK_WIDTH;
+            chunk->blocks[y][z][x].type = (BlockType)block_type;
+        }
+        loaded_blocks += run_length;
+    }
+
+    return loaded_blocks == total_blocks;
+}
+
+static bool load_chunk_from_file(FILE* file, Chunk* chunk)
+{
+    uint8_t magic[4];
+    if (fread(magic, 1, sizeof(magic), file) != sizeof(magic)) return false;
+    if (memcmp(magic, CHUNK_FILE_MAGIC, sizeof(magic)) != 0) {
+        return false;
+    }
+
+    uint8_t version;
+    if (fread(&version, 1, 1, file) != 1 || version != CHUNK_FILE_VERSION) return false;
+
+    uint8_t method;
+    if (fread(&method, 1, 1, file) != 1) return false;
+
+    uint32_t payload_size;
+    uint32_t uncompressed_size;
+    if (!read_le32(file, &payload_size) || !read_le32(file, &uncompressed_size)) return false;
+
+    uint8_t* payload = (uint8_t*)malloc(payload_size);
+    if (!payload) return false;
+    if (fread(payload, 1, payload_size, file) != payload_size) {
+        free(payload);
+        return false;
+    }
+
+    uint8_t* decompressed = NULL;
+    uint8_t* parse_buffer = payload;
+    size_t parse_buffer_size = payload_size;
+
+    if (method == CHUNK_METHOD_RAW_COMPRESSED || method == CHUNK_METHOD_RLE_COMPRESSED) {
+        decompressed = (uint8_t*)malloc(uncompressed_size);
+        if (!decompressed) {
+            free(payload);
+            return false;
+        }
+        uLongf dest_len = uncompressed_size;
+        int result = uncompress(decompressed, &dest_len, payload, payload_size);
+        free(payload);
+        if (result != Z_OK || dest_len != uncompressed_size) {
+            free(decompressed);
+            return false;
+        }
+        parse_buffer = decompressed;
+        parse_buffer_size = dest_len;
+    }
+
+    bool success = false;
+    if (method == CHUNK_METHOD_RAW || method == CHUNK_METHOD_RAW_COMPRESSED) {
+        const int total_blocks = CHUNK_WIDTH * CHUNK_HEIGHT * CHUNK_DEPTH;
+        if (parse_buffer_size == (size_t)total_blocks) {
+            int offset = 0;
+            for (int y = 0; y < CHUNK_HEIGHT; y++) {
+                for (int z = 0; z < CHUNK_DEPTH; z++) {
+                    for (int x = 0; x < CHUNK_WIDTH; x++) {
+                        chunk->blocks[y][z][x].type = (BlockType)parse_buffer[offset++];
+                    }
+                }
+            }
+            success = true;
+        }
+    } else if (method == CHUNK_METHOD_RLE || method == CHUNK_METHOD_RLE_COMPRESSED) {
+        success = parse_rle_payload(parse_buffer, parse_buffer_size, chunk);
+    }
+
+    if (decompressed) free(decompressed);
+    if (method == CHUNK_METHOD_RAW || method == CHUNK_METHOD_RLE) free(payload);
+    return success;
+}
+
 // Save a single chunk to disk
-bool world_save_chunk(Chunk* chunk, const char* world_name)
+bool world_save_chunk(Chunk* chunk, const char* world_name, bool allow_compression)
 {
     if (!chunk || !world_name) return false;
 
@@ -1001,21 +1305,7 @@ bool world_save_chunk(Chunk* chunk, const char* world_name)
     FILE* file = fopen(filepath, "wb");
     if (!file) return false;
 
-    bool success = true;
-    for (int y = 0; y < CHUNK_HEIGHT; y++) {
-        for (int z = 0; z < CHUNK_DEPTH; z++) {
-            for (int x = 0; x < CHUNK_WIDTH; x++) {
-                BlockType block_type = chunk->blocks[y][z][x].type;
-                if (fwrite(&block_type, sizeof(BlockType), 1, file) != 1) {
-                    success = false;
-                    break;
-                }
-            }
-            if (!success) break;
-        }
-        if (!success) break;
-    }
-
+    bool success = write_chunk_file(file, chunk, allow_compression);
     fclose(file);
     return success;
 }
@@ -1066,6 +1356,7 @@ bool world_save(World* world, const char* world_name)
 
         fprintf(metadata_file, "name=%s\n", world_name);
         fprintf(metadata_file, "seed=%lu\n", world->seed);
+        fprintf(metadata_file, "compress=%d\n", world->compress_chunk_files ? 1 : 0);
         fprintf(metadata_file, "last_saved=%s\n", time_str);
         fprintf(metadata_file, "chunk_count=%d\n", world->chunk_cache.chunk_count);
         // Player position is stored per-world in players.txt (TOML) now
@@ -1078,25 +1369,9 @@ bool world_save(World* world, const char* world_name)
     // Save each loaded chunk
     for (int i = 0; i < world->chunk_cache.chunk_count; i++) {
         Chunk* chunk = &world->chunk_cache.chunks[i];
-
-        char filepath[512];
-        snprintf(filepath, sizeof(filepath), "./worlds/%s/chunks/chunk_%d_%d_%d.chunk",
-                 world_name, chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
-
-        FILE* file = fopen(filepath, "wb");
-        if (!file) continue;
-
-        for (int y = 0; y < CHUNK_HEIGHT; y++) {
-            for (int z = 0; z < CHUNK_DEPTH; z++) {
-                for (int x = 0; x < CHUNK_WIDTH; x++) {
-                    BlockType block_type = chunk->blocks[y][z][x].type;
-                    fwrite(&block_type, sizeof(BlockType), 1, file);
-                }
-            }
+        if (world_save_chunk(chunk, world_name, world->compress_chunk_files)) {
+            chunk->modified = false;  // Mark chunk as saved
         }
-
-        fclose(file);
-        chunk->modified = false;  // Mark chunk as saved
     }
 
     // Always write players.txt for this world (store last position and inventory if available)
@@ -1151,7 +1426,7 @@ static void write_players_file(World* world, void* player_ptr, const char* world
     // Write nickname from world if set, otherwise default to "Player"
     const char* nick_to_write = (world->player_nickname[0] != '\0') ? world->player_nickname : "Player";
     fprintf(f, "nickname = \"%s\"\n", nick_to_write);
-    fprintf(f, "last_ip = \"127.0.0.1\"\n");
+    fprintf(f, "last_ip = \"0.0.19-beta\"\n");
     fprintf(f, "last_login = %lu\n", (unsigned long)now);
     // Save position: prefer live player's position if available, otherwise use world's last_player_position
     Vector3 pos = player ? player->position : world->last_player_position;
@@ -1229,7 +1504,6 @@ bool world_apply_players_to(World* world, void* player_ptr)
         }
 
         // Parse key = value
-        char key[128];
         char val[256];
         // If in player section, look for nickname
         if (in_player_section) {
@@ -1407,6 +1681,8 @@ bool world_load(World* world, const char* world_name)
             uint64_t seed_val;
             if (sscanf(line, "seed=%lu", &seed_val) == 1) {
                 world->seed = seed_val;
+            } else if (strncmp(line, "compress=", 9) == 0) {
+                world->compress_chunk_files = (line[9] == '1');
             }
         }
         fclose(metadata_file);
@@ -1418,14 +1694,12 @@ bool world_load(World* world, const char* world_name)
     // Try to load initial chunks from disk
     // Only generate minimal spawn area to avoid startup lag
     int spawn_dist = 1;  // Only load immediate area around spawn
-    bool any_chunk_loaded = false;
 
     for (int cx = -spawn_dist; cx <= spawn_dist; cx++) {
         for (int cy = -1; cy <= 1; cy++) {
             for (int cz = -spawn_dist; cz <= spawn_dist; cz++) {
                 Chunk* chunk = world_load_or_create_chunk(world, cx, cy, cz);
                 if (chunk && chunk->loaded) {
-                    any_chunk_loaded = true;
                     // Loaded chunks still need lighting and meshing
                     if (chunk->needs_relighting || !chunk->meshed) {
                         worker_queue_chunk(world, chunk);
@@ -1522,6 +1796,7 @@ typedef struct {
 // Note: uses double-buffering so render thread never reads partially-updated lighting data.
 void calculate_chunk_blocklight(Chunk* chunk, World* world, int target_buffer)
 {
+    (void)world;
     if (!chunk) return;
 
     uint8_t (*blocklight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->blocklight[target_buffer];
@@ -1743,9 +2018,6 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
         mesh->quads[f] = (MergedQuad*)malloc(sizeof(MergedQuad) * mesh->quad_capacity[f]);
         mesh->quad_count[f] = 0;
     }
-
-    // Track processed blocks to avoid duplicate quads
-    bool processed[CHUNK_HEIGHT][CHUNK_DEPTH][CHUNK_WIDTH] = {0};
 
     // For each face direction, perform greedy meshing
     // Face 0: +X, Face 1: -X, Face 2: +Y, Face 3: -Y, Face 4: +Z, Face 5: -Z

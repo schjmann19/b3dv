@@ -4,6 +4,7 @@ Crediti e informazioni
 Esci
 Indietro
 Nome del mondo (alfanumerico + trattino basso):
+Comprimi i file del mondo
 Crea
 Annulla
 Il nome del mondo non può essere vuoto

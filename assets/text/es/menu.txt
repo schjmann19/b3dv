@@ -4,6 +4,7 @@ Créditos e Info
 Salir
 Atrás
 Nombre del Mundo (alfanumérico + guion bajo):
+Comprimir archivos del mundo
 Crear
 Cancelar
 El nombre del mundo no puede estar vacío

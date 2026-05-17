@@ -88,6 +88,7 @@ typedef struct {
     char new_world_name[256];
     int new_world_name_len;
     bool create_world_error;
+    bool create_world_compress;
     char create_world_error_msg[256];
     // Background image
     Texture2D background_texture;
@@ -108,6 +109,7 @@ typedef struct {
     char text_quit[256];
     char text_back[256];
     char text_world_name_label[512];
+    char text_compress_world_files[256];
     char text_create_btn[128];
     char text_cancel_btn[128];
     char text_error_empty_name[256];

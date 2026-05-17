@@ -97,10 +97,11 @@ static void* worker_thread_main(void* arg)
             // Save chunk to disk (same format as world_save_chunk)
             if (chunk->modified) {
                 pthread_mutex_unlock(&chunk->mutex);  // release while saving to avoid long lock hold
-                world_save_chunk(chunk, world->world_name);
+                world_save_chunk(chunk, world->world_name, world->compress_chunk_files);
                 pthread_mutex_lock(&chunk->mutex);
                 chunk->modified = false;
             }
+
             chunk->pending_save = false;
 
             // If this chunk was scheduled for unload, allow it to be removed next update
@@ -163,7 +164,7 @@ static void* worker_thread_main(void* arg)
 
             chunk_cache_visible_blocks(chunk, world);
 
-            fprintf(stderr, "[worker] Cached %d visible blocks for chunk (%d,%d,%d)\n", chunk->visible_count, chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
+            fprintf(stderr, "[worker] Cached %d visible blocks for chunk (%d,%d,%d)\n", chunk->visible_count[chunk->active_mesh], chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
             fflush(stderr);
 
             // Re-acquire chunk->mutex to update meshed flag atomically

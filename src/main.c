@@ -117,7 +117,7 @@ int b3dv_main(int argc, char **argv)
 {   
     // if no args, print version and help
     if (argc == 1) {
-        //puts("b3dv version 0.0.18-beta");
+        //puts("b3dv version 0.0.19-beta");
         puts("Usage:");
         puts("       b3dv [--version|-v] - version info");
         puts("       b3dv run - launch game");
@@ -126,7 +126,7 @@ int b3dv_main(int argc, char **argv)
 
     // version argument
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
-            puts("b3dv version 0.0.18-beta");
+            puts("b3dv version 0.0.19-beta");
             puts("By Jimena Neumann; BSD-3-Clause License");
             #ifdef DEBUG
             puts("compiled on " __DATE__ " at " __TIME__);
@@ -145,7 +145,7 @@ int b3dv_main(int argc, char **argv)
     // Disable HIGHDPI to avoid fractional scaling issues with Hyprland's 1.2x compositor scaling
     // Render at 1200x800 logical pixels; let window manager handle physical scaling
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.18-beta");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.19-beta");
 
     // Load SDF shader from project assets (avoid external/ references)
     sdf_shader = (Shader){0};
@@ -355,6 +355,7 @@ int b3dv_main(int argc, char **argv)
             // Initialize game with selected world
             if (!world) {
                 world = world_create();
+                world->compress_chunk_files = menu->create_world_compress;
                 // Try to load the selected world, or generate new one
                 if (!world_load(world, menu->selected_world_name)) {
                     world_generate_prism(world);
@@ -1401,7 +1402,7 @@ int b3dv_main(int argc, char **argv)
                      player->position.x, player->position.y, player->position.z);
             DrawTextExCustom(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.19-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 2) {
             // player stats HUD
             DrawTextExCustom(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1431,14 +1432,14 @@ int b3dv_main(int argc, char **argv)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextExCustom(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.19-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextExCustom(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextExCustom(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.19-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // Draw chat message history (last few messages with fade-out)

@@ -160,7 +160,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
     if (file) {
         char line[512];
         int line_count = 0;
-        while (fgets(line, sizeof(line), file) && line_count < 38) {
+        while (fgets(line, sizeof(line), file) && line_count < 39) {
             // Remove newline
             line[strcspn(line, "\n")] = '\0';
 
@@ -171,6 +171,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 menu->text_quit,
                 menu->text_back,
                 menu->text_world_name_label,
+                menu->text_compress_world_files,
                 menu->text_create_btn,
                 menu->text_cancel_btn,
                 menu->text_error_empty_name,
@@ -228,6 +229,7 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->text_quit),
                 sizeof(menu->text_back),
                 sizeof(menu->text_world_name_label),
+                sizeof(menu->text_compress_world_files),
                 sizeof(menu->text_create_btn),
                 sizeof(menu->text_cancel_btn),
                 sizeof(menu->text_error_empty_name),
@@ -608,6 +610,7 @@ MenuSystem* menu_system_create(void)
     strcpy(menu->new_world_name, "");
     menu->new_world_name_len = 0;
     menu->create_world_error = false;
+    menu->create_world_compress = true;
     strcpy(menu->create_world_error_msg, "");
 
     // Initialize settings with defaults
@@ -773,7 +776,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.18-beta";
+    const char* version = "Basic 3D Visualizer - v0.0.19-beta";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextExCustom(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
@@ -1036,6 +1039,7 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
             strcpy(menu->new_world_name, "");
             menu->new_world_name_len = 0;
             menu->create_world_error = false;
+            menu->create_world_compress = true;
         } else if (back_hover) {
             menu->current_state = MENU_STATE_MAIN;
         }
@@ -1156,11 +1160,36 @@ void menu_draw_create_world(MenuSystem* menu, Font font)
                (Vector2){input_x, input_y - 40},
                20, 1, GRAY);
 
+    // Compression checkbox
+    int checkbox_size = 24;
+    int checkbox_x = input_x;
+    int checkbox_y = input_y + input_height + 20;
+    Rectangle compression_checkbox = {
+        (float)checkbox_x,
+        (float)checkbox_y,
+        (float)checkbox_size,
+        (float)checkbox_size
+    };
+    Rectangle compression_checkbox_area = {
+        compression_checkbox.x,
+        compression_checkbox.y,
+        compression_checkbox.width + 400,
+        compression_checkbox.height
+    };
+    DrawRectangleRec(compression_checkbox, (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(compression_checkbox, 2, WHITE);
+    if (menu->create_world_compress) {
+        DrawRectangleRec((Rectangle){compression_checkbox.x + 4, compression_checkbox.y + 4, compression_checkbox.width - 8, compression_checkbox.height - 8}, WHITE);
+    }
+    DrawTextExCustom(font, menu->text_compress_world_files,
+               (Vector2){checkbox_x + checkbox_size + 10, checkbox_y + 2},
+               20, 1, WHITE);
+
     // Buttons
     int button_width = 150;
     int button_height = 50;
     int button_spacing = 20;
-    int buttons_y = screen_height / 2 + 100;
+    int buttons_y = screen_height / 2 + 140;
 
     Rectangle create_btn = {
         (float)(input_x + input_width / 2 - button_width - button_spacing / 2),
@@ -1215,6 +1244,8 @@ void menu_draw_create_world(MenuSystem* menu, Font font)
         } else if (cancel_hover) {
             menu->current_state = MENU_STATE_MAIN;
             menu->create_world_error = false;
+        } else if (CheckCollisionPointRec(mouse_pos, compression_checkbox_area)) {
+            menu->create_world_compress = !menu->create_world_compress;
         }
     }
 

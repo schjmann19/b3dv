@@ -167,6 +167,7 @@ typedef struct {
     char world_name[256];  // Current world name for proper chunk loading
     Vector3 last_player_position;  // Last known player position for saving/loading
     uint64_t seed;  // World seed for reproducible terrain generation
+    bool compress_chunk_files;  // Whether this world's chunk files should be compressed
     WorkerQueue worker_queue;  // Queue of chunks to process
     pthread_t worker_thread;  // Worker thread handle
     bool worker_running;  // Whether worker thread is active
@@ -188,7 +189,7 @@ void world_generate_prism(World* world);
 void world_system_init(void);
 bool world_save(World* world, const char* world_name);
 bool world_load(World* world, const char* world_name);
-bool world_save_chunk(Chunk* chunk, const char* world_name);  // Save a single chunk to disk
+bool world_save_chunk(Chunk* chunk, const char* world_name, bool allow_compression);  // Save a single chunk to disk
 void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forward, float render_distance_blocks);
 Chunk* world_get_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 void world_set_block(World* world, int x, int y, int z, BlockType type);

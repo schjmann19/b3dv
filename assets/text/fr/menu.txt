@@ -4,6 +4,7 @@ Crédits et infos
 Quitter
 Retour
 Nom du monde (alphanumérique + tiret bas) :
+Compresser les fichiers du monde
 Créer
 Annuler
 Le nom du monde ne peut pas être vide

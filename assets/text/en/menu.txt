@@ -4,6 +4,7 @@ Credits & Info
 Quit
 Back
 World Name (alphanumeric + underscore):
+Compress world files
 Create
 Cancel
 World name cannot be empty

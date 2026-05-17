@@ -4,6 +4,7 @@ Napisy i informacje
 Wyjdź
 Wstecz
 Nazwa świata (alfanumeryczna + podkreślenie):
+Kompresuj pliki świata
 Utwórz
 Anuluj
 Nazwa świata nie może być pusta

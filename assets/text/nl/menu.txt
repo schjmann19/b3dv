@@ -4,6 +4,7 @@ Credits & Info
 Afsluiten
 Terug
 Wereldnaam (alfanumeriek + underscore):
+Wereldbestanden comprimeren
 Maken
 Annuleren
 Wereldnaam mag niet leeg zijn

@@ -56,6 +56,7 @@ pub fn build(b: *std.Build) void {
     }
 
     mod.linkSystemLibrary("m", .{});
+    mod.linkSystemLibrary("z", .{});
 
     b.installArtifact(exe);
 

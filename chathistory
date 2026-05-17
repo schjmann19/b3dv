@@ -729,3 +729,5 @@ hello
 /show_chunk_borders off
 /show_chunk_borders on
 /show_chunk_borders off
+/tp 100 100 100
+/tp 100 120 100
