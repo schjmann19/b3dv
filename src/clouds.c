@@ -35,11 +35,10 @@ void clouds_free(CloudSystem* clouds) {
 }
 
 void clouds_update(CloudSystem* clouds, Vector3 player_pos) {
-    // Anchor clouds to the player's world X/Z so they appear static above the player
-    if (clouds) {
-        clouds->anchor_pos.x = player_pos.x;
-        clouds->anchor_pos.y = player_pos.z;
-    }
+    // Clouds are rendered as part of the sky and should not be re-anchored to the player.
+    // This update function is intentionally left empty in skybox-style implementation.
+    (void)clouds;
+    (void)player_pos;
 }
 
 void clouds_draw(CloudSystem* clouds, Vector3 camera_pos, Vector3 camera_offset) {
@@ -52,10 +51,10 @@ void clouds_draw(CloudSystem* clouds, Vector3 camera_pos, Vector3 camera_offset)
 
     BeginBlendMode(BLEND_ALPHA);
 
-    // Calculate which tiles to render based on anchored position (player)
+    // Choose cloud tiles based on the camera's current world position
     float tile_size = 512.0f;  // Size of each cloud texture tile in world units
-    int center_tile_x = (int)floorf(clouds->anchor_pos.x / tile_size);
-    int center_tile_z = (int)floorf(clouds->anchor_pos.y / tile_size);
+    int center_tile_x = (int)floorf(camera_pos.x / tile_size);
+    int center_tile_z = (int)floorf(camera_pos.z / tile_size);
 
     // Render a 3x3 grid of tiles around the camera
     for (int tile_dx = -1; tile_dx <= 1; tile_dx++) {

@@ -16,7 +16,7 @@ WASD para mover, Espaço para pular
 F3 para métricas de desempenho, F2 para esta tela, F4 para estatísticas do jogador
 F5 para informações do sistema, F7 para ativar/desativar a captura do mouse
 Inventário
-Pressione I para fechar
+Pressione ESC para fechar
 Mouse para olhar ao redor
 ESC ou P para pausar
 PAUSADO

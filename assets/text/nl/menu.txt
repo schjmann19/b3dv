@@ -16,7 +16,7 @@ WASD om te bewegen, spatie om te springen
 F3 voor prestatiegegevens, F2 voor dit, F4 voor spelersstatistieken
 F5 voor systeeminfo, F7 om muisopname in/uit te schakelen
 Inventaris
-Druk op I om te sluiten
+Druk op ESC om te sluiten
 Muis om rond te kijken
 ESC of P om te pauzeren
 GEPAUZEERD

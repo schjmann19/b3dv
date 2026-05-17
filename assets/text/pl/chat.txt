@@ -10,9 +10,15 @@ Wybrany blok: %s
 Nieznany typ bloku: %s. Dostępne: stone, dirt, grass, sand, wood
 Latanie włączone. Kliknij dwukrotnie Spację, aby przełączyć.
 Latanie wyłączone.
-Użycie: /fly enable lub /fly disablePrzechodzenie przez obiekty włączone. Móżesz przechodzić przez bloki.
+Użycie: /fly enable lub /fly disable
+Przechodzenie przez obiekty włączone. Możesz przechodzić przez bloki.
 Przechodzenie przez obiekty wyłączone. Kolizje są ponownie aktywne.
-Użycie: /noclip enable lub /noclip disableBlok umieszczony w (%.1f, %.1f, %.1f) jako %s
+Użycie: /noclip enable lub /noclip disable
+Blok umieszczony w (%.1f, %.1f, %.1f) jako %s
 Poza granicami: y in [0, 255]
 Użycie: /setblock x y z [block_type]
 Nieznana komenda: %s
+
+Obramowania chunków włączone.
+Obramowania chunków wyłączone.
+Użycie: /show_chunk_borders [on|off]

@@ -18,3 +18,7 @@ Set block at (%.1f, %.1f, %.1f) to %s
 Out of bounds: y in [0, 255]
 Usage: /setblock x y z [block_type]
 Unknown command: %s
+
+Chunk borders enabled.
+Chunk borders disabled.
+Usage: /show_chunk_borders [on|off]

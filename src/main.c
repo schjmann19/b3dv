@@ -223,6 +223,7 @@ int b3dv_main(int argc, char **argv)
 
     // Wireframe rendering mode (toggled with F7)
     bool show_wireframe = false;
+    bool show_chunk_borders = false;
 
     // Flight system
     bool flight_enabled = false;
@@ -500,6 +501,22 @@ int b3dv_main(int argc, char **argv)
                     }
                     else if (strncmp(chat_input, "/fly ", 5) == 0) { char fly_cmd_buf[32]; strncpy(fly_cmd_buf, chat_input + 5, sizeof(fly_cmd_buf) - 1); fly_cmd_buf[31] = '\0'; trim_string(fly_cmd_buf); const char* fly_cmd = fly_cmd_buf; if (strcmp(fly_cmd, "enable") == 0) { flight_enabled = true; add_chat_message(menu->game_text.msg_flight_enabled); } else if (strcmp(fly_cmd, "disable") == 0) { flight_enabled = false; player->is_flying = false; add_chat_message(menu->game_text.msg_flight_disabled); } else add_chat_message(menu->game_text.msg_fly_usage); }
                     else if (strncmp(chat_input, "/noclip ", 8) == 0) { char noclip_cmd_buf[32]; strncpy(noclip_cmd_buf, chat_input + 8, sizeof(noclip_cmd_buf) - 1); noclip_cmd_buf[31] = '\0'; trim_string(noclip_cmd_buf); const char* noclip_cmd = noclip_cmd_buf; if (strcmp(noclip_cmd, "enable") == 0) { player->no_clip = true; add_chat_message(menu->game_text.msg_noclip_enabled); } else if (strcmp(noclip_cmd, "disable") == 0) { player->no_clip = false; add_chat_message(menu->game_text.msg_noclip_disabled); } else add_chat_message(menu->game_text.msg_noclip_usage); }
+                    else if (strncmp(chat_input, "/show_chunk_borders", 19) == 0) {
+                        const char* arg = chat_input + 19;
+                        while (*arg == ' ') arg++;
+                        if (*arg == '\0') {
+                            show_chunk_borders = !show_chunk_borders;
+                            add_chat_message(show_chunk_borders ? menu->game_text.msg_chunk_borders_enabled : menu->game_text.msg_chunk_borders_disabled);
+                        } else if (strncmp(arg, "on", 2) == 0 && (arg[2] == '\0' || arg[2] == ' ')) {
+                            show_chunk_borders = true;
+                            add_chat_message(menu->game_text.msg_chunk_borders_enabled);
+                        } else if (strncmp(arg, "off", 3) == 0 && (arg[3] == '\0' || arg[3] == ' ')) {
+                            show_chunk_borders = false;
+                            add_chat_message(menu->game_text.msg_chunk_borders_disabled);
+                        } else {
+                            add_chat_message(menu->game_text.msg_chunk_borders_usage);
+                        }
+                    }
                     else if (strncmp(chat_input, "/setblock ", 10) == 0) {
                         float fx, fy, fz; char block_name[32] = {0}; int parsed = sscanf(chat_input, "/setblock %f %f %f %31s", &fx, &fy, &fz, block_name);
                         if (parsed >= 3) {
@@ -1028,6 +1045,36 @@ int b3dv_main(int argc, char **argv)
                 DrawCubeWires(block_pos, 1.0f, 1.0f, 1.0f, YELLOW);
             }
             DrawGrid(30, 1.0f);
+
+            if (show_chunk_borders) {
+                Color border_color = (Color){255, 255, 0, 150};
+                Color fill_color = (Color){255, 255, 0, 45};
+
+                int player_chunk_x = (int)floorf(original_camera_pos.x / CHUNK_WIDTH);
+                int player_chunk_z = (int)floorf(original_camera_pos.z / CHUNK_DEPTH);
+
+                for (int c = 0; c < chunk_count_snapshot; c++) {
+                    Chunk* chunk = chunks_snapshot[c];
+                    if (!chunk->loaded || !chunk->generated) continue;
+                    if (chunk->chunk_x < player_chunk_x - 1 || chunk->chunk_x > player_chunk_x + 1) continue;
+                    if (chunk->chunk_z < player_chunk_z - 1 || chunk->chunk_z > player_chunk_z + 1) continue;
+
+                    Vector3 chunk_min = (Vector3){
+                        chunk->chunk_x * CHUNK_WIDTH - camera_offset.x,
+                        chunk->chunk_y * CHUNK_HEIGHT - camera_offset.y,
+                        chunk->chunk_z * CHUNK_DEPTH - camera_offset.z
+                    };
+                    Vector3 chunk_center = (Vector3){
+                        chunk_min.x + CHUNK_WIDTH * 0.5f,
+                        chunk_min.y + CHUNK_HEIGHT * 0.5f,
+                        chunk_min.z + CHUNK_DEPTH * 0.5f
+                    };
+
+                    // Draw translucent faces to show full chunk bounds
+                    DrawCube(chunk_center, (float)CHUNK_WIDTH, (float)CHUNK_HEIGHT, (float)CHUNK_DEPTH, fill_color);
+                    DrawCubeWires(chunk_center, (float)CHUNK_WIDTH, (float)CHUNK_HEIGHT, (float)CHUNK_DEPTH, border_color);
+                }
+            }
 
             // Draw clouds
             clouds_draw(clouds, camera.position, camera_offset);

@@ -18,3 +18,7 @@ Bloque colocado en (%.1f, %.1f, %.1f) como %s
 Fuera de límites: y en [0, 255]
 Uso: /setblock x y z [block_type]
 Comando desconocido: %s
+
+Fronteras de chunk activadas.
+Fronteras de chunk desactivadas.
+Uso: /show_chunk_borders [on|off]

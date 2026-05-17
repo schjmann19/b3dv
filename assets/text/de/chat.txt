@@ -18,3 +18,7 @@ Block platziert bei (%.1f, %.1f, %.1f) als %s
 Außerhalb der Grenzen: y in [0, 255]
 Verwendung: /setblock x y z [block_type]
 Unbekannter Befehl: %s
+
+Chunk-Grenzen aktiviert.
+Chunk-Grenzen deaktiviert.
+Verwendung: /show_chunk_borders [on|off]

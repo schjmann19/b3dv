@@ -717,3 +717,15 @@ hello
 /fly enabl
 /fly enable
 adadds
+/give glowstone 65
+/fly enable
+hello
+?
+/showchunkborders
+/showchunkborders on
+/show_chunk_borders on
+/show_chunk_borders off
+/show_chunk_borders on
+/show_chunk_borders off
+/show_chunk_borders on
+/show_chunk_borders off

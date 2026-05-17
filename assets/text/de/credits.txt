@@ -5,7 +5,6 @@ Ein voxelbasierter 3D-Weltenerkunder
 erstellt mit Raylib
 
 Mitwirkende:
-
 - Idee: Leandro Testa
 - Alles andere: Ich
 
@@ -18,7 +17,6 @@ Benutzerdefinierte Schriften, die Sie hinzufügen können:
 ./assets/fonts/[Schriftartname]/ttf/*.ttf
 
 Befehle:
-
 /tp <x y z> – Spieler zu den Koordinaten teleportieren
 /setblock <x y z [Block]> – Block an den Koordinaten platzieren
 /select <Block> (stone|grass|dirt|wood|sand) – Block zum Platzieren auswählen

@@ -317,7 +317,10 @@ void menu_load_language(MenuSystem* menu, const char* language)
             menu->game_text.msg_block_set,
             menu->game_text.msg_out_of_bounds,
             menu->game_text.msg_setblock_usage,
-            menu->game_text.msg_unknown_command
+            menu->game_text.msg_unknown_command,
+            menu->game_text.msg_chunk_borders_enabled,
+            menu->game_text.msg_chunk_borders_disabled,
+            menu->game_text.msg_chunk_borders_usage
         };
 
         int chat_sizes[] = {
@@ -340,10 +343,13 @@ void menu_load_language(MenuSystem* menu, const char* language)
             sizeof(menu->game_text.msg_block_set),
             sizeof(menu->game_text.msg_out_of_bounds),
             sizeof(menu->game_text.msg_setblock_usage),
-            sizeof(menu->game_text.msg_unknown_command)
+            sizeof(menu->game_text.msg_unknown_command),
+            sizeof(menu->game_text.msg_chunk_borders_enabled),
+            sizeof(menu->game_text.msg_chunk_borders_disabled),
+            sizeof(menu->game_text.msg_chunk_borders_usage)
         };
 
-        while (fgets(line, sizeof(line), chat_file) && chat_line_count < 20) {
+        while (fgets(line, sizeof(line), chat_file) && chat_line_count < 23) {
             // Remove newline
             line[strcspn(line, "\n")] = '\0';
             strncpy(chat_buffers[chat_line_count], line, chat_sizes[chat_line_count] - 1);

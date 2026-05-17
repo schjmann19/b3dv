@@ -16,7 +16,7 @@ WASD para moverte, Espacio para saltar
 F3 para métricas de rendimiento, F2 para esto
 F7 para alternar captura del ratón
 Inventario
-Pulsa I para cerrar
+Pulsa ESC para cerrar
 Ratón para mirar alrededor
 ESC o P para pausar
 EN PAUSA

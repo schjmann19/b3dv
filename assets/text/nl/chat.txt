@@ -18,3 +18,7 @@ Blok geplaatst op (%.1f, %.1f, %.1f) als %s
 Buiten grenzen: y in [0, 255]
 Gebruik: /setblock x y z [block_type]
 Onbekend commando: %s
+
+Chunk-grenzen ingeschakeld.
+Chunk-grenzen uitgeschakeld.
+Gebruik: /show_chunk_borders [on|off]
