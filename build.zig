@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.use_llvm = true;
+    //exe.linkage = .static;
 
     const sources = &.{
         "src/main.c",
