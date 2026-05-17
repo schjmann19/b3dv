@@ -755,21 +755,21 @@ void menu_draw_main(MenuSystem* menu, Font font)
                        0,
                        WHITE);
     } else {
-        // Fallback to solid color if image not loaded
-        ClearBackground((Color){20, 20, 20, 255});
+        // Fallback to solid diagnostic color if image not loaded (magenta for visibility)
+        ClearBackground((Color){255, 0, 255, 255});
     }
 
     // Draw title
     const char* title = "B3DV";
     Vector2 title_size = MeasureTextEx(font, title, 80, 2);
-    DrawTextEx(font, title,
+    DrawTextExCustom(font, title,
                (Vector2){(screen_width - title_size.x) / 2, 60},
                80, 2, WHITE);
 
     // Draw version
     const char* version = "Basic 3D Visualizer - v0.0.18-beta";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
-    DrawTextEx(font, version,
+    DrawTextExCustom(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
                24, 1, GRAY);
 
@@ -839,7 +839,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     DrawRectangleRec(world_button, world_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(world_button, 2, WHITE);
     Vector2 world_text_size = MeasureTextEx(font, menu->text_select_world, 32, 1);
-    DrawTextEx(font, menu->text_select_world,
+    DrawTextExCustom(font, menu->text_select_world,
                (Vector2){center_x - world_text_size.x / 2, center_y + 14},
                32, 1, BLACK);
 
@@ -847,7 +847,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     DrawRectangleRec(credits_button, credits_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(credits_button, 2, WHITE);
     Vector2 credits_text_size = MeasureTextEx(font, menu->text_credits_info, 32, 1);
-    DrawTextEx(font, menu->text_credits_info,
+    DrawTextExCustom(font, menu->text_credits_info,
                (Vector2){center_x - credits_text_size.x / 2, center_y + button_height + button_spacing + 14},
                32, 1, BLACK);
 
@@ -855,7 +855,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     DrawRectangleRec(settings_button, settings_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(settings_button, 2, WHITE);
     Vector2 settings_text_size = MeasureTextEx(font, menu->game_text.settings, 32, 1);
-    DrawTextEx(font, menu->game_text.settings,
+    DrawTextExCustom(font, menu->game_text.settings,
                (Vector2){center_x - settings_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 14},
                32, 1, BLACK);
 
@@ -863,7 +863,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(quit_button, 2, WHITE);
     Vector2 quit_text_size = MeasureTextEx(font, menu->text_quit, 32, 1);
-    DrawTextEx(font, menu->text_quit,
+    DrawTextExCustom(font, menu->text_quit,
                (Vector2){center_x - quit_text_size.x / 2, center_y + 3 * (button_height + button_spacing) + 14},
                32, 1, BLACK);
 
@@ -902,7 +902,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
     DrawRectangleLinesEx(lang_button, 2, WHITE);
 
     Vector2 lang_text_size = MeasureTextEx(font, menu->current_language, 24, 1);
-    DrawTextEx(font, menu->current_language,
+    DrawTextExCustom(font, menu->current_language,
                (Vector2){lang_button_x + (lang_button_width - (int)lang_text_size.x) / 2,
                         lang_button_y + (lang_button_height - (int)lang_text_size.y) / 2},
                24, 1, BLACK);
@@ -926,7 +926,7 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
 
     // Draw title
     Vector2 title_size = MeasureTextEx(font, menu->text_title_select_world, 64, 2);
-    DrawTextEx(font, menu->text_title_select_world,
+    DrawTextExCustom(font, menu->text_title_select_world,
                (Vector2){(screen_width - title_size.x) / 2, 40},
                64, 2, WHITE);
 
@@ -962,7 +962,7 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
         DrawRectangleLinesEx(item_rect, 2, WHITE);
 
         // Draw world name and metadata
-        DrawTextEx(font, menu->available_worlds[i].name,
+        DrawTextExCustom(font, menu->available_worlds[i].name,
                    (Vector2){item_rect.x + 10, item_rect.y + 5},
                    24, 1, WHITE);
 
@@ -970,7 +970,7 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
         char metadata[256];
         snprintf(metadata, sizeof(metadata), menu->text_last,
                  menu->available_worlds[i].created, menu->available_worlds[i].chunk_count);
-        DrawTextEx(font, metadata,
+        DrawTextExCustom(font, metadata,
                    (Vector2){item_rect.x + 10, item_rect.y + 28},
                    16, 1, GRAY);
 
@@ -1012,7 +1012,7 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
     DrawRectangleRec(create_button, create_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(create_button, 2, WHITE);
     Vector2 create_text_size = MeasureTextEx(font, menu->text_create_world, 28, 1);
-    DrawTextEx(font, menu->text_create_world,
+    DrawTextExCustom(font, menu->text_create_world,
                (Vector2){create_button.x + (button_width - create_text_size.x) / 2, create_button.y + 10},
                28, 1, BLACK);
 
@@ -1020,7 +1020,7 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
     DrawRectangleRec(back_button, back_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(back_button, 2, WHITE);
     Vector2 back_text_size = MeasureTextEx(font, menu->text_back, 28, 1);
-    DrawTextEx(font, menu->text_back,
+    DrawTextExCustom(font, menu->text_back,
                (Vector2){back_button.x + (button_width - back_text_size.x) / 2, back_button.y + 10},
                28, 1, BLACK);
 
@@ -1054,7 +1054,7 @@ void menu_draw_world_select(MenuSystem* menu, Font font)
     // Display info if no worlds found
     if (menu->world_count == 0) {
         Vector2 no_worlds_size = MeasureTextEx(font, menu->text_no_worlds, 32, 1);
-        DrawTextEx(font, menu->text_no_worlds,
+        DrawTextExCustom(font, menu->text_no_worlds,
                    (Vector2){(screen_width - no_worlds_size.x) / 2, screen_height / 2},
                    32, 1, GRAY);
     }
@@ -1091,7 +1091,7 @@ void menu_draw_create_world(MenuSystem* menu, Font font)
 
     // Draw title
     Vector2 title_size = MeasureTextEx(font, menu->text_title_create_world, 64, 2);
-    DrawTextEx(font, menu->text_title_create_world,
+    DrawTextExCustom(font, menu->text_title_create_world,
                (Vector2){(screen_width - title_size.x) / 2, 40},
                64, 2, WHITE);
 
@@ -1134,7 +1134,7 @@ void menu_draw_create_world(MenuSystem* menu, Font font)
     }
 
     // Draw input text
-    DrawTextEx(font, menu->new_world_name,
+    DrawTextExCustom(font, menu->new_world_name,
                (Vector2){input_x + 10, input_y + 10},
                32, 1, WHITE);
 
@@ -1146,7 +1146,7 @@ void menu_draw_create_world(MenuSystem* menu, Font font)
     }
 
     // Draw label
-    DrawTextEx(font, menu->text_world_name_label,
+    DrawTextExCustom(font, menu->text_world_name_label,
                (Vector2){input_x, input_y - 40},
                20, 1, GRAY);
 
@@ -1178,7 +1178,7 @@ void menu_draw_create_world(MenuSystem* menu, Font font)
     DrawRectangleRec(create_btn, create_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(create_btn, 2, WHITE);
     Vector2 create_text_size = MeasureTextEx(font, menu->text_create_btn, 28, 1);
-    DrawTextEx(font, menu->text_create_btn,
+    DrawTextExCustom(font, menu->text_create_btn,
                (Vector2){create_btn.x + (button_width - create_text_size.x) / 2, create_btn.y + 10},
                28, 1, BLACK);
 
@@ -1186,14 +1186,14 @@ void menu_draw_create_world(MenuSystem* menu, Font font)
     DrawRectangleRec(cancel_btn, cancel_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(cancel_btn, 2, WHITE);
     Vector2 cancel_text_size = MeasureTextEx(font, menu->text_cancel_btn, 28, 1);
-    DrawTextEx(font, menu->text_cancel_btn,
+    DrawTextExCustom(font, menu->text_cancel_btn,
                (Vector2){cancel_btn.x + (button_width - cancel_text_size.x) / 2, cancel_btn.y + 10},
                28, 1, BLACK);
 
     // Draw error message if any
     if (menu->create_world_error) {
         Vector2 error_size = MeasureTextEx(font, menu->create_world_error_msg, 24, 1);
-        DrawTextEx(font, menu->create_world_error_msg,
+        DrawTextExCustom(font, menu->create_world_error_msg,
                    (Vector2){(screen_width - error_size.x) / 2, buttons_y + button_height + 20},
                    24, 1, RED);
     }
@@ -1248,7 +1248,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
 
     // Draw title
     Vector2 title_size = MeasureTextEx(font, menu->game_text.settings, 64, 2);
-    DrawTextEx(font, menu->game_text.settings,
+    DrawTextExCustom(font, menu->game_text.settings,
                (Vector2){(screen_width - title_size.x) / 2, 40},
                64, 2, WHITE);
 
@@ -1268,12 +1268,12 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     int slider_height = 20;
 
     // Draw label
-    DrawTextEx(font, menu->game_text.render_dist_label, (Vector2){panel_x + 30, slider_y - 35}, 28, 1, WHITE);
+    DrawTextExCustom(font, menu->game_text.render_dist_label, (Vector2){panel_x + 30, slider_y - 35}, 28, 1, WHITE);
 
     // Draw value
     char render_dist_str[32];
     snprintf(render_dist_str, sizeof(render_dist_str), "%.0f", menu->render_distance);
-    DrawTextEx(font, render_dist_str, (Vector2){panel_x + 500, slider_y - 35}, 28, 1, GRAY);
+    DrawTextExCustom(font, render_dist_str, (Vector2){panel_x + 500, slider_y - 35}, 28, 1, GRAY);
 
     // Draw slider background
     DrawRectangle(slider_x, slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
@@ -1303,7 +1303,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     int fps_slider_y = slider_y + 100;
 
     // Draw label
-    DrawTextEx(font, menu->game_text.max_fps_label, (Vector2){panel_x + 30, fps_slider_y - 35}, 28, 1, WHITE);
+    DrawTextExCustom(font, menu->game_text.max_fps_label, (Vector2){panel_x + 30, fps_slider_y - 35}, 28, 1, WHITE);
 
     // Draw value
     char fps_str[32];
@@ -1312,7 +1312,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     } else {
         snprintf(fps_str, sizeof(fps_str), "%d", menu->max_fps);
     }
-    DrawTextEx(font, fps_str, (Vector2){panel_x + 500, fps_slider_y - 35}, 28, 1, GRAY);
+    DrawTextExCustom(font, fps_str, (Vector2){panel_x + 500, fps_slider_y - 35}, 28, 1, GRAY);
 
     // Draw slider background
     DrawRectangle(slider_x, fps_slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
@@ -1351,7 +1351,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     int font_y = fps_slider_y + 90;
 
     // Draw label
-    DrawTextEx(font, menu->game_text.font_family_label, (Vector2){panel_x + 30, font_y - 35}, 24, 1, WHITE);
+    DrawTextExCustom(font, menu->game_text.font_family_label, (Vector2){panel_x + 30, font_y - 35}, 24, 1, WHITE);
 
     // Previous/Next buttons for font family selection
     int button_small_width = 35;
@@ -1380,16 +1380,16 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     // Draw previous button
     DrawRectangleRec(prev_button, prev_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(prev_button, 2, WHITE);
-    DrawTextEx(font, "<", (Vector2){prev_button_x + 7, font_display_y + 3}, 24, 1, BLACK);
+    DrawTextExCustom(font, "<", (Vector2){prev_button_x + 7, font_display_y + 3}, 24, 1, BLACK);
 
     // Draw next button
     DrawRectangleRec(next_button, next_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(next_button, 2, WHITE);
-    DrawTextEx(font, ">", (Vector2){next_button_x + 9, font_display_y + 3}, 24, 1, BLACK);
+    DrawTextExCustom(font, ">", (Vector2){next_button_x + 9, font_display_y + 3}, 24, 1, BLACK);
 
     // Draw current font family name in the middle
     Vector2 family_name_size = MeasureTextEx(font, menu->font_families[menu->current_font_family_index], 22, 1);
-    DrawTextEx(font, menu->font_families[menu->current_font_family_index],
+    DrawTextExCustom(font, menu->font_families[menu->current_font_family_index],
                (Vector2){panel_x + (panel_width - (int)family_name_size.x) / 2, font_display_y + 6},
                22, 1, WHITE);
 
@@ -1410,7 +1410,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
 
     // Font variant dropdown
     int variant_y = font_display_y + 67;
-    DrawTextEx(font, menu->game_text.font_variant_label, (Vector2){panel_x + 30, variant_y - 25}, 24, 1, WHITE);
+    DrawTextExCustom(font, menu->game_text.font_variant_label, (Vector2){panel_x + 30, variant_y - 25}, 24, 1, WHITE);
 
     // Draw variant dropdown background
     int dropdown_x = panel_x + 140;
@@ -1428,7 +1428,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     char* ext = strrchr(variant_display, '.');
     if (ext) *ext = '\0';
 
-    DrawTextEx(font, variant_display,
+    DrawTextExCustom(font, variant_display,
                (Vector2){dropdown_x + 10, dropdown_y + 5},
                20, 1, WHITE);
 
@@ -1460,12 +1460,12 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     // Draw up button
     DrawRectangleRec(variant_up_button, variant_up_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(variant_up_button, 2, WHITE);
-    DrawTextEx(font, "^", (Vector2){variant_up_x + 6, variant_up_y + 2}, 20, 1, BLACK);
+    DrawTextExCustom(font, "^", (Vector2){variant_up_x + 6, variant_up_y + 2}, 20, 1, BLACK);
 
     // Draw down button
     DrawRectangleRec(variant_down_button, variant_down_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(variant_down_button, 2, WHITE);
-    DrawTextEx(font, "v", (Vector2){variant_down_x + 6, variant_down_y + 2}, 20, 1, BLACK);
+    DrawTextExCustom(font, "v", (Vector2){variant_down_x + 6, variant_down_y + 2}, 20, 1, BLACK);
 
     // Handle variant selection
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -1493,7 +1493,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     DrawRectangleRec(back_button, back_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(back_button, 2, WHITE);
     Vector2 back_text_size = MeasureTextEx(font, menu->text_back, 28, 1);
-    DrawTextEx(font, menu->text_back,
+    DrawTextExCustom(font, menu->text_back,
                (Vector2){back_button.x + (button_width - back_text_size.x) / 2, back_button.y + 10},
                28, 1, BLACK);
 
@@ -1539,7 +1539,7 @@ void menu_draw_credits(MenuSystem* menu, Font font)
                        WHITE);
 
     // Draw the credits text directly
-    DrawTextEx(font, menu->credits_text,
+    DrawTextExCustom(font, menu->credits_text,
                (Vector2){text_x, text_y},
                font_size, spacing, WHITE);
 
@@ -1563,7 +1563,7 @@ void menu_draw_credits(MenuSystem* menu, Font font)
     DrawRectangleRec(info_btn, info_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(info_btn, 2, WHITE);
     Vector2 btn_text_size = MeasureTextEx(font, menu->game_text.see_full_info, 24, 1);
-    DrawTextEx(font, menu->game_text.see_full_info,
+    DrawTextExCustom(font, menu->game_text.see_full_info,
                (Vector2){button_x + (button_width - (int)btn_text_size.x) / 2, button_y + 12},
                24, 1, BLACK);
 
@@ -1590,7 +1590,7 @@ void menu_draw_credits(MenuSystem* menu, Font font)
 
     // Draw instructions
     Vector2 instr_size = MeasureTextEx(font, menu->game_text.press_esc_to_return, 18, 1);
-    DrawTextEx(font, menu->game_text.press_esc_to_return,
+    DrawTextExCustom(font, menu->game_text.press_esc_to_return,
                (Vector2){(screen_width - instr_size.x) / 2, screen_height - 40},
                18, 1, GRAY);
 }

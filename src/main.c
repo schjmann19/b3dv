@@ -15,6 +15,15 @@
 #include "menu.h"
 #include "clouds.h"
 
+#if defined(PLATFORM_DESKTOP)
+#define SDF_GLSL_VER 330
+#else
+#define SDF_GLSL_VER 100
+#endif
+
+static Shader sdf_shader = {0};
+static bool sdf_font_is_sdf = false;
+
 // graphics and player constants
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 800
@@ -51,13 +60,22 @@ static Font load_font_variant(const char* font_family, const char* font_variant)
         codepoints[codepoint_count++] = i;
     }
 
-    Font font = LoadFontEx(font_path, 64, codepoints, codepoint_count);
-
+    // Load font at a large base_size to generate high-quality glyphs
+    // Now that HIGHDPI is disabled, we can use a moderate base_size for smooth scaling.
+    int base_size = 256;
+    Font font = LoadFontEx(font_path, base_size, codepoints, codepoint_count);
     if (font.glyphCount > 0) {
+        // Use bilinear filtering for smooth downsampling
+        SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
+        GenTextureMipmaps(&font.texture);
+        sdf_font_is_sdf = false;
+        TraceLog(LOG_INFO, "Loaded high-quality font %s size=%d glyphs=%d (bilinear + mipmaps)", font_path, base_size, font.glyphCount);
         return font;
     }
 
     // Fallback to default if font not found
+    sdf_font_is_sdf = false;
+    TraceLog(LOG_WARNING, "Failed to load font %s, using default font", font_path);
     return GetFontDefault();
 }
 
@@ -86,6 +104,13 @@ static Font load_font_by_name(const char* font_name)
 
     // Fallback to default if no font found
     return GetFontDefault();
+}
+
+// Wrapper that draws `font` - fonts rasterized at 256px with mipmaps for smooth scaling
+void DrawTextExCustom(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint)
+{
+    // High-quality rasterization with mipmaps produces crisp text at various sizes
+    DrawTextEx(font, text, position, fontSize, spacing, tint);
 }
 
 int b3dv_main(int argc, char **argv)
@@ -117,14 +142,41 @@ int b3dv_main(int argc, char **argv)
         return 1;
     }
 
+    // Disable HIGHDPI to avoid fractional scaling issues with Hyprland's 1.2x compositor scaling
+    // Render at 1200x800 logical pixels; let window manager handle physical scaling
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.18-beta");
+
+    // Load SDF shader from project assets (avoid external/ references)
+    sdf_shader = (Shader){0};
+    int try_versions[] = { 330, 120, 100 };
+    for (int i = 0; i < 3; i++) {
+        int ver = try_versions[i];
+        if (ver == 0) continue;
+        char vsPath[256];
+        char fsPath[256];
+        snprintf(vsPath, sizeof(vsPath), "assets/shaders/glsl%d/sdf.vs", ver);
+        snprintf(fsPath, sizeof(fsPath), "assets/shaders/glsl%d/sdf.fs", ver);
+        if (FileExists(vsPath) && FileExists(fsPath)) {
+            sdf_shader = LoadShader(vsPath, fsPath);
+            if (sdf_shader.id != 0) {
+                TraceLog(LOG_INFO, "Loaded SDF shader from %s and %s", vsPath, fsPath);
+                break;
+            } else {
+                TraceLog(LOG_WARNING, "Failed to load shader files %s / %s", vsPath, fsPath);
+            }
+        }
+    }
 
     // Disable default ESC key behavior (we handle it manually for pause menu)
     SetExitKey(KEY_NULL);
 
-    // Disable Raylib logging spam
-    SetTraceLogLevel(LOG_NONE);
+    // Enable info-level logging for diagnosis
+    SetTraceLogLevel(LOG_INFO);
+
+    // Debug: print window and DPI info
+    Vector2 dpi = GetWindowScaleDPI();
+    TraceLog(LOG_INFO, "Window size: %dx%d, DPI scale: (%f, %f)", GetScreenWidth(), GetScreenHeight(), dpi.x, dpi.y);
 
     // Initialize world save system (needed for menu world scanning)
     world_system_init();
@@ -235,13 +287,26 @@ int b3dv_main(int argc, char **argv)
     {
         float dt = GetFrameTime();
 
+        // Temporary debug overlay: show magenta clear for first 120 frames
+        static int debug_frames = 120;
+        if (debug_frames > 0) {
+            debug_frames--;
+            BeginDrawing();
+            ClearBackground(MAGENTA);
+            DrawText("DEBUG OVERLAY", 50, 50, 40, WHITE);
+            EndDrawing();
+            continue;
+        }
+
         // Check if font family or variant changed in settings and reload if needed
-        if (strcmp(menu->font_families[menu->current_font_family_index], last_loaded_family) != 0 ||
-            strcmp(menu->font_variants[menu->current_font_variant_index], last_loaded_variant) != 0) {
-            // Unload old font if it's not the default
-            if (custom_font.glyphCount > 0 && custom_font.glyphCount != GetFontDefault().glyphCount) {
-                UnloadFont(custom_font);
-            }
+            if (strcmp(menu->font_families[menu->current_font_family_index], last_loaded_family) != 0 ||
+                strcmp(menu->font_variants[menu->current_font_variant_index], last_loaded_variant) != 0) {
+                // Unload old font if it's not the default
+                if (custom_font.glyphCount > 0 && custom_font.glyphCount != GetFontDefault().glyphCount) {
+                    UnloadFont(custom_font);
+                }
+                // Reset SDF flag when font changes
+                sdf_font_is_sdf = false;
             // Load new font variant
             custom_font = load_font_variant(menu->font_families[menu->current_font_family_index],
                                            menu->font_variants[menu->current_font_variant_index]);
@@ -1043,13 +1108,13 @@ int b3dv_main(int argc, char **argv)
                     snprintf(count_str, sizeof(count_str), "%d", slot->count);
                     int text_x = x + slot_size - MeasureTextEx(custom_font, count_str, 20, 1).x - 5;
                     int text_y = y + slot_size - 20;
-                    DrawTextEx(custom_font, count_str, (Vector2){text_x, text_y}, 20, 1, WHITE);
+                    DrawTextExCustom(custom_font, count_str, (Vector2){text_x, text_y}, 20, 1, WHITE);
                 }
 
                 // Draw slot number
                 char slot_num[4];
                 snprintf(slot_num, sizeof(slot_num), "%d", i + 1);
-                DrawTextEx(custom_font, slot_num, (Vector2){x + 3, y + 3}, 16, 1, (Color){150, 150, 150, 255});
+                DrawTextExCustom(custom_font, slot_num, (Vector2){x + 3, y + 3}, 16, 1, (Color){150, 150, 150, 255});
             }
         }
 
@@ -1067,7 +1132,7 @@ int b3dv_main(int argc, char **argv)
             DrawRectangleLines(inv_x - 10, inv_y - 10, inv_width + 20, inv_height + 20, (Color){100, 100, 100, 255});
 
             // Draw title
-            DrawTextEx(custom_font, "Inventory", (Vector2){inv_x, inv_y - 35}, 24, 1, WHITE);
+            DrawTextExCustom(custom_font, "Inventory", (Vector2){inv_x, inv_y - 35}, 24, 1, WHITE);
 
             // Draw big inventory slots (4 rows x 9 columns)
             for (int row = 0; row < BIG_INVENTORY_ROWS; row++) {
@@ -1103,7 +1168,7 @@ int b3dv_main(int argc, char **argv)
                         snprintf(count_str, sizeof(count_str), "%d", slot->count);
                         int text_x = x + slot_size - MeasureTextEx(custom_font, count_str, 16, 1).x - 3;
                         int text_y = y + slot_size - 16;
-                        DrawTextEx(custom_font, count_str, (Vector2){text_x, text_y}, 16, 1, WHITE);
+                        DrawTextExCustom(custom_font, count_str, (Vector2){text_x, text_y}, 16, 1, WHITE);
                     }
                     // Handle mouse interaction for big inventory
                     Vector2 mouse_pos = GetMousePosition();
@@ -1189,13 +1254,13 @@ int b3dv_main(int argc, char **argv)
                     snprintf(count_str, sizeof(count_str), "%d", slot->count);
                     int text_x = x + slot_size - MeasureTextEx(custom_font, count_str, 16, 1).x - 3;
                     int text_y = y + slot_size - 16;
-                    DrawTextEx(custom_font, count_str, (Vector2){text_x, text_y}, 16, 1, WHITE);
+                    DrawTextExCustom(custom_font, count_str, (Vector2){text_x, text_y}, 16, 1, WHITE);
                 }
 
                 // Draw slot number
                 char slot_num[4];
                 snprintf(slot_num, sizeof(slot_num), "%d", i + 1);
-                DrawTextEx(custom_font, slot_num, (Vector2){x + 3, y + 3}, 14, 1, (Color){150, 150, 150, 255});
+                DrawTextExCustom(custom_font, slot_num, (Vector2){x + 3, y + 3}, 14, 1, (Color){150, 150, 150, 255});
             }
 
             // Handle hotbar mouse interaction
@@ -1241,67 +1306,67 @@ int b3dv_main(int argc, char **argv)
 
             // Draw help text
             // localized close help
-            DrawTextEx(custom_font, menu->game_text.inventory_close, (Vector2){inv_x, hotbar_y + slot_size + 10}, 16, 1, (Color){150, 150, 150, 255});
+            DrawTextExCustom(custom_font, menu->game_text.inventory_close, (Vector2){inv_x, hotbar_y + slot_size + 10}, 16, 1, (Color){150, 150, 150, 255});
         }
 
         // draw HUD based on mode
         if (hud_visible && hud_mode == 0) {
             // default HUD
-            DrawTextEx(custom_font, menu->game_text.move_controls, (Vector2){10, 10}, 32, 1, BLACK);
-            DrawTextEx(custom_font, menu->game_text.metrics_help, (Vector2){10, 50}, 32, 1, BLACK);
-            DrawTextEx(custom_font, menu->game_text.mouse_help, (Vector2){10, 90}, 32, 1, BLACK);
-            DrawTextEx(custom_font, menu->game_text.look_help, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, menu->game_text.pause_help, (Vector2){10, 170}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, menu->game_text.move_controls, (Vector2){10, 10}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, menu->game_text.metrics_help, (Vector2){10, 50}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, menu->game_text.mouse_help, (Vector2){10, 90}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, menu->game_text.look_help, (Vector2){10, 130}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, menu->game_text.pause_help, (Vector2){10, 170}, 32, 1, BLACK);
 
             char coord_text[128];
             snprintf(coord_text, sizeof(coord_text), "%s (%.1f, %.1f, %.1f)",
                      menu->game_text.coord_label, player->position.x, player->position.y, player->position.z);
-            DrawTextEx(custom_font, coord_text, (Vector2){10, 210}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, coord_text, (Vector2){10, 210}, 32, 1, BLACK);
 
             char fps_text[64];
             snprintf(fps_text, sizeof(fps_text), "%s %d", menu->game_text.fps_label, GetFPS());
-            DrawTextEx(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, fps_text, (Vector2){10, 250}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, menu->game_text.version, (Vector2){10, 290}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, menu->game_text.version, (Vector2){10, 290}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 1) {
             // performance metrics HUD
-            DrawTextEx(custom_font, menu->game_text.perf_metrics, (Vector2){10, 10}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, menu->game_text.perf_metrics, (Vector2){10, 10}, 32, 1, BLACK);
 
             char frame_time[64];
             snprintf(frame_time, sizeof(frame_time), "Frame Time: %.2f ms", dt * 1000.0f);
-            DrawTextEx(custom_font, frame_time, (Vector2){10, 50}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, frame_time, (Vector2){10, 50}, 32, 1, BLACK);
 
             char fps_text[32];
             snprintf(fps_text, sizeof(fps_text), "%s %d", menu->game_text.fps_label, GetFPS());
-            DrawTextEx(custom_font, fps_text, (Vector2){10, 90}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, fps_text, (Vector2){10, 90}, 32, 1, BLACK);
 
             char blocks_text[64];
             snprintf(blocks_text, sizeof(blocks_text), "Blocks Rendered: %d", blocks_rendered);
-            DrawTextEx(custom_font, blocks_text, (Vector2){10, 130}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, blocks_text, (Vector2){10, 130}, 32, 1, BLACK);
 
             int memory_mb = get_process_memory_mb();
             char memory_text[64];
             snprintf(memory_text, sizeof(memory_text), "Memory Usage: %d MB", memory_mb);
-            DrawTextEx(custom_font, memory_text, (Vector2){10, 170}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, memory_text, (Vector2){10, 170}, 32, 1, BLACK);
 
             char pos_text[64];
             snprintf(pos_text, sizeof(pos_text), "Pos: (%.1f, %.1f, %.1f)",
                      player->position.x, player->position.y, player->position.z);
-            DrawTextEx(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 2) {
             // player stats HUD
-            DrawTextEx(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
 
             char fps_text[32];
             snprintf(fps_text, sizeof(fps_text), "FPS: %d", GetFPS());
-            DrawTextEx(custom_font, fps_text, (Vector2){10, 50}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, fps_text, (Vector2){10, 50}, 32, 1, BLACK);
 
             char pos_text[64];
             snprintf(pos_text, sizeof(pos_text), "Pos: (%.1f, %.1f, %.1f)",
                      player->position.x, player->position.y, player->position.z);
-            DrawTextEx(custom_font, pos_text, (Vector2){10, 90}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, pos_text, (Vector2){10, 90}, 32, 1, BLACK);
 
             // calculate speed (magnitude of velocity)
             // Use actual movement for speedometer
@@ -1311,22 +1376,22 @@ int b3dv_main(int argc, char **argv)
             float actual_speed = sqrtf(dx*dx + dy*dy + dz*dz) / dt;
             char speed_text[64];
             snprintf(speed_text, sizeof(speed_text), "Speed: %.2f m/s", actual_speed);
-            DrawTextEx(custom_font, speed_text, (Vector2){10, 130}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, speed_text, (Vector2){10, 130}, 32, 1, BLACK);
 
             // momentum/velocity components
             char momentum_text[96];
             snprintf(momentum_text, sizeof(momentum_text), "Vel: (%.2f, %.2f, %.2f) m/s",
                      player->velocity.x, player->velocity.y, player->velocity.z);
-            DrawTextEx(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextEx(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 3) {
             // system info HUD (using cached values)
-            DrawTextEx(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
-            DrawTextEx(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
-            DrawTextEx(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
-            DrawTextEx(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextEx(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
+            DrawTextExCustom(custom_font, "b3dv 0.0.18-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         // Draw chat message history (last few messages with fade-out)
@@ -1352,7 +1417,7 @@ int b3dv_main(int argc, char **argv)
 
                 Color msg_color = (Color){255, 255, 255, (unsigned char)(255 * fade_factor)};
                 int y_offset = message_start_y - (messages_shown * 35);
-                DrawTextEx(custom_font, chat_messages[msg_index], (Vector2){10, y_offset}, 28, 1, msg_color);
+                DrawTextExCustom(custom_font, chat_messages[msg_index], (Vector2){10, y_offset}, 28, 1, msg_color);
                 messages_shown++;
             }
         }
@@ -1369,7 +1434,7 @@ int b3dv_main(int argc, char **argv)
 
                 // Draw title
                 Vector2 title_size = MeasureTextEx(custom_font, menu->game_text.settings, 64, 2);
-                DrawTextEx(custom_font, menu->game_text.settings,
+                DrawTextExCustom(custom_font, menu->game_text.settings,
                            (Vector2){(screen_width - title_size.x) / 2, 40},
                            64, 2, WHITE);
 
@@ -1389,12 +1454,12 @@ int b3dv_main(int argc, char **argv)
                 int slider_height = 20;
 
                 // Draw label
-                DrawTextEx(custom_font, menu->game_text.render_dist_label, (Vector2){panel_x + 30, slider_y - 35}, 28, 1, WHITE);
+                DrawTextExCustom(custom_font, menu->game_text.render_dist_label, (Vector2){panel_x + 30, slider_y - 35}, 28, 1, WHITE);
 
                 // Draw value
                 char render_dist_str[32];
                 snprintf(render_dist_str, sizeof(render_dist_str), "%.0f", menu->render_distance);
-                DrawTextEx(custom_font, render_dist_str, (Vector2){panel_x + 500, slider_y - 35}, 28, 1, GRAY);
+                DrawTextExCustom(custom_font, render_dist_str, (Vector2){panel_x + 500, slider_y - 35}, 28, 1, GRAY);
 
                 // Draw slider background
                 DrawRectangle(slider_x, slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
@@ -1424,7 +1489,7 @@ int b3dv_main(int argc, char **argv)
                 int fps_slider_y = slider_y + 100;
 
                 // Draw label
-                DrawTextEx(custom_font, menu->game_text.max_fps_label, (Vector2){panel_x + 30, fps_slider_y - 35}, 28, 1, WHITE);
+                DrawTextExCustom(custom_font, menu->game_text.max_fps_label, (Vector2){panel_x + 30, fps_slider_y - 35}, 28, 1, WHITE);
 
                 // Draw value
                 char fps_str[32];
@@ -1433,7 +1498,7 @@ int b3dv_main(int argc, char **argv)
                 } else {
                     snprintf(fps_str, sizeof(fps_str), "%d", menu->max_fps);
                 }
-                DrawTextEx(custom_font, fps_str, (Vector2){panel_x + 500, fps_slider_y - 35}, 28, 1, GRAY);
+                DrawTextExCustom(custom_font, fps_str, (Vector2){panel_x + 500, fps_slider_y - 35}, 28, 1, GRAY);
 
                 // Draw slider background
                 DrawRectangle(slider_x, fps_slider_y, slider_width, slider_height, (Color){60, 60, 60, 255});
@@ -1485,7 +1550,7 @@ int b3dv_main(int argc, char **argv)
                 DrawRectangleRec(back_button, back_hover ? LIGHTGRAY : GRAY);
                 DrawRectangleLinesEx(back_button, 2, WHITE);
                 Vector2 back_text_size = MeasureTextEx(custom_font, menu->text_back, 32, 1);
-                DrawTextEx(custom_font, menu->text_back,
+                DrawTextExCustom(custom_font, menu->text_back,
                            (Vector2){((float)screen_width / 2.0f) - (back_text_size.x / 2.0f), (float)button_y + 12.0f},
                            32, 1, BLACK);
 
@@ -1511,7 +1576,7 @@ int b3dv_main(int argc, char **argv)
                 Vector2 paused_size = MeasureTextEx(custom_font, menu->game_text.paused, 64, 2);
 
                 // draw title
-                DrawTextEx(custom_font, menu->game_text.paused,
+                DrawTextExCustom(custom_font, menu->game_text.paused,
                            (Vector2){((float)screen_width - paused_size.x) / 2.0f, (float)screen_height / 2.0f - 120.0f},
                            64, 2, /*RED*/WHITE);
 
@@ -1556,7 +1621,7 @@ int b3dv_main(int argc, char **argv)
                 DrawRectangleRec(resume_button, resume_hover ? LIGHTGRAY : GRAY);
                 DrawRectangleLinesEx(resume_button, 2, WHITE);
                 Vector2 resume_text_size = MeasureTextEx(custom_font, menu->game_text.resume, 32, 1);
-                DrawTextEx(custom_font, menu->game_text.resume,
+                DrawTextExCustom(custom_font, menu->game_text.resume,
                            (Vector2){center_x - resume_text_size.x / 2, center_y + 12},
                            32, 1, BLACK);
 
@@ -1564,7 +1629,7 @@ int b3dv_main(int argc, char **argv)
                 DrawRectangleRec(settings_button, settings_hover ? LIGHTGRAY : GRAY);
                 DrawRectangleLinesEx(settings_button, 2, WHITE);
                 Vector2 settings_text_size = MeasureTextEx(custom_font, menu->game_text.settings, 32, 1);
-                DrawTextEx(custom_font, menu->game_text.settings,
+                DrawTextExCustom(custom_font, menu->game_text.settings,
                            (Vector2){center_x - settings_text_size.x / 2, center_y + button_height + button_spacing + 12},
                            32, 1, BLACK);
 
@@ -1572,7 +1637,7 @@ int b3dv_main(int argc, char **argv)
                 DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : GRAY);
                 DrawRectangleLinesEx(quit_button, 2, WHITE);
                 Vector2 quit_text_size = MeasureTextEx(custom_font, menu->game_text.back_to_menu, 32, 1);
-                DrawTextEx(custom_font, menu->game_text.back_to_menu,
+                DrawTextExCustom(custom_font, menu->game_text.back_to_menu,
                            (Vector2){center_x - quit_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 12},
                            32, 1, BLACK);
 
@@ -1626,7 +1691,7 @@ int b3dv_main(int argc, char **argv)
             // draw chat input text with prompt
             char chat_display[512];
             snprintf(chat_display, sizeof(chat_display), "> %s", chat_input);
-            DrawTextEx(custom_font, chat_display, (Vector2){20, chat_box_y + 8}, 28, 1, WHITE);
+            DrawTextExCustom(custom_font, chat_display, (Vector2){20, chat_box_y + 8}, 28, 1, WHITE);
 
             // draw blinking cursor at cursor position
             if ((int)(GetTime() * 2) % 2 == 0) {
@@ -1665,6 +1730,7 @@ int b3dv_main(int argc, char **argv)
         world_unload_textures(world);  // Unload textures before closing
         world_free(world);
     }
+    if (sdf_shader.id != 0) UnloadShader(sdf_shader);
     CloseWindow();
     return 0;
 }

@@ -142,6 +142,8 @@ void menu_draw_world_select(MenuSystem* menu, Font font);
 void menu_draw_create_world(MenuSystem* menu, Font font);
 void menu_draw_credits(MenuSystem* menu, Font font);
 void menu_draw_settings(MenuSystem* menu, Font font);
+// Use SDF-aware draw helper from main.c for consistent font rendering
+void DrawTextExCustom(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint);
 void menu_update_input(MenuSystem* menu);
 void menu_load_language(MenuSystem* menu, const char* language);
 bool menu_load_text_file(const char* language, const char* filename, char* out_buffer, int buffer_size);
