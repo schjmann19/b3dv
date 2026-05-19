@@ -14,6 +14,7 @@
 #include "utils.h"
 #include "menu.h"
 #include "clouds.h"
+#include "console.h"
 
 #if defined(PLATFORM_DESKTOP)
 #define SDF_GLSL_VER 330
@@ -113,11 +114,41 @@ void DrawTextExCustom(Font font, const char *text, Vector2 position, float fontS
     DrawTextEx(font, text, position, fontSize, spacing, tint);
 }
 
+static const char* get_cardinal_direction(float heading_deg)
+{
+    if (heading_deg < 22.5f || heading_deg >= 337.5f) return "N";
+    if (heading_deg < 67.5f) return "NE";
+    if (heading_deg < 112.5f) return "E";
+    if (heading_deg < 157.5f) return "SE";
+    if (heading_deg < 202.5f) return "S";
+    if (heading_deg < 247.5f) return "SW";
+    if (heading_deg < 292.5f) return "W";
+    return "NW";
+}
+
+static void draw_compass_hud(Font font, float yaw_radians)
+{
+    float heading_deg = yaw_radians * (180.0f / 3.14159265f);
+    heading_deg = fmodf(heading_deg, 360.0f);
+    if (heading_deg < 0.0f) heading_deg += 360.0f;
+
+    const char* cardinal = get_cardinal_direction(heading_deg);
+    char heading_text[64];
+    snprintf(heading_text, sizeof(heading_text), "Heading: %.0f° %s", heading_deg, cardinal);
+
+    int screen_w = GetScreenWidth();
+    Vector2 text_size = MeasureTextEx(font, heading_text, 28, 1);
+    Vector2 text_pos = { (float)(screen_w - (int)text_size.x - 20), 20.0f };
+
+    DrawRectangle((int)text_pos.x - 10, (int)text_pos.y - 8, (int)text_size.x + 20, (int)text_size.y + 16, (Color){0, 0, 0, 150});
+    DrawTextExCustom(font, heading_text, text_pos, 28, 1, WHITE);
+}
+
 int b3dv_main(int argc, char **argv)
 {   
     // if no args, print version and help
     if (argc == 1) {
-        //puts("b3dv version 0.0.19-beta");
+        //puts("b3dv version 0.0.20-beta");
         puts("Usage:");
         puts("       b3dv [--version|-v] - version info");
         puts("       b3dv run - launch game");
@@ -126,7 +157,7 @@ int b3dv_main(int argc, char **argv)
 
     // version argument
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
-            puts("b3dv version 0.0.19-beta");
+            puts("b3dv version 0.0.20-beta");
             puts("By Jimena Neumann; BSD-3-Clause License");
             #ifdef DEBUG
             puts("compiled on " __DATE__ " at " __TIME__);
@@ -145,7 +176,7 @@ int b3dv_main(int argc, char **argv)
     // Disable HIGHDPI to avoid fractional scaling issues with Hyprland's 1.2x compositor scaling
     // Render at 1200x800 logical pixels; let window manager handle physical scaling
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.19-beta");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.20-beta");
 
     // Load SDF shader from project assets (avoid external/ references)
     sdf_shader = (Shader){0};
@@ -184,8 +215,12 @@ int b3dv_main(int argc, char **argv)
     // Create menu system
     MenuSystem* menu = menu_system_create();
 
+    // Initialize console input system
+    console_init();
+
     // Set target FPS based on menu settings (will be updated dynamically)
     SetTargetFPS(menu->max_fps);
+    int last_target_fps = menu->max_fps;
 
     // Load initial font from menu settings
     Font custom_font = load_font_variant(menu->font_families[menu->current_font_family_index],
@@ -284,6 +319,7 @@ int b3dv_main(int argc, char **argv)
     float fov_half_vert_tan = 0.0f;
     float fov_half_horiz_tan = 0.0f;
 
+    B3DV_MAIN_LOOP 
     while (!WindowShouldClose() && !should_quit)
     {
         float dt = GetFrameTime();
@@ -372,9 +408,20 @@ int b3dv_main(int argc, char **argv)
                 // Register player with world and apply saved inventory if present
                 world->current_player = player;
                 world_apply_players_to(world, player);
+                if (menu->nickname[0] != '\0') {
+                    strncpy(world->player_nickname, menu->nickname, sizeof(world->player_nickname) - 1);
+                    world->player_nickname[sizeof(world->player_nickname) - 1] = '\0';
+                    strncpy(player->nickname, menu->nickname, sizeof(player->nickname) - 1);
+                    player->nickname[sizeof(player->nickname) - 1] = '\0';
+                }
 
-                // Create cloud system with cloud texture
+                // Create cloud system
                 clouds = clouds_create("./assets/textures/clouds.png");
+                // Apply cloud settings from menu
+                if (clouds) {
+                    clouds->enabled = menu->clouds_enabled;
+                    clouds->render_distance = menu->clouds_render_distance;
+                }
 
                 // Enable mouse capture for gameplay
                 mouse_captured = true;
@@ -400,8 +447,11 @@ int b3dv_main(int argc, char **argv)
         fov_half_vert_tan = tanf(fovy_rad / 2.0f);
         fov_half_horiz_tan = fov_half_vert_tan * window_aspect;
 
-        // Update target FPS from settings
-        SetTargetFPS(menu->max_fps);
+        // Update target FPS from settings only when it changes to avoid repeated INFO messages
+        if (menu->max_fps != last_target_fps) {
+            SetTargetFPS(menu->max_fps);
+            last_target_fps = menu->max_fps;
+        }
 
         // Chat system - handle first to consume all input when active
         if (chat_active) {
@@ -690,6 +740,102 @@ int b3dv_main(int argc, char **argv)
             EnableCursor();
         }
         }  // End of else block for non-chat input
+
+        // Console system - check for commands from terminal
+        ConsoleCommand console_cmd;
+        while (console_get_next_command(&console_cmd)) {
+            // Process console commands (simplified - console can only run certain commands)
+            printf("[console] Executing: %s\n", console_cmd.raw_input);
+            
+            // Determine target player - for now, always use current player
+            // (In future, could support multiple players)
+            Player* target_player = player;
+            
+            // Process by command type
+            switch (console_cmd.type) {
+                case CMD_QUIT:
+                    printf("[console] Quitting...\n");
+                    should_quit = true;
+                    break;
+
+                case CMD_CHAT:
+                    add_chat_message(console_cmd.args);
+                    break;
+
+                case CMD_TP:
+                    if (target_player) {
+                        float x, y, z;
+                        if (sscanf(console_cmd.args, "%f %f %f", &x, &y, &z) == 3) {
+                            target_player->position = (Vector3){ x, y, z };
+                            target_player->velocity = (Vector3){0,0,0};
+                            printf("[console] Teleported %s to (%.1f, %.1f, %.1f)\n", target_player->nickname, x, y, z);
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), "[console] Teleported to (%.1f, %.1f, %.1f)", x, y, z);
+                            add_chat_message(msg);
+                        } else {
+                            printf("[console] Usage: /tp <x> <y> <z>\n");
+                        }
+                    }
+                    break;
+                    
+                case CMD_GIVE:
+                    if (target_player && console_cmd.args[0] != '\0') {
+                        char item_buf[64] = {0};
+                        int count = 1;
+                        sscanf(console_cmd.args, "%63s %d", item_buf, &count);
+                        
+                        BlockType block_type = BLOCK_AIR;
+                        const char* type_str = NULL;
+                        
+                        if (strcmp(item_buf, "stone") == 0) { block_type = BLOCK_STONE; type_str = "stone"; }
+                        else if (strcmp(item_buf, "dirt") == 0) { block_type = BLOCK_DIRT; type_str = "dirt"; }
+                        else if (strcmp(item_buf, "grass") == 0) { block_type = BLOCK_GRASS; type_str = "grass"; }
+                        else if (strcmp(item_buf, "sand") == 0) { block_type = BLOCK_SAND; type_str = "sand"; }
+                        else if (strcmp(item_buf, "wood") == 0) { block_type = BLOCK_WOOD; type_str = "wood"; }
+                        else if (strcmp(item_buf, "glowstone") == 0) { block_type = BLOCK_GLOWSTONE; type_str = "glowstone"; }
+                        
+                        if (type_str && inventory_give(target_player, block_type, count)) {
+                            printf("[console] Gave %d of %s to %s\n", count, type_str, target_player->nickname);
+                            char msg[256];
+                            snprintf(msg, sizeof(msg), "[console] Gave %d of %s", count, type_str);
+                            add_chat_message(msg);
+                        } else {
+                            printf("[console] Failed to give item: %s\n", item_buf);
+                        }
+                    }
+                    break;
+                    
+                case CMD_SELECT:
+                    if (target_player && console_cmd.args[0] != '\0') {
+                        const char* block_name = console_cmd.args;
+                        if (strcmp(block_name, "stone") == 0) { target_player->selected_block = BLOCK_STONE; printf("[console] Selected stone\n"); add_chat_message("[console] Selected stone"); }
+                        else if (strcmp(block_name, "dirt") == 0) { target_player->selected_block = BLOCK_DIRT; printf("[console] Selected dirt\n"); add_chat_message("[console] Selected dirt"); }
+                        else if (strcmp(block_name, "grass") == 0) { target_player->selected_block = BLOCK_GRASS; printf("[console] Selected grass\n"); add_chat_message("[console] Selected grass"); }
+                        else if (strcmp(block_name, "sand") == 0) { target_player->selected_block = BLOCK_SAND; printf("[console] Selected sand\n"); add_chat_message("[console] Selected sand"); }
+                        else if (strcmp(block_name, "wood") == 0) { target_player->selected_block = BLOCK_WOOD; printf("[console] Selected wood\n"); add_chat_message("[console] Selected wood"); }
+                        else if (strcmp(block_name, "glowstone") == 0) { target_player->selected_block = BLOCK_GLOWSTONE; printf("[console] Selected glowstone\n"); add_chat_message("[console] Selected glowstone"); }
+                        else { printf("[console] Unknown block: %s\n", block_name); }
+                    }
+                    break;
+                    
+                case CMD_HELP:
+                    printf("[console] Available commands:\n");
+                    printf("  /tp <x> <y> <z>           - Teleport to coordinates\n");
+                    printf("  /give <block> [count]      - Give items (stone, dirt, grass, sand, wood, glowstone)\n");
+                    printf("  /select <block>            - Select block type\n");
+                    printf("  /quit                      - Quit the game\n");
+                    printf("  /help                      - Show this help message\n");
+                    break;
+                    
+                case CMD_UNKNOWN:
+                    printf("[console] Unknown command: %s\n", console_cmd.raw_input);
+                    break;
+                    
+                default:
+                    printf("[console] Command not yet supported from console\n");
+                    break;
+            }
+        }
 
         // handle mouse look (must happen before getting forward/right)
         if (mouse_captured) {
@@ -1077,7 +1223,11 @@ int b3dv_main(int argc, char **argv)
                 }
             }
 
-            // Draw clouds
+            // Draw clouds (sync with menu settings)
+            if (clouds) {
+                clouds->enabled = menu->clouds_enabled;
+                clouds->render_distance = menu->clouds_render_distance;
+            }
             clouds_draw(clouds, camera.position, camera_offset);
         EndMode3D();
 
@@ -1402,7 +1552,7 @@ int b3dv_main(int argc, char **argv)
                      player->position.x, player->position.y, player->position.z);
             DrawTextExCustom(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.19-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.20-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 2) {
             // player stats HUD
             DrawTextExCustom(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1432,14 +1582,18 @@ int b3dv_main(int argc, char **argv)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextExCustom(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.19-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.20-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextExCustom(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextExCustom(custom_font, "b3dv 0.0.19-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.20-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+        }
+
+        if (hud_visible && menu->compass_enabled) {
+            draw_compass_hud(custom_font, camera_yaw);
         }
 
         // Draw chat message history (last few messages with fade-out)
@@ -1487,10 +1641,10 @@ int b3dv_main(int argc, char **argv)
                            64, 2, WHITE);
 
                 // Settings panel
-                int panel_width = 600;
-                int panel_height = 300;
+                int panel_width = 700;
+                int panel_height = 700;
                 int panel_x = (screen_width - panel_width) / 2;
-                int panel_y = 120;
+                int panel_y = 30;
 
                 DrawRectangle(panel_x - 10, panel_y - 10, panel_width + 20, panel_height + 20, (Color){40, 40, 40, 255});
                 DrawRectangleLines(panel_x - 10, panel_y - 10, panel_width + 20, panel_height + 20, WHITE);
@@ -1581,10 +1735,120 @@ int b3dv_main(int argc, char **argv)
                     menu_save_settings(menu);
                 }
 
+                // Nickname input
+                int nickname_y = fps_slider_y + 90;
+                int nickname_box_x = panel_x + 50;
+                int nickname_box_width = 500;
+                int nickname_box_height = 40;
+                Rectangle nickname_box = {
+                    (float)nickname_box_x,
+                    (float)nickname_y,
+                    (float)nickname_box_width,
+                    (float)nickname_box_height
+                };
+
+                DrawTextExCustom(custom_font, "Nickname:", (Vector2){panel_x + 30, nickname_y - 35}, 24, 1, WHITE);
+                DrawRectangleRec(nickname_box, (Color){60, 60, 60, 255});
+                DrawRectangleLinesEx(nickname_box, 2, menu->nickname_edit_active ? YELLOW : WHITE);
+                DrawTextExCustom(custom_font, menu->nickname,
+                           (Vector2){nickname_box.x + 10, nickname_box.y + 8},
+                           24, 1, WHITE);
+
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    if (CheckCollisionPointRec(mouse_pos, nickname_box)) {
+                        menu->nickname_edit_active = true;
+                    } else {
+                        menu->nickname_edit_active = false;
+                    }
+                }
+
+                if (menu->nickname_edit_active) {
+                    int key = GetCharPressed();
+                    bool changed = false;
+                    while (key > 0) {
+                        if ((key >= 32 && key <= 126) && menu->nickname_len < (int)sizeof(menu->nickname) - 1) {
+                            menu->nickname[menu->nickname_len++] = (char)key;
+                            menu->nickname[menu->nickname_len] = '\0';
+                            changed = true;
+                        }
+                        key = GetCharPressed();
+                    }
+
+                    if (IsKeyPressed(KEY_BACKSPACE) && menu->nickname_len > 0) {
+                        menu->nickname_len--;
+                        menu->nickname[menu->nickname_len] = '\0';
+                        changed = true;
+                    }
+
+                    if (changed) {
+                        menu_save_settings(menu);
+                    }
+                }
+
+                if (menu->nickname_edit_active && (int)(GetTime() * 2) % 2 == 0) {
+                    Vector2 cursor_pos = MeasureTextEx(custom_font, menu->nickname, 24, 1);
+                    DrawLineEx((Vector2){nickname_box.x + 10 + cursor_pos.x, nickname_box.y + 8},
+                               (Vector2){nickname_box.x + 10 + cursor_pos.x, nickname_box.y + nickname_box_height - 8},
+                               2, WHITE);
+                }
+
+                // Cloud render distance slider
+                int cloud_dist_y = nickname_y + 90;
+
+                // Draw label
+                DrawTextExCustom(custom_font, "Cloud Distance:", (Vector2){panel_x + 30, cloud_dist_y - 35}, 24, 1, WHITE);
+
+                // Draw value
+                char cloud_dist_str[32];
+                snprintf(cloud_dist_str, sizeof(cloud_dist_str), "%.0f", menu->clouds_render_distance);
+                DrawTextExCustom(custom_font, cloud_dist_str, (Vector2){panel_x + 500, cloud_dist_y - 35}, 24, 1, GRAY);
+
+                // Draw slider background
+                DrawRectangle(slider_x, cloud_dist_y, slider_width, slider_height, (Color){60, 60, 60, 255});
+                DrawRectangleLines(slider_x, cloud_dist_y, slider_width, slider_height, WHITE);
+
+                // Calculate cloud distance slider knob position
+                float cloud_dist_normalized = (menu->clouds_render_distance - 32.0f) / (512.0f - 32.0f);
+                cloud_dist_normalized = cloud_dist_normalized < 0 ? 0 : (cloud_dist_normalized > 1 ? 1 : cloud_dist_normalized);
+                int cloud_knob_x = slider_x + (int)(cloud_dist_normalized * slider_width);
+
+                // Draw knob
+                DrawRectangle(cloud_knob_x - 6, cloud_dist_y - 5, 12, slider_height + 10, LIGHTGRAY);
+                DrawRectangleLines(cloud_knob_x - 6, cloud_dist_y - 5, 12, slider_height + 10, WHITE);
+
+                // Handle cloud distance slider input
+                Rectangle cloud_slider_rect = {(float)slider_x, (float)(cloud_dist_y - 10), (float)slider_width, slider_height + 20};
+
+                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, cloud_slider_rect)) {
+                    float new_pos = (mouse_pos.x - slider_x) / slider_width;
+                    new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
+                    menu->clouds_render_distance = 32.0f + (new_pos * (512.0f - 32.0f));
+                    menu_save_settings(menu);
+                }
+
+                // Cloud toggle checkbox
+                int cloud_toggle_y = cloud_dist_y + 60;
+                int checkbox_size = 30;
+                int checkbox_x = panel_x + 50;
+                Rectangle cloud_checkbox = {(float)checkbox_x, (float)cloud_toggle_y, (float)checkbox_size, (float)checkbox_size};
+
+                DrawRectangleRec(cloud_checkbox, (Color){60, 60, 60, 255});
+                DrawRectangleLinesEx(cloud_checkbox, 2, WHITE);
+                if (menu->clouds_enabled) {
+                    DrawRectangle(checkbox_x + 5, cloud_toggle_y + 5, checkbox_size - 10, checkbox_size - 10, (Color){100, 200, 100, 255});
+                }
+
+                DrawTextExCustom(custom_font, "Clouds Enabled", (Vector2){checkbox_x + checkbox_size + 15, cloud_toggle_y + 3}, 24, 1, WHITE);
+
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, cloud_checkbox)) {
+                    menu->clouds_enabled = !menu->clouds_enabled;
+                    menu_save_settings(menu);
+                }
+
                 // Back button to return to pause menu
                 int button_width = 450;
                 int button_height = 60;
-                int button_y = fps_slider_y + 100;
+                int button_y = cloud_toggle_y + 80;
 
                 Rectangle back_button = {
                     ((float)screen_width - (float)button_width) / 2.0f,
@@ -1779,6 +2043,10 @@ int b3dv_main(int argc, char **argv)
         world_free(world);
     }
     if (sdf_shader.id != 0) UnloadShader(sdf_shader);
+    
+    // Shutdown console input system
+    console_shutdown();
+    
     CloseWindow();
     return 0;
 }

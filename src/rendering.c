@@ -218,17 +218,16 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
         rlSetTexture(texture.id);
     }
 
+    rlDisableBackfaceCulling();
+
     for (int face = 0; face < 6; face++) {
-        // Skip faces that are not exposed or face away from camera
+        // Skip faces that are not exposed to air
         if (!(exposed_faces & (1 << face))) {
             continue;  // Face is occluded by neighbor
         }
 
-        // Backface culling: skip faces facing away from camera
-        float dot = to_cam.x * face_normals[face].x + to_cam.y * face_normals[face].y + to_cam.z * face_normals[face].z;
-        if (dot <= 0.0f) {
-            continue;  // Face points away from camera
-        }
+        // Backface culling is disabled for block faces here to avoid transient terrain holes
+        // when the camera passes near a block plane edge during jumps.
 
         if (has_texture) {
             rlBegin(RL_QUADS);
@@ -248,6 +247,8 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     if (has_texture) {
         rlSetTexture(0);
     }
+
+    rlEnableBackfaceCulling();
 
     // Draw wireframe if enabled
     if (show_wireframe) {

@@ -731,3 +731,20 @@ hello
 /show_chunk_borders off
 /tp 100 100 100
 /tp 100 120 100
+asd
+asd
+asd
+asd
+asd
+/save
+/saveworld
+/saveworld asd
+/save asd
+/tp 200 200 200000
+/give grass 20
+/give grass 20
+/give stone 300
+asd
+/tp 1200 200 2000
+/fly enable
+/tp 0 120 0

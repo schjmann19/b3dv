@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 #include "player.h"
@@ -8,7 +9,16 @@
 // Create a player
 Player* player_create(float x, float y, float z)
 {
+    return player_create_with_uid(x, y, z, 0x00000001, "Player");
+}
+
+// Create a player with specific UID and nickname
+Player* player_create_with_uid(float x, float y, float z, uint32_t uid, const char* nickname)
+{
     Player* player = (Player*)malloc(sizeof(Player));
+    player->uid = uid;
+    strncpy(player->nickname, nickname, sizeof(player->nickname) - 1);
+    player->nickname[sizeof(player->nickname) - 1] = '\0';
     player->position = (Vector3){ x, y, z };
     player->prev_position = player->position;
     player->velocity = (Vector3){ 0, 0, 0 };

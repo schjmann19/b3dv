@@ -1,6 +1,7 @@
 #ifndef PLAYER_H
 #define PLAYER_H
 
+#include <stdint.h>
 #include "raylib.h"
 #include "world.h"
 
@@ -27,7 +28,9 @@ typedef struct {
 } InventorySlot;
 
 // Player structure
-typedef struct {
+typedef struct Player {
+    uint32_t uid;        // Unique player ID (8-digit hex, stored as uint32)
+    char nickname[64];   // Player display name
     Vector3 position;    // Head position
     Vector3 prev_position; // Previous position (for actual movement)
     Vector3 velocity;    // Current velocity
@@ -50,6 +53,7 @@ typedef struct {
 
 // Function declarations
 Player* player_create(float x, float y, float z);
+Player* player_create_with_uid(float x, float y, float z, uint32_t uid, const char* nickname);
 void player_free(Player* player);
 void player_move_input(Player* player, Vector3 forward, Vector3 right, bool flight_enabled);
 void player_update(Player* player, World* world, float dt, bool flight_enabled);

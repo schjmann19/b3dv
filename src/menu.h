@@ -126,6 +126,12 @@ typedef struct {
     // Settings
     float render_distance;
     int max_fps;
+    char nickname[64];
+    int nickname_len;
+    bool nickname_edit_active;
+    bool clouds_enabled;
+    bool compass_enabled;
+    float clouds_render_distance;
     // Font selection
     char font_families[16][256];  // Up to 16 font families (folder names)
     int font_families_count;

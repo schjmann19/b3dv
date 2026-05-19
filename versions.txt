@@ -1,3 +1,7 @@
+0.0.20-beta:
+    added console, player nicknames, fixed world save files, revamped clouds (+ compass)
+    +bug: weird bug where you can see caves and blocks backfaces through some blocks, sometimes
+
 0.0.19-beta:
     localization fixes, !!world save optimization (smaller now)
 

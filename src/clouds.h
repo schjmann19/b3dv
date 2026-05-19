@@ -11,8 +11,14 @@ typedef struct {
     float cloud_size;     // Size of each cloud segment
     Vector2 grid_offset;  // Offset for smooth scrolling
     Vector2 anchor_pos;   // World X/Z position clouds are anchored to (player)
-    Texture2D cloud_texture;  // Cloud image texture
+    Texture2D cloud_texture;  // Cloud image texture (legacy, unused)
     bool texture_loaded;  // Whether texture was successfully loaded
+    float render_distance;  // Cloud render distance
+    bool enabled;         // Whether clouds are enabled
+    float time_offset;    // Time offset for cloud movement (eastward drift)
+    float scroll_speed;   // Cells per second for cloud movement
+    int cloud_map_size;   // Size of the persistent cloud mask
+    unsigned char cloud_map[128][128]; // Persistent cloud occupancy mask
 } CloudSystem;
 
 // Function declarations

@@ -11,8 +11,4 @@ cp zig-out/bin/b3dv ./b3dv
 
 echo "Done! Binary available at ./b3dv"
 
-# If first argument is 'run', execute order 66
-if [ "$1" = "run" ]; then
-	echo "Running ./b3dv..."
-	exec ./b3dv
-fi
+

@@ -15,7 +15,7 @@ Uses Raylib and Zig build system.
 ./Screenshots/      - Screenshots
 ./src/              - source code
 ./tools/            - convenient tools
-./run.sh            - build script (zig build + copy)
+./build.sh          - build script (zig build + copy)
 ./b3dv              - executable (Linux)
 ./LICENSE           - license text
 ./zig-out/          - zig build output
@@ -26,8 +26,8 @@ Uses Raylib and Zig build system.
 ### Linux
 
 ```bash
-./run.sh
-./b3dv
+./build.sh
+./run
 ```
 
 Or manually:
@@ -35,7 +35,7 @@ Or manually:
 ```bash
 zig build -Drelease-safe
 cp zig-out/bin/b3dv ./b3dv
-./b3dv
+./b3dv run
 ```
 
 ## Dependencies
@@ -50,29 +50,29 @@ cp zig-out/bin/b3dv ./b3dv
 **Arch Linux:**
 
 ```bash
-pacman -S zig raylib
+sudo pacman -S zig raylib
 ```
 
 **Ubuntu/Debian:**
 
 ```bash
-sudo apt-get update
-sudo apt-get install raylib-dev
+sudo apt update
+sudo apt install zig libraylib-dev
 ```
 
 **Fedora/RHEL:**
 
 ```bash
-sudo dnf install raylib-devel
+sudo dnf install zig raylib-devel
 ```
 
 **macOS:**
 
 ```bash
-brew install raylib
+brew install zig raylib
 ```
 
-# NOTES
+## NOTES
 
 - Windows support has been dropped. This is a Linux household.
 - Tested on Linux with raylib 5.5. and 6.0

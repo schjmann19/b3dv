@@ -467,7 +467,7 @@ void menu_scan_font_variants(MenuSystem* menu, const char* font_family)
 
 void menu_load_settings(MenuSystem* menu)
 {
-    FILE* file = fopen("./options.txt", "r");
+    FILE* file = fopen("./options.conf", "r");
     if (!file) {
         // File doesn't exist, use defaults (already set in menu_system_create)
         return;
@@ -534,6 +534,18 @@ void menu_load_settings(MenuSystem* menu)
         } else if (strcmp(key, "font_variant") == 0) {
             strncpy(font_variant, value, sizeof(font_variant) - 1);
             font_variant[sizeof(font_variant) - 1] = '\0';
+        } else if (strcmp(key, "nickname") == 0) {
+            strncpy(menu->nickname, value, sizeof(menu->nickname) - 1);
+            menu->nickname[sizeof(menu->nickname) - 1] = '\0';
+            menu->nickname_len = (int)strlen(menu->nickname);
+        } else if (strcmp(key, "clouds_enabled") == 0) {
+            menu->clouds_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+        } else if (strcmp(key, "compass_enabled") == 0) {
+            menu->compass_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+        } else if (strcmp(key, "clouds_render_distance") == 0) {
+            menu->clouds_render_distance = atof(value);
+            if (menu->clouds_render_distance < 32.0f) menu->clouds_render_distance = 32.0f;
+            if (menu->clouds_render_distance > 512.0f) menu->clouds_render_distance = 512.0f;
         }
     }
 
@@ -578,15 +590,19 @@ void menu_load_settings(MenuSystem* menu)
 
 void menu_save_settings(MenuSystem* menu)
 {
-    FILE* file = fopen("./options.txt", "w");
+    FILE* file = fopen("./options.conf", "w");
     if (!file) {
-        fprintf(stderr, "Failed to save options.txt\n");
+        fprintf(stderr, "Failed to save options.conf\n");
         return;
     }
 
     fprintf(file, "# B3DV Game Settings\n");
     fprintf(file, "render_distance=%.1f\n", menu->render_distance);
     fprintf(file, "max_fps=%d # 0 means unlimited\n", menu->max_fps);
+    fprintf(file, "nickname=%s\n", menu->nickname);
+    fprintf(file, "clouds_enabled=%s\n", menu->clouds_enabled ? "true" : "false");
+    fprintf(file, "compass_enabled=%s\n", menu->compass_enabled ? "true" : "false");
+    fprintf(file, "clouds_render_distance=%.1f\n", menu->clouds_render_distance);
     fprintf(file, "language=%s\n", menu->current_language);
     fprintf(file, "# do not change fonts manually i made a nice little interface for that :c\n");
     fprintf(file, "font_family=%s\n", menu->font_families[menu->current_font_family_index]);
@@ -616,6 +632,12 @@ MenuSystem* menu_system_create(void)
     // Initialize settings with defaults
     menu->render_distance = 50.0f;
     menu->max_fps = 144;
+    strcpy(menu->nickname, "Player");
+    menu->nickname_len = (int)strlen(menu->nickname);
+    menu->nickname_edit_active = false;
+    menu->clouds_enabled = true;
+    menu->compass_enabled = true;
+    menu->clouds_render_distance = 128.0f;
 
     // Load random background image from mainmenubackground folder
     menu_load_random_background(menu);
@@ -637,14 +659,14 @@ MenuSystem* menu_system_create(void)
     // Scan variants for the current font family
     menu_scan_font_variants(menu, menu->font_families[menu->current_font_family_index]);
 
-    // Load persisted settings from options.txt (if it exists)
+    // Load persisted settings from options.conf (if it exists)
     // This must be done after languages and fonts are scanned
     menu_load_settings(menu);
 
     // Scan for available worlds
     menu_scan_worlds(menu);
 
-    // Create/save options.txt file if it doesn't exist
+    // Create/save options.conf file if it doesn't exist
     menu_save_settings(menu);
 
     return menu;
@@ -776,7 +798,7 @@ void menu_draw_main(MenuSystem* menu, Font font)
                80, 2, WHITE);
 
     // Draw version
-    const char* version = "Basic 3D Visualizer - v0.0.19-beta";
+    const char* version = "Basic 3D Visualizer - v0.0.20-beta";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextExCustom(font, version,
                (Vector2){(screen_width - version_size.x) / 2, 150},
@@ -1289,11 +1311,12 @@ void menu_draw_settings(MenuSystem* menu, Font font)
                (Vector2){(screen_width - title_size.x) / 2, 40},
                64, 2, WHITE);
 
-    // Settings panel - increased height for font selection
-    int panel_width = 600;
-    int panel_height = 420;
+    // Settings panel - bigger so all options fit without feeling cramped
+    int panel_width = screen_width - 200;
+    if (panel_width > 720) panel_width = 720;
+    int panel_height = 860;
     int panel_x = (screen_width - panel_width) / 2;
-    int panel_y = 120;
+    int panel_y = 100;
 
     DrawRectangle(panel_x - 10, panel_y - 10, panel_width + 20, panel_height + 20, (Color){40, 40, 40, 255});
     DrawRectangleLines(panel_x - 10, panel_y - 10, panel_width + 20, panel_height + 20, WHITE);
@@ -1384,8 +1407,136 @@ void menu_draw_settings(MenuSystem* menu, Font font)
         menu_save_settings(menu);
     }
 
+    // Nickname input
+    int nickname_y = fps_slider_y + 90;
+    int nickname_box_x = panel_x + 50;
+    int nickname_box_width = 500;
+    int nickname_box_height = 40;
+    Rectangle nickname_box = {
+        (float)nickname_box_x,
+        (float)nickname_y,
+        (float)nickname_box_width,
+        (float)nickname_box_height
+    };
+                                // TODO: localize
+    DrawTextExCustom(font, "Nickname:", (Vector2){panel_x + 30, nickname_y - 35}, 24, 1, WHITE);
+    DrawRectangleRec(nickname_box, (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(nickname_box, 2, menu->nickname_edit_active ? YELLOW : WHITE);
+    DrawTextExCustom(font, menu->nickname,
+               (Vector2){nickname_box.x + 10, nickname_box.y + 8},
+               24, 1, WHITE);
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (CheckCollisionPointRec(mouse_pos, nickname_box)) {
+            menu->nickname_edit_active = true;
+        } else {
+            menu->nickname_edit_active = false;
+        }
+    }
+
+    if (menu->nickname_edit_active) {
+        int key = GetCharPressed();
+        bool changed = false;
+        while (key > 0) {
+            if ((key >= 32 && key <= 126) && menu->nickname_len < (int)sizeof(menu->nickname) - 1) {
+                menu->nickname[menu->nickname_len++] = (char)key;
+                menu->nickname[menu->nickname_len] = '\0';
+                changed = true;
+            }
+            key = GetCharPressed();
+        }
+
+        if (IsKeyPressed(KEY_BACKSPACE) && menu->nickname_len > 0) {
+            menu->nickname_len--;
+            menu->nickname[menu->nickname_len] = '\0';
+            changed = true;
+        }
+
+        if (changed) {
+            menu_save_settings(menu);
+        }
+    }
+
+    // Draw blinking cursor when active
+    if (menu->nickname_edit_active && (int)(GetTime() * 2) % 2 == 0) {
+        Vector2 cursor_pos = MeasureTextEx(font, menu->nickname, 24, 1);
+        DrawLineEx((Vector2){nickname_box.x + 10 + cursor_pos.x, nickname_box.y + 8},
+                   (Vector2){nickname_box.x + 10 + cursor_pos.x, nickname_box.y + nickname_box_height - 8},
+                   2, WHITE);
+    }
+
+    // Cloud render distance slider
+    int cloud_dist_y = nickname_y + 90;
+
+    // Draw label
+    DrawTextExCustom(font, "Cloud Distance:", (Vector2){panel_x + 30, cloud_dist_y - 35}, 24, 1, WHITE);
+
+    // Draw value
+    char cloud_dist_str[32];
+    snprintf(cloud_dist_str, sizeof(cloud_dist_str), "%.0f", menu->clouds_render_distance);
+    DrawTextExCustom(font, cloud_dist_str, (Vector2){panel_x + 500, cloud_dist_y - 35}, 24, 1, GRAY);
+
+    // Draw slider background
+    DrawRectangle(slider_x, cloud_dist_y, slider_width, slider_height, (Color){60, 60, 60, 255});
+    DrawRectangleLines(slider_x, cloud_dist_y, slider_width, slider_height, WHITE);
+
+    // Calculate cloud distance slider knob position
+    float cloud_dist_normalized = (menu->clouds_render_distance - 32.0f) / (512.0f - 32.0f);
+    cloud_dist_normalized = cloud_dist_normalized < 0 ? 0 : (cloud_dist_normalized > 1 ? 1 : cloud_dist_normalized);
+    int cloud_knob_x = slider_x + (int)(cloud_dist_normalized * slider_width);
+
+    // Draw knob
+    DrawRectangle(cloud_knob_x - 6, cloud_dist_y - 5, 12, slider_height + 10, LIGHTGRAY);
+    DrawRectangleLines(cloud_knob_x - 6, cloud_dist_y - 5, 12, slider_height + 10, WHITE);
+
+    // Handle cloud distance slider input
+    Rectangle cloud_slider_rect = {(float)slider_x, (float)(cloud_dist_y - 10), (float)slider_width, slider_height + 20};
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, cloud_slider_rect)) {
+        float new_pos = (mouse_pos.x - slider_x) / slider_width;
+        new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
+        menu->clouds_render_distance = 32.0f + (new_pos * (512.0f - 32.0f));
+        menu_save_settings(menu);
+    }
+
+    // Cloud toggle checkbox
+    int cloud_toggle_y = cloud_dist_y + 60;
+    int checkbox_size = 30;
+    int checkbox_x = panel_x + 50;
+    Rectangle cloud_checkbox = {(float)checkbox_x, (float)cloud_toggle_y, (float)checkbox_size, (float)checkbox_size};
+
+    DrawRectangleRec(cloud_checkbox, (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(cloud_checkbox, 2, WHITE);
+    if (menu->clouds_enabled) {
+        DrawRectangle(checkbox_x + 5, cloud_toggle_y + 5, checkbox_size - 10, checkbox_size - 10, (Color){100, 200, 100, 255});
+    }
+
+    DrawTextExCustom(font, "Clouds Enabled", (Vector2){checkbox_x + checkbox_size + 15, cloud_toggle_y + 3}, 24, 1, WHITE);
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, cloud_checkbox)) {
+        menu->clouds_enabled = !menu->clouds_enabled;
+        menu_save_settings(menu);
+    }
+
+    // Compass HUD toggle checkbox
+    int compass_toggle_y = cloud_toggle_y + 60;
+    Rectangle compass_checkbox = {(float)checkbox_x, (float)compass_toggle_y, (float)checkbox_size, (float)checkbox_size};
+
+    DrawRectangleRec(compass_checkbox, (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(compass_checkbox, 2, WHITE);
+    if (menu->compass_enabled) {
+        DrawRectangle(checkbox_x + 5, compass_toggle_y + 5, checkbox_size - 10, checkbox_size - 10, (Color){100, 200, 100, 255});
+    }
+                         // TODO: localize
+    DrawTextExCustom(font, "Compass HUD", (Vector2){checkbox_x + checkbox_size + 15, compass_toggle_y + 3}, 24, 1, WHITE);
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, compass_checkbox)) {
+        menu->compass_enabled = !menu->compass_enabled;
+        menu_save_settings(menu);
+    }
+
     // Font selection
-    int font_y = fps_slider_y + 90;
+    int font_y = cloud_toggle_y + 80;
 
     // Draw label
     DrawTextExCustom(font, menu->game_text.font_family_label, (Vector2){panel_x + 30, font_y - 35}, 24, 1, WHITE);
