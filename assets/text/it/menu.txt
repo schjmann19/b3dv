@@ -34,8 +34,6 @@ Famiglia caratteri:
 Variante:
 Illimitato
 Nickname:
-Distanza delle nuvole:
-Nuvole attive
 HUD bussola
 Premi ESC per tornare al menu principale
 Vedi info complete

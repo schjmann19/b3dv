@@ -13,7 +13,7 @@
 #include "rendering.h"
 #include "utils.h"
 #include "menu.h"
-#include "clouds.h"
+//#include "clouds.h"
 #include "console.h"
 
 #if defined(PLATFORM_DESKTOP)
@@ -243,7 +243,7 @@ int b3dv_main(int argc, char **argv)
     // World and player will be created after menu selection
     World* world = NULL;
     Player* player = NULL;
-    CloudSystem* clouds = NULL;
+    //CloudSystem* clouds = NULL;
 
     // enable mouse capture (will be disabled in menu)
     bool mouse_captured = false;
@@ -414,7 +414,7 @@ int b3dv_main(int argc, char **argv)
                     strncpy(player->nickname, menu->nickname, sizeof(player->nickname) - 1);
                     player->nickname[sizeof(player->nickname) - 1] = '\0';
                 }
-
+#if 0
                 // Create cloud system
                 clouds = clouds_create("./assets/textures/clouds.png");
                 // Apply cloud settings from menu
@@ -422,7 +422,7 @@ int b3dv_main(int argc, char **argv)
                     clouds->enabled = menu->clouds_enabled;
                     clouds->render_distance = menu->clouds_render_distance;
                 }
-
+#endif
                 // Enable mouse capture for gameplay
                 mouse_captured = true;
                 DisableCursor();
@@ -533,12 +533,12 @@ int b3dv_main(int argc, char **argv)
                     else if (strncmp(chat_input, "/createworld ", 13) == 0) {
                         char world_name_buf[256]; strncpy(world_name_buf, chat_input + 13, sizeof(world_name_buf) - 1); world_name_buf[255] = '\0'; trim_string(world_name_buf); const char* world_name = world_name_buf;
                         bool valid_name = true; if (world_name[0] == '\0') valid_name = false; else for (int i = 0; world_name[i]; i++) { char c = world_name[i]; if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')) { valid_name = false; break; }}
-                        if (!valid_name) add_chat_message("Invalid world name. Use only alphanumeric characters and underscore."); else { world_free(world); clouds_reset(clouds); world = world_create(); world_load_textures(world); strncpy(world->world_name, world_name, sizeof(world->world_name) - 1); world->world_name[sizeof(world->world_name) - 1] = '\0'; world_generate_prism(world); if (world_save(world, world_name)) { char msg[512]; snprintf(msg, sizeof(msg), "World '%s' created and saved successfully.", world_name); add_chat_message(msg); player->position = (Vector3){0,105,0}; player->velocity = (Vector3){0,0,0}; } else { char msg[512]; snprintf(msg, sizeof(msg), "Failed to create world '%s'.", world_name); add_chat_message(msg); } }
+                        if (!valid_name) add_chat_message("Invalid world name. Use only alphanumeric characters and underscore."); else { world_free(world);/* clouds_reset(clouds);*/ world = world_create(); world_load_textures(world); strncpy(world->world_name, world_name, sizeof(world->world_name) - 1); world->world_name[sizeof(world->world_name) - 1] = '\0'; world_generate_prism(world); if (world_save(world, world_name)) { char msg[512]; snprintf(msg, sizeof(msg), "World '%s' created and saved successfully.", world_name); add_chat_message(msg); player->position = (Vector3){0,105,0}; player->velocity = (Vector3){0,0,0}; } else { char msg[512]; snprintf(msg, sizeof(msg), "Failed to create world '%s'.", world_name); add_chat_message(msg); } }
                     }
                     else if (strncmp(chat_input, "/loadworld ", 11) == 0) {
                         char world_name_buf[256]; strncpy(world_name_buf, chat_input + 11, sizeof(world_name_buf) - 1); world_name_buf[255] = '\0'; trim_string(world_name_buf); const char* world_name = world_name_buf;
                         bool valid_name = true; if (world_name[0] == '\0') valid_name = false; else for (int i = 0; world_name[i]; i++) { char c = world_name[i]; if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')) { valid_name = false; break; }}
-                        if (!valid_name) add_chat_message(menu->game_text.msg_invalid_world_name); else { world_free(world); clouds_reset(clouds); world = world_create(); world_load_textures(world); float spawn_x = 8.0f; float spawn_z = 8.0f; float h1 = sinf(spawn_x * 0.1f) * cosf(spawn_z * 0.1f) * 8.0f; float h2 = sinf(spawn_x * 0.05f) * cosf(spawn_z * 0.05f) * 6.0f; float terrain_h = h1 + h2 + 10.0f + 5.0f; float spawn_y = terrain_h + 1.5f; player = player_create(spawn_x, spawn_y, spawn_z); if (world_load(world, world_name)) { player->position = (Vector3){0,105,0}; player->velocity = (Vector3){0,0,0}; char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_loaded, world_name); add_chat_message(msg); } else { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_load_failed, world_name); add_chat_message(msg); world_generate_prism(world); } }
+                        if (!valid_name) add_chat_message(menu->game_text.msg_invalid_world_name); else { world_free(world); /* clouds_reset(clouds);*/ world = world_create(); world_load_textures(world); float spawn_x = 8.0f; float spawn_z = 8.0f; float h1 = sinf(spawn_x * 0.1f) * cosf(spawn_z * 0.1f) * 8.0f; float h2 = sinf(spawn_x * 0.05f) * cosf(spawn_z * 0.05f) * 6.0f; float terrain_h = h1 + h2 + 10.0f + 5.0f; float spawn_y = terrain_h + 1.5f; player = player_create(spawn_x, spawn_y, spawn_z); if (world_load(world, world_name)) { player->position = (Vector3){0,105,0}; player->velocity = (Vector3){0,0,0}; char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_loaded, world_name); add_chat_message(msg); } else { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_load_failed, world_name); add_chat_message(msg); world_generate_prism(world); } }
                     }
                     else if (strncmp(chat_input, "/select ", 8) == 0) {
                         char block_name_buf[32]; strncpy(block_name_buf, chat_input + 8, sizeof(block_name_buf) - 1); block_name_buf[31] = '\0'; trim_string(block_name_buf); const char* block_name = block_name_buf;
@@ -902,7 +902,7 @@ int b3dv_main(int argc, char **argv)
             player_update(player, world, dt, flight_enabled);
             // Pass current render distance (in blocks) so chunk loading scales with it
             world_update_chunks(world, player->position, camera_forward, menu->render_distance);  // Load/unload chunks based on player position and camera direction
-            clouds_update(clouds, player->position);  // Update cloud positions
+            //clouds_update(clouds, player->position);  // Update cloud positions
         }
 
         // Handle player input only if chat is not active and inventory is not open
@@ -1222,13 +1222,14 @@ int b3dv_main(int argc, char **argv)
                     DrawCubeWires(chunk_center, (float)CHUNK_WIDTH, (float)CHUNK_HEIGHT, (float)CHUNK_DEPTH, border_color);
                 }
             }
-
+#if 0
             // Draw clouds (sync with menu settings)
             if (clouds) {
                 clouds->enabled = menu->clouds_enabled;
                 clouds->render_distance = menu->clouds_render_distance;
             }
             clouds_draw(clouds, camera.position, camera_offset);
+#endif
         EndMode3D();
 
         // Free the chunk snapshot
@@ -1792,7 +1793,7 @@ int b3dv_main(int argc, char **argv)
                                2, WHITE);
                 }
 
-                // Cloud render distance slider
+                /*// Cloud render distance slider
                 int cloud_dist_y = nickname_y + 90;
 
                 // Draw label
@@ -1843,12 +1844,12 @@ int b3dv_main(int argc, char **argv)
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, cloud_checkbox)) {
                     menu->clouds_enabled = !menu->clouds_enabled;
                     menu_save_settings(menu);
-                }
+                }*/
 
                 // Back button to return to pause menu
                 int button_width = 450;
                 int button_height = 60;
-                int button_y = cloud_toggle_y + 80;
+                int button_y = nickname_y + 150;  // Adjusted position since cloud UI is now disabled
 
                 Rectangle back_button = {
                     ((float)screen_width - (float)button_width) / 2.0f,
@@ -1976,10 +1977,10 @@ int b3dv_main(int argc, char **argv)
                         world_unload_textures(world);
                         world_free(world);
                         player_free(player);
-                        clouds_free(clouds);
+                        //clouds_free(clouds);
                         world = NULL;
                         player = NULL;
-                        clouds = NULL;
+                        //clouds = NULL;
                         // Release mouse
                         mouse_captured = false;
                         EnableCursor();
@@ -2037,7 +2038,7 @@ int b3dv_main(int argc, char **argv)
 
     UnloadFont(custom_font);
     if (player) player_free(player);
-    if (clouds) clouds_free(clouds);
+    //if (clouds) clouds_free(clouds);
     if (world) {
         world_unload_textures(world);  // Unload textures before closing
         world_free(world);

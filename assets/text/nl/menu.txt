@@ -36,8 +36,6 @@ Lettertypefamilie:
 Variant:
 Onbeperkt
 Nickname:
-Wolkafstand:
-Wolken ingeschakeld
 Kompas-HUD
 Druk ESC om terug te gaan naar het hoofdmenu
 Zie volledige info

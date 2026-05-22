@@ -36,8 +36,6 @@ Família de fontes:
 Variante:
 Ilimitado
 Apelido:
-Distância das nuvens:
-Nuvens ativadas
 HUD da bússola
 Pressione ESC para voltar ao menu principal
 Ver informações completas

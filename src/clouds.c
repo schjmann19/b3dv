@@ -1,3 +1,4 @@
+#if 0
 #include <math.h>
 #include <stdlib.h>
 #include "clouds.h"
@@ -242,3 +243,4 @@ void clouds_reset(CloudSystem* clouds) {
         clouds->time_offset = 0.0f;
     }
 }
+#endif

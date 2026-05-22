@@ -1,3 +1,4 @@
+#if 0
 #ifndef CLOUDS_H
 #define CLOUDS_H
 
@@ -28,4 +29,5 @@ void clouds_update(CloudSystem* clouds, Vector3 player_pos);
 void clouds_draw(CloudSystem* clouds, Vector3 camera_pos, Vector3 camera_offset);
 void clouds_reset(CloudSystem* clouds);
 
+#endif
 #endif

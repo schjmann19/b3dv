@@ -758,3 +758,11 @@ asd
 /fly enable
 /fly enable
 /fly disable
+/fly enable
+/noclip enable
+/fill -120 80 75
+/fly enable
+/fill -120 80 75 -70 100 120 stone
+/fill -120 80 75 -70 100 120 \
+asd
+asd

@@ -198,8 +198,8 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 menu->game_text.font_variant_label,
                 menu->game_text.uncapped,
                 menu->game_text.nickname_label,
-                menu->game_text.cloud_distance_label,
-                menu->game_text.clouds_enabled_label,
+                //menu->game_text.cloud_distance_label,
+                //menu->game_text.clouds_enabled_label,
                 menu->game_text.compass_hud_label,
                 menu->game_text.press_esc_to_return,
                 menu->game_text.see_full_info,
@@ -260,8 +260,8 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->game_text.font_variant_label),
                 sizeof(menu->game_text.uncapped),
                 sizeof(menu->game_text.nickname_label),
-                sizeof(menu->game_text.cloud_distance_label),
-                sizeof(menu->game_text.clouds_enabled_label),
+                //sizeof(menu->game_text.cloud_distance_label),
+                //sizeof(menu->game_text.clouds_enabled_label),
                 sizeof(menu->game_text.compass_hud_label),
                 sizeof(menu->game_text.press_esc_to_return),
                 sizeof(menu->game_text.see_full_info),
@@ -546,15 +546,16 @@ void menu_load_settings(MenuSystem* menu)
             strncpy(menu->nickname, value, sizeof(menu->nickname) - 1);
             menu->nickname[sizeof(menu->nickname) - 1] = '\0';
             menu->nickname_len = (int)strlen(menu->nickname);
-        } else if (strcmp(key, "clouds_enabled") == 0) {
+        } /* else if (strcmp(key, "clouds_enabled") == 0) {
             menu->clouds_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-        } else if (strcmp(key, "compass_enabled") == 0) {
+        } */
+        else if (strcmp(key, "compass_enabled") == 0) {
             menu->compass_enabled = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-        } else if (strcmp(key, "clouds_render_distance") == 0) {
+        } /* else if (strcmp(key, "clouds_render_distance") == 0) {
             menu->clouds_render_distance = atof(value);
             if (menu->clouds_render_distance < 32.0f) menu->clouds_render_distance = 32.0f;
             if (menu->clouds_render_distance > 512.0f) menu->clouds_render_distance = 512.0f;
-        }
+        } */
     }
 
     fclose(file);
@@ -608,9 +609,9 @@ void menu_save_settings(MenuSystem* menu)
     fprintf(file, "render_distance=%.1f\n", menu->render_distance);
     fprintf(file, "max_fps=%d # 0 means unlimited\n", menu->max_fps);
     fprintf(file, "nickname=%s\n", menu->nickname);
-    fprintf(file, "clouds_enabled=%s\n", menu->clouds_enabled ? "true" : "false");
+    //fprintf(file, "clouds_enabled=%s\n", menu->clouds_enabled ? "true" : "false");
     fprintf(file, "compass_enabled=%s\n", menu->compass_enabled ? "true" : "false");
-    fprintf(file, "clouds_render_distance=%.1f\n", menu->clouds_render_distance);
+    //fprintf(file, "clouds_render_distance=%.1f\n", menu->clouds_render_distance);
     fprintf(file, "language=%s\n", menu->current_language);
     fprintf(file, "\n"); //fprintf(file, "# do not change fonts manually i made a nice little interface for that :c\n");
     fprintf(file, "font_family=%s\n", menu->font_families[menu->current_font_family_index]);
@@ -643,9 +644,9 @@ MenuSystem* menu_system_create(void)
     strcpy(menu->nickname, "Player");
     menu->nickname_len = (int)strlen(menu->nickname);
     menu->nickname_edit_active = false;
-    menu->clouds_enabled = true;
+    //menu->clouds_enabled = true;
     menu->compass_enabled = true;
-    menu->clouds_render_distance = 128.0f;
+    //menu->clouds_render_distance = 128.0f; //
 
     // Load random background image from mainmenubackground folder
     menu_load_random_background(menu);
@@ -1473,7 +1474,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
                    2, WHITE);
     }
 
-    // Cloud render distance slider
+    /*// Cloud render distance slider
     int cloud_dist_y = nickname_y + 90;
 
     // Draw label
@@ -1524,10 +1525,13 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, cloud_checkbox)) {
         menu->clouds_enabled = !menu->clouds_enabled;
         menu_save_settings(menu);
-    }
+    }*/
 
     // Compass HUD toggle checkbox
-    int compass_toggle_y = cloud_toggle_y + 60;
+    //int compass_toggle_y = cloud_toggle_y + 60;
+    int compass_toggle_y = nickname_y + 90;  // Adjust position since cloud UI is now disabled
+    int checkbox_size = 30;  // Define for compass checkbox
+    int checkbox_x = panel_x + 50;  // Define for compass checkbox
     Rectangle compass_checkbox = {(float)checkbox_x, (float)compass_toggle_y, (float)checkbox_size, (float)checkbox_size};
 
     DrawRectangleRec(compass_checkbox, (Color){60, 60, 60, 255});
@@ -1544,7 +1548,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     }
 
     // Font selection
-    int font_y = cloud_toggle_y + 80;
+    int font_y = nickname_y + 150;  // Adjust position since cloud UI is now disabled
 
     // Draw label
     DrawTextExCustom(font, menu->game_text.font_family_label, (Vector2){panel_x + 30, font_y - 35}, 24, 1, WHITE);

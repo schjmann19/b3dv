@@ -45,8 +45,8 @@ typedef struct {
     char font_variant_label[256];
     char uncapped[64];
     char nickname_label[128];
-    char cloud_distance_label[128];
-    char clouds_enabled_label[128];
+    //char cloud_distance_label[128];
+    //char clouds_enabled_label[128];
     char compass_hud_label[128];
     // Credits & Info text
     char press_esc_to_return[256];
@@ -133,9 +133,9 @@ typedef struct {
     char nickname[64];
     int nickname_len;
     bool nickname_edit_active;
-    bool clouds_enabled;
+    //bool clouds_enabled;
     bool compass_enabled;
-    float clouds_render_distance;
+    //float clouds_render_distance;
     // Font selection
     char font_families[16][256];  // Up to 16 font families (folder names)
     int font_families_count;

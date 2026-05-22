@@ -34,8 +34,6 @@ _Font Family:
 _Variant:
 _Uncapped
 _Nickname:
-_Cloud Distance:
-_Clouds Enabled
 _Compass HUD
 _Press ESC to return to main menu
 _See full info
