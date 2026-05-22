@@ -160,11 +160,8 @@ void menu_load_language(MenuSystem* menu, const char* language)
     if (file) {
         char line[512];
         int line_count = 0;
-        while (fgets(line, sizeof(line), file) && line_count < 39) {
-            // Remove newline
-            line[strcspn(line, "\n")] = '\0';
 
-            char* buffers[] = {
+        char* buffers[] = {
                 menu->text_select_world,
                 menu->text_create_world,
                 menu->text_credits_info,
@@ -200,6 +197,10 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 menu->game_text.font_family_label,
                 menu->game_text.font_variant_label,
                 menu->game_text.uncapped,
+                menu->game_text.nickname_label,
+                menu->game_text.cloud_distance_label,
+                menu->game_text.clouds_enabled_label,
+                menu->game_text.compass_hud_label,
                 menu->game_text.press_esc_to_return,
                 menu->game_text.see_full_info,
                 menu->game_text.inventory_title,
@@ -258,6 +259,10 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->game_text.font_family_label),
                 sizeof(menu->game_text.font_variant_label),
                 sizeof(menu->game_text.uncapped),
+                sizeof(menu->game_text.nickname_label),
+                sizeof(menu->game_text.cloud_distance_label),
+                sizeof(menu->game_text.clouds_enabled_label),
+                sizeof(menu->game_text.compass_hud_label),
                 sizeof(menu->game_text.press_esc_to_return),
                 sizeof(menu->game_text.see_full_info),
                 sizeof(menu->game_text.inventory_title),
@@ -280,11 +285,14 @@ void menu_load_language(MenuSystem* menu, const char* language)
                 sizeof(menu->game_text.msg_setblock_usage),
                 sizeof(menu->game_text.msg_unknown_command)
             };
-
-            strncpy(buffers[line_count], line, sizes[line_count] - 1);
-            buffers[line_count][sizes[line_count] - 1] = '\0';
-            line_count++;
-        }
+            int menu_line_capacity = sizeof(buffers) / sizeof(buffers[0]);
+            while (fgets(line, sizeof(line), file) && line_count < menu_line_capacity) {
+                // Remove newline
+                line[strcspn(line, "\n")] = '\0';
+                strncpy(buffers[line_count], line, sizes[line_count] - 1);
+                buffers[line_count][sizes[line_count] - 1] = '\0';
+                line_count++;
+            }
         fclose(file);
     } else {
         fprintf(stderr, "Failed to load menu text from: %s\n", menu_path);
@@ -604,7 +612,7 @@ void menu_save_settings(MenuSystem* menu)
     fprintf(file, "compass_enabled=%s\n", menu->compass_enabled ? "true" : "false");
     fprintf(file, "clouds_render_distance=%.1f\n", menu->clouds_render_distance);
     fprintf(file, "language=%s\n", menu->current_language);
-    fprintf(file, "# do not change fonts manually i made a nice little interface for that :c\n");
+    fprintf(file, "\n"); //fprintf(file, "# do not change fonts manually i made a nice little interface for that :c\n");
     fprintf(file, "font_family=%s\n", menu->font_families[menu->current_font_family_index]);
     fprintf(file, "font_variant=%s\n", menu->font_variants[menu->current_font_variant_index]);
 
@@ -1419,7 +1427,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
         (float)nickname_box_height
     };
                                 // TODO: localize
-    DrawTextExCustom(font, "Nickname:", (Vector2){panel_x + 30, nickname_y - 35}, 24, 1, WHITE);
+    DrawTextExCustom(font, menu->game_text.nickname_label, (Vector2){panel_x + 30, nickname_y - 35}, 24, 1, WHITE);
     DrawRectangleRec(nickname_box, (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(nickname_box, 2, menu->nickname_edit_active ? YELLOW : WHITE);
     DrawTextExCustom(font, menu->nickname,
@@ -1469,7 +1477,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
     int cloud_dist_y = nickname_y + 90;
 
     // Draw label
-    DrawTextExCustom(font, "Cloud Distance:", (Vector2){panel_x + 30, cloud_dist_y - 35}, 24, 1, WHITE);
+    DrawTextExCustom(font, menu->game_text.cloud_distance_label, (Vector2){panel_x + 30, cloud_dist_y - 35}, 24, 1, WHITE);
 
     // Draw value
     char cloud_dist_str[32];
@@ -1511,7 +1519,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
         DrawRectangle(checkbox_x + 5, cloud_toggle_y + 5, checkbox_size - 10, checkbox_size - 10, (Color){100, 200, 100, 255});
     }
 
-    DrawTextExCustom(font, "Clouds Enabled", (Vector2){checkbox_x + checkbox_size + 15, cloud_toggle_y + 3}, 24, 1, WHITE);
+    DrawTextExCustom(font, menu->game_text.clouds_enabled_label, (Vector2){checkbox_x + checkbox_size + 15, cloud_toggle_y + 3}, 24, 1, WHITE);
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, cloud_checkbox)) {
         menu->clouds_enabled = !menu->clouds_enabled;
@@ -1528,7 +1536,7 @@ void menu_draw_settings(MenuSystem* menu, Font font)
         DrawRectangle(checkbox_x + 5, compass_toggle_y + 5, checkbox_size - 10, checkbox_size - 10, (Color){100, 200, 100, 255});
     }
                          // TODO: localize
-    DrawTextExCustom(font, "Compass HUD", (Vector2){checkbox_x + checkbox_size + 15, compass_toggle_y + 3}, 24, 1, WHITE);
+    DrawTextExCustom(font, menu->game_text.compass_hud_label, (Vector2){checkbox_x + checkbox_size + 15, compass_toggle_y + 3}, 24, 1, WHITE);
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(mouse_pos, compass_checkbox)) {
         menu->compass_enabled = !menu->compass_enabled;

@@ -11,6 +11,7 @@ void get_kernel_info(char* buffer, size_t size);
 bool get_chat_history_line(int lines_back, char* out_line, size_t max_len);
 void trim_string(char* str);
 
-#define B3DV_MAIN_LOOP 
+#define B3DV_MAIN_LOOP
+#define UNIMPLEMENTED
 
 #endif

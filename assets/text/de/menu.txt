@@ -33,6 +33,10 @@ Max FPS:
 Schriftartenfamilie:
 Variante:
 Unbegrenzt
+Spitzname:
+Wolkendistanz:
+Wolken aktiviert
+Kompass-HUD
 Drücke ESC, um zum Hauptmenü zurückzukehren
 Vollständige Info anzeigen
 Inventar

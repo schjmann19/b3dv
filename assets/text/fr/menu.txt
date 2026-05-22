@@ -33,6 +33,10 @@ FPS max :
 Famille de polices :
 Variante :
 Illimité
+Pseudo :
+Distance des nuages :
+Nuages activés
+HUD de la boussole
 Appuyez sur ESC pour revenir au menu principal
 Voir les infos complètes
 Inventaire

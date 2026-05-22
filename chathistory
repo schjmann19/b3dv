@@ -748,3 +748,13 @@ asd
 /tp 1200 200 2000
 /fly enable
 /tp 0 120 0
+/fly enable
+/fly enable
+asd
+/show_chunk_borders on
+/show_chunk_borders off
+/fly enable
+/fly enable
+/fly enable
+/fly enable
+/fly disable

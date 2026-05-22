@@ -285,7 +285,7 @@ void worker_queue_chunk_save(World* world, Chunk* chunk)
         return;
     }
     chunk->pending_save = true;
-    pthread_mutex_unlock(&chunk->mutex);
+    pthread_mutex_unlock(&chunk->mutex);   
 
     WorkerJob job = { .chunk_x = chunk->chunk_x,
                       .chunk_y = chunk->chunk_y,

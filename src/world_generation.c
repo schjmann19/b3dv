@@ -230,7 +230,10 @@ World* world_create(void)
     world->chunk_cache.chunks = (Chunk*)malloc(sizeof(Chunk) * world->chunk_cache.chunk_capacity);
     world->chunk_cache.chunk_count = 0;
     world->last_loaded_chunk_x = INT32_MAX;
+    world->last_loaded_chunk_y = INT32_MAX;
     world->last_loaded_chunk_z = INT32_MAX;
+    world->last_chunk_update_position = (Vector3){1000000000.0f, 1000000000.0f, 1000000000.0f};
+    world->last_chunk_update_forward = (Vector3){1000000000.0f, 1000000000.0f, 1000000000.0f};
 
     // Initialize texture cache
     world->textures.textures_loaded = false;
@@ -793,7 +796,7 @@ BlockType world_get_block_or_solid(World* world, int x, int y, int z)
     // Lock cache before accessing chunk
     pthread_mutex_lock(&world->cache_mutex);
     Chunk* chunk = world_get_chunk(world, chunk_x, chunk_y, chunk_z);
-    if (!chunk) {
+    if (!chunk || !chunk->loaded) {
         pthread_mutex_unlock(&world->cache_mutex);
         return BLOCK_STONE;  // Unloaded chunks are treated as solid (prevents false light propagation)
     }
@@ -873,16 +876,33 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     int32_t player_chunk_y = (int32_t)floorf(player_pos.y / CHUNK_HEIGHT);
     int32_t player_chunk_z = (int32_t)floorf(player_pos.z / CHUNK_DEPTH);
 
-    // Only update if player moved to a different chunk
-    if (player_chunk_x == world->last_loaded_chunk_x &&
-        player_chunk_y == world->last_loaded_chunk_y &&
-        player_chunk_z == world->last_loaded_chunk_z) {
-        return;
+    bool first_update = (world->last_chunk_update_position.x > 999999999.0f ||
+                         world->last_chunk_update_forward.x > 999999999.0f);
+
+    if (!first_update) {
+        float dx = player_pos.x - world->last_chunk_update_position.x;
+        float dy = player_pos.y - world->last_chunk_update_position.y;
+        float dz = player_pos.z - world->last_chunk_update_position.z;
+        float move_sq = dx*dx + dy*dy + dz*dz;
+
+        float forward_dot = camera_forward.x * world->last_chunk_update_forward.x +
+                            camera_forward.y * world->last_chunk_update_forward.y +
+                            camera_forward.z * world->last_chunk_update_forward.z;
+
+        if (player_chunk_x == world->last_loaded_chunk_x &&
+            player_chunk_y == world->last_loaded_chunk_y &&
+            player_chunk_z == world->last_loaded_chunk_z &&
+            forward_dot > 0.999f &&
+            move_sq < 1.0f) {
+            return;
+        }
     }
 
     world->last_loaded_chunk_x = player_chunk_x;
     world->last_loaded_chunk_y = player_chunk_y;
     world->last_loaded_chunk_z = player_chunk_z;
+    world->last_chunk_update_position = player_pos;
+    world->last_chunk_update_forward = camera_forward;
 
     // CRITICAL: Lock cache mutex while loading/creating chunks to prevent races with unload
     pthread_mutex_lock(&world->cache_mutex);
@@ -891,8 +911,18 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     // Compute chunk load distance from desired render distance in blocks
     int load_dist = (int)ceilf(render_distance_blocks / (float)CHUNK_WIDTH);
     if (load_dist < 1) load_dist = 1;
+
+    float camera_forward_xz_len = sqrtf(camera_forward.x * camera_forward.x + camera_forward.z * camera_forward.z);
+    bool has_horizontal_forward = camera_forward_xz_len > 1e-6f;
+    float camera_forward_xz_norm_x = 0.0f;
+    float camera_forward_xz_norm_z = 0.0f;
+    if (has_horizontal_forward) {
+        camera_forward_xz_norm_x = camera_forward.x / camera_forward_xz_len;
+        camera_forward_xz_norm_z = camera_forward.z / camera_forward_xz_len;
+    }
+
     for (int cx = player_chunk_x - load_dist; cx <= player_chunk_x + load_dist; cx++) {
-        for (int cy = player_chunk_y - 1; cy <= player_chunk_y + 1; cy++) {
+        for (int cy = player_chunk_y - load_dist; cy <= player_chunk_y + load_dist; cy++) {
             for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
                 // Calculate chunk center relative to player
                 float chunk_center_x = cx * CHUNK_WIDTH + CHUNK_WIDTH / 2.0f;
@@ -904,13 +934,14 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
                 float to_chunk_y = chunk_center_y - player_pos.y;
                 float to_chunk_z = chunk_center_z - player_pos.z;
 
-                // Dot product with camera forward (if negative, chunk is behind player)
-                float dot = to_chunk_x * camera_forward.x + to_chunk_y * camera_forward.y + to_chunk_z * camera_forward.z;
-
-                // Skip chunks behind the player (with a small margin to avoid harsh cutoff)
-                // Allow a small cone behind (dot product threshold of -0.3)
-                if (dot < -0.3f * (load_dist + 1) * CHUNK_WIDTH) {
-                    continue;
+                // Skip chunks that are behind the player based on horizontal view only.
+                // Avoid using the camera's vertical component here, because looking up or down
+                // should not cause vertical chunks to be treated as behind the player.
+                if (has_horizontal_forward) {
+                    float dot_xz = to_chunk_x * camera_forward_xz_norm_x + to_chunk_z * camera_forward_xz_norm_z;
+                    if (dot_xz < -0.3f * (load_dist + 1) * CHUNK_WIDTH) {
+                        continue;
+                    }
                 }
 
                 Chunk* chunk = world_load_or_create_chunk(world, cx, cy, cz);
@@ -937,7 +968,7 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
     // Queue newly generated chunks for lighting/meshing after releasing cache_mutex
     pthread_mutex_lock(&world->cache_mutex);
     for (int cx = player_chunk_x - load_dist; cx <= player_chunk_x + load_dist; cx++) {
-        for (int cy = player_chunk_y - 1; cy <= player_chunk_y + 1; cy++) {
+        for (int cy = player_chunk_y - load_dist; cy <= player_chunk_y + load_dist; cy++) {
             for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
                 Chunk* chunk = world_get_chunk(world, cx, cy, cz);
                 if (chunk && chunk->generated && chunk->loaded && chunk->needs_relighting) {
@@ -948,6 +979,46 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
         }
     }
     pthread_mutex_unlock(&world->cache_mutex);
+
+    // Invalidate neighboring chunk meshes after loading new chunks.
+    // This ensures adjacent chunks update their faces when chunk load state changes.
+    {
+        const int neighbor_offsets[6][3] = {
+            { 1,  0,  0}, {-1,  0,  0},
+            { 0,  1,  0}, { 0, -1,  0},
+            { 0,  0,  1}, { 0,  0, -1}
+        };
+
+        pthread_mutex_lock(&world->cache_mutex);
+        for (int cx = player_chunk_x - load_dist; cx <= player_chunk_x + load_dist; cx++) {
+            for (int cy = player_chunk_y - load_dist; cy <= player_chunk_y + load_dist; cy++) {
+                for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
+                    Chunk* chunk = world_get_chunk(world, cx, cy, cz);
+                    if (!chunk || !chunk->loaded || !chunk->generated) continue;
+
+                    for (int ni = 0; ni < 6; ni++) {
+                        int nx = cx + neighbor_offsets[ni][0];
+                        int ny = cy + neighbor_offsets[ni][1];
+                        int nz = cz + neighbor_offsets[ni][2];
+                        Chunk* neighbor = world_get_chunk(world, nx, ny, nz);
+                        if (!neighbor || !neighbor->loaded || !neighbor->generated) continue;
+                        if (neighbor == chunk) continue;
+
+                        bool was_meshed;
+                        pthread_mutex_lock(&neighbor->mutex);
+                        was_meshed = neighbor->meshed;
+                        neighbor->meshed = false;
+                        pthread_mutex_unlock(&neighbor->mutex);
+
+                        if (was_meshed) {
+                            worker_queue_chunk(world, neighbor);
+                        }
+                    }
+                }
+            }
+        }
+        pthread_mutex_unlock(&world->cache_mutex);
+    }
 
     // Note: We no longer flush the worker queue here to avoid stalling the main thread.
     // Chunks that are in-use by the worker (in_use_count > 0) will not be unloaded until
@@ -985,8 +1056,11 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
         float to_chunk_y = chunk_center_y - player_pos.y;
         float to_chunk_z = chunk_center_z - player_pos.z;
 
-        float dot = to_chunk_x * camera_forward.x + to_chunk_y * camera_forward.y + to_chunk_z * camera_forward.z;
-        bool behind_player = dot < -0.3f * (unload_dist + 1) * CHUNK_WIDTH;
+        bool behind_player = false;
+        if (has_horizontal_forward) {
+            float dot_xz = to_chunk_x * camera_forward_xz_norm_x + to_chunk_z * camera_forward_xz_norm_z;
+            behind_player = dot_xz < -0.3f * (unload_dist + 1) * CHUNK_WIDTH;
+        }
         bool too_far = dx*dx + dz*dz > unload_dist*unload_dist || dy > unload_dist || dy < -unload_dist;
 
         if (too_far || behind_player) {
@@ -994,6 +1068,34 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
             if (__atomic_load_n(&chunk->in_use_count, __ATOMIC_ACQUIRE) > 0) {
                 i++;
                 continue;
+            }
+
+            // Invalidate neighbor meshes before unloading this chunk.
+            // Neighbors may now need to update faces that were previously against this chunk.
+            {
+                const int neighbor_offsets[6][3] = {
+                    { 1,  0,  0}, {-1,  0,  0},
+                    { 0,  1,  0}, { 0, -1,  0},
+                    { 0,  0,  1}, { 0,  0, -1}
+                };
+                for (int ni = 0; ni < 6; ni++) {
+                    int nx = chunk->chunk_x + neighbor_offsets[ni][0];
+                    int ny = chunk->chunk_y + neighbor_offsets[ni][1];
+                    int nz = chunk->chunk_z + neighbor_offsets[ni][2];
+                    Chunk* neighbor = world_get_chunk(world, nx, ny, nz);
+                    if (!neighbor || !neighbor->loaded || !neighbor->generated) continue;
+                    if (neighbor == chunk) continue;
+
+                    bool was_meshed;
+                    pthread_mutex_lock(&neighbor->mutex);
+                    was_meshed = neighbor->meshed;
+                    neighbor->meshed = false;
+                    pthread_mutex_unlock(&neighbor->mutex);
+
+                    if (was_meshed) {
+                        worker_queue_chunk(world, neighbor);
+                    }
+                }
             }
 
             // If modified, queue async save and mark for unload after save completes.
@@ -2348,41 +2450,29 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
                 // If neighbor chunk isn't loaded, don't mark face as exposed
                 uint8_t exposed_faces = 0;
 
-                // Check +X direction (use world_get_block_or_solid to treat unloaded chunks as solid)
-                if (world_get_block_or_solid(world, world_x + 1, world_y, world_z) == BLOCK_AIR) {
-                    int32_t adj_chunk_x = (world_x + 1) < 0 ? ((world_x + 1) - CHUNK_WIDTH + 1) / CHUNK_WIDTH : (world_x + 1) / CHUNK_WIDTH;
-                    Chunk* adj_chunk = world_get_chunk(world, adj_chunk_x, chunk->chunk_y, chunk->chunk_z);
-                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 0);
+                // Check +X direction (unloaded or missing neighbor chunks are treated as air here)
+                if (world_get_block(world, world_x + 1, world_y, world_z) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 0);
                 }
                 // Check -X direction
-                if (world_get_block_or_solid(world, world_x - 1, world_y, world_z) == BLOCK_AIR) {
-                    int32_t adj_chunk_x = (world_x - 1) < 0 ? ((world_x - 1) - CHUNK_WIDTH + 1) / CHUNK_WIDTH : (world_x - 1) / CHUNK_WIDTH;
-                    Chunk* adj_chunk = world_get_chunk(world, adj_chunk_x, chunk->chunk_y, chunk->chunk_z);
-                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 1);
+                if (world_get_block(world, world_x - 1, world_y, world_z) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 1);
                 }
                 // Check +Y direction
-                if (world_get_block_or_solid(world, world_x, world_y + 1, world_z) == BLOCK_AIR) {
-                    int32_t adj_chunk_y = (world_y + 1) < 0 ? ((world_y + 1) - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : (world_y + 1) / CHUNK_HEIGHT;
-                    Chunk* adj_chunk = world_get_chunk(world, chunk->chunk_x, adj_chunk_y, chunk->chunk_z);
-                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 2);
+                if (world_get_block(world, world_x, world_y + 1, world_z) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 2);
                 }
                 // Check -Y direction
-                if (world_get_block_or_solid(world, world_x, world_y - 1, world_z) == BLOCK_AIR) {
-                    int32_t adj_chunk_y = (world_y - 1) < 0 ? ((world_y - 1) - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : (world_y - 1) / CHUNK_HEIGHT;
-                    Chunk* adj_chunk = world_get_chunk(world, chunk->chunk_x, adj_chunk_y, chunk->chunk_z);
-                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 3);
+                if (world_get_block(world, world_x, world_y - 1, world_z) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 3);
                 }
                 // Check +Z direction
-                if (world_get_block_or_solid(world, world_x, world_y, world_z + 1) == BLOCK_AIR) {
-                    int32_t adj_chunk_z = (world_z + 1) < 0 ? ((world_z + 1) - CHUNK_DEPTH + 1) / CHUNK_DEPTH : (world_z + 1) / CHUNK_DEPTH;
-                    Chunk* adj_chunk = world_get_chunk(world, chunk->chunk_x, chunk->chunk_y, adj_chunk_z);
-                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 4);
+                if (world_get_block(world, world_x, world_y, world_z + 1) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 4);
                 }
                 // Check -Z direction
-                if (world_get_block_or_solid(world, world_x, world_y, world_z - 1) == BLOCK_AIR) {
-                    int32_t adj_chunk_z = (world_z - 1) < 0 ? ((world_z - 1) - CHUNK_DEPTH + 1) / CHUNK_DEPTH : (world_z - 1) / CHUNK_DEPTH;
-                    Chunk* adj_chunk = world_get_chunk(world, chunk->chunk_x, chunk->chunk_y, adj_chunk_z);
-                    if (adj_chunk && adj_chunk->loaded) exposed_faces |= (1 << 5);
+                if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 5);
                 }
 
                 if (exposed_faces != 0) {

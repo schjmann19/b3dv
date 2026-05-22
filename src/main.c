@@ -745,7 +745,7 @@ int b3dv_main(int argc, char **argv)
         ConsoleCommand console_cmd;
         while (console_get_next_command(&console_cmd)) {
             // Process console commands (simplified - console can only run certain commands)
-            printf("[console] Executing: %s\n", console_cmd.raw_input);
+            //printf("[console] Executing: %s\n", console_cmd.raw_input);
             
             // Determine target player - for now, always use current player
             // (In future, could support multiple players)

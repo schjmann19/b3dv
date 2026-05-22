@@ -12,3 +12,7 @@ releases
 *.log
 zig-out/
 .zig-cache/
+.future/
+lua/
+.hidden/
+.lines

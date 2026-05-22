@@ -44,6 +44,10 @@ typedef struct {
     char font_family_label[256];
     char font_variant_label[256];
     char uncapped[64];
+    char nickname_label[128];
+    char cloud_distance_label[128];
+    char clouds_enabled_label[128];
+    char compass_hud_label[128];
     // Credits & Info text
     char press_esc_to_return[256];
     char see_full_info[64];

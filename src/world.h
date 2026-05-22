@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include "raylib.h"
+#include "utils.h"
 
 // Forward declare Player so World can reference the active player without including player.h
 struct Player;
@@ -23,8 +24,10 @@ typedef enum {
 
 // Block properties (emission and opacity)
 typedef struct {
-    uint8_t emission;  // Light emitted by this block (0-15)
-    uint8_t opacity;   // How much light is absorbed (1-15, where 15 = opaque, 0 = transparent)
+    uint8_t emission; // Light emitted by this block (0-15)
+    uint8_t opacity; // How much light is absorbed (1-15, where 15 = opaque, 0 = transparent)
+    uint8_t hardness; UNIMPLEMENTED // How long it takes to break this block (0=insta, higher is harder) (unused)
+    uint8_t blast_resistance; UNIMPLEMENTED // Resistance to explosions (0=none, higher is stronger) (unused)
 } BlockProperties;
 
 // Get block properties (emission and opacity)
@@ -42,7 +45,7 @@ static inline BlockProperties get_block_properties(BlockType type) {
     }
 }
 
-// Cached visible block entry - for mesh caching
+// Cached visible block entry for mesh caching
 typedef struct {
     int x, y, z;  // Local chunk coordinates
     uint8_t exposed_faces;  // Bitmask of which faces are exposed (bits 0-5 = faces 0-5)
@@ -50,7 +53,7 @@ typedef struct {
     uint8_t face_light[6]; // Per-face light levels (0-15) baked at meshing time
 } CachedVisibleBlock;
 
-// Merged quad from greedy meshing - represents a rectangular face region
+// Merged quad from greedy meshing, represents a rectangular face region
 typedef struct {
     int x, y, z;        // World position of one corner of the quad
     int w, h;           // Width and height in blocks
@@ -59,7 +62,7 @@ typedef struct {
     BlockType type;     // Block type (for color/texture)
 } MergedQuad;
 
-// Chunk mesh data - holds merged quads per face direction
+// Chunk mesh data, holds merged quads per face direction
 typedef struct {
     MergedQuad* quads[6];       // Merged quads for each face direction
     int quad_count[6];          // Number of quads per face
@@ -70,8 +73,6 @@ typedef struct {
 #define CHUNK_WIDTH 32
 #define CHUNK_HEIGHT 64
 #define CHUNK_DEPTH 32
-#define CHUNK_LOAD_DISTANCE 1  // Load chunks 1 chunk away - performance vs visibility tradeoff
-#define MIN_RENDER_DISTANCE 2.0f  // Don't render blocks closer than this (reduces near-field clutter)
 
 // World height limits - prevents unloaded chunk light leaks
 #define WORLD_Y_MIN 0
@@ -132,7 +133,7 @@ typedef struct {
     int chunk_capacity;
 } ChunkCache;
 
-// Worker job types
+// Worker job types: _LIGHTING_AND_MESH or _SAVE_CHUNK
 typedef enum {
     WORKER_JOB_LIGHTING_AND_MESH,  // Recalculate lighting and/or mesh for a chunk
     WORKER_JOB_SAVE_CHUNK          // Save chunk to disk (async)
@@ -166,6 +167,8 @@ typedef struct {
     int32_t last_loaded_chunk_z;
     char world_name[256];  // Current world name for proper chunk loading
     Vector3 last_player_position;  // Last known player position for saving/loading
+    Vector3 last_chunk_update_position;  // Last position used for chunk load/unload updates
+    Vector3 last_chunk_update_forward;  // Last camera forward used for chunk load/unload updates
     uint64_t seed;  // World seed for reproducible terrain generation
     bool compress_chunk_files;  // Whether this world's chunk files should be compressed
     WorkerQueue worker_queue;  // Queue of chunks to process
@@ -174,15 +177,24 @@ typedef struct {
     pthread_mutex_t cache_mutex;  // Protects chunk_cache array from realloc while worker accesses it
     // Pointer to the active player when in-game (used for saving player data)
     void* current_player;
-    // Cached player nickname (from players.txt); used for chat display
+    // Cached player nickname (from players.toml); used for chat display
     char player_nickname[64];
 } World;
 
 // Function declarations
+
+// Create a new world
 World* world_create(void);
+
+// Free world
 void world_free(World* world);
+
+// Get color for a block type (obsolete/fallback)
 Color world_get_block_color(BlockType type);
+
+// Get texture for a block type (use this one instead of world_get_block_color)
 Texture2D world_get_block_texture(World* world, BlockType type);
+
 void world_load_textures(World* world);
 void world_unload_textures(World* world);
 void world_generate_prism(World* world);

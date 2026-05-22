@@ -35,5 +35,9 @@ Max klatek/s:
 Rodzina czcionek:
 Wariant:
 Bez ograniczeń
+Nickname:
+Odległość chmur:
+Chmury włączone
+HUD kompasu
 Nacisnij ESC, aby wrócić do menu głównego
 Zobacz pełne informacje

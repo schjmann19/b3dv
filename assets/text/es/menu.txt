@@ -35,5 +35,9 @@ FPS máx.:
 Familia tipográfica:
 Variante:
 Sin límite
+Apodo:
+Distancia de nubes:
+Nubes activadas
+HUD de brújula
 Presiona ESC para volver al menú principal
 Ver información completa
