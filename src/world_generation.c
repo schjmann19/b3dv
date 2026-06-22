@@ -2446,33 +2446,66 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
                 int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
 
                 // Check which faces are exposed (neighbor is air)
-                // Only mark a face as exposed if the neighbor exists and is air
-                // If neighbor chunk isn't loaded, don't mark face as exposed
+                // CRITICAL: Do this WITHOUT acquiring locks - iterate chunk cache directly
+                // Reading from chunk arrays is safe (no modification during this read)
                 uint8_t exposed_faces = 0;
 
-                // Check +X direction (unloaded or missing neighbor chunks are treated as air here)
-                if (world_get_block(world, world_x + 1, world_y, world_z) == BLOCK_AIR) {
-                    exposed_faces |= (1 << 0);
-                }
-                // Check -X direction
-                if (world_get_block(world, world_x - 1, world_y, world_z) == BLOCK_AIR) {
-                    exposed_faces |= (1 << 1);
-                }
-                // Check +Y direction
-                if (world_get_block(world, world_x, world_y + 1, world_z) == BLOCK_AIR) {
-                    exposed_faces |= (1 << 2);
-                }
-                // Check -Y direction
-                if (world_get_block(world, world_x, world_y - 1, world_z) == BLOCK_AIR) {
-                    exposed_faces |= (1 << 3);
-                }
-                // Check +Z direction
-                if (world_get_block(world, world_x, world_y, world_z + 1) == BLOCK_AIR) {
-                    exposed_faces |= (1 << 4);
-                }
-                // Check -Z direction
-                if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) {
-                    exposed_faces |= (1 << 5);
+                // Define neighbor offsets and directions
+                int neighbor_offsets[6][3] = {
+                    {1, 0, 0},   // +X
+                    {-1, 0, 0},  // -X
+                    {0, 1, 0},   // +Y
+                    {0, -1, 0},  // -Y
+                    {0, 0, 1},   // +Z
+                    {0, 0, -1}   // -Z
+                };
+
+                for (int face = 0; face < 6; face++) {
+                    int nx = world_x + neighbor_offsets[face][0];
+                    int ny = world_y + neighbor_offsets[face][1];
+                    int nz = world_z + neighbor_offsets[face][2];
+
+                    BlockType neighbor = BLOCK_STONE;  // Default: assume solid if not found (conservative)
+
+                    // Calculate which chunk the neighbor is in (just math, no locking)
+                    int32_t n_chunk_x = nx < 0 ? (nx - CHUNK_WIDTH + 1) / CHUNK_WIDTH : nx / CHUNK_WIDTH;
+                    int32_t n_chunk_y = ny < 0 ? (ny - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : ny / CHUNK_HEIGHT;
+                    int32_t n_chunk_z = nz < 0 ? (nz - CHUNK_DEPTH + 1) / CHUNK_DEPTH : nz / CHUNK_DEPTH;
+
+                    if (n_chunk_x == chunk->chunk_x && n_chunk_y == chunk->chunk_y && n_chunk_z == chunk->chunk_z) {
+                        // Same chunk - read directly from chunk->blocks (no lock needed)
+                        int local_nx = nx - (chunk->chunk_x * CHUNK_WIDTH);
+                        int local_ny = ny - (chunk->chunk_y * CHUNK_HEIGHT);
+                        int local_nz = nz - (chunk->chunk_z * CHUNK_DEPTH);
+                        if (local_nx >= 0 && local_nx < CHUNK_WIDTH &&
+                            local_ny >= 0 && local_ny < CHUNK_HEIGHT &&
+                            local_nz >= 0 && local_nz < CHUNK_DEPTH) {
+                            neighbor = chunk->blocks[local_ny][local_nz][local_nx].type;
+                        }
+                    } else {
+                        // Different chunk - search cache WITHOUT locking (safe to read, just don't resize)
+                        for (int ci = 0; ci < world->chunk_cache.chunk_count; ci++) {
+                            Chunk* n_chunk = &world->chunk_cache.chunks[ci];
+                            if (n_chunk->chunk_x == n_chunk_x && n_chunk->chunk_y == n_chunk_y && n_chunk->chunk_z == n_chunk_z) {
+                                if (n_chunk->loaded && n_chunk->generated) {
+                                    int local_nx = nx - (n_chunk_x * CHUNK_WIDTH);
+                                    int local_ny = ny - (n_chunk_y * CHUNK_HEIGHT);
+                                    int local_nz = nz - (n_chunk_z * CHUNK_DEPTH);
+                                    if (local_nx >= 0 && local_nx < CHUNK_WIDTH &&
+                                        local_ny >= 0 && local_ny < CHUNK_HEIGHT &&
+                                        local_nz >= 0 && local_nz < CHUNK_DEPTH) {
+                                        neighbor = n_chunk->blocks[local_ny][local_nz][local_nx].type;
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // If neighbor is air, this face is exposed
+                    if (neighbor == BLOCK_AIR) {
+                        exposed_faces |= (1 << face);
+                    }
                 }
 
                 if (exposed_faces != 0) {
@@ -2490,65 +2523,11 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
                     temp_blocks[temp_count].exposed_faces = exposed_faces;
                     temp_blocks[temp_count].light_level = 0;  // preserved for compatibility
 
-                    // Compute per-face baked lighting (use max of skylight and blocklight at adjacent air block)
+                    // DON'T calculate lighting here (no more world_get_skylight calls)
+                    // Lighting will be looked up at render time from active lighting buffers
+                    // This eliminates lock contention during meshing
                     for (int face = 0; face < 6; face++) {
-                        // default to zero light
-                        temp_blocks[temp_count].face_light[face] = 0;
-                    }
-
-                    // +X
-                    if (exposed_faces & (1 << 0)) {
-                        int nx = world_x + 1;
-                        int ny = world_y;
-                        int nz = world_z;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[0] = (skyl > blockl) ? skyl : blockl;
-                    }
-                    // -X
-                    if (exposed_faces & (1 << 1)) {
-                        int nx = world_x - 1;
-                        int ny = world_y;
-                        int nz = world_z;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[1] = (skyl > blockl) ? skyl : blockl;
-                    }
-                    // +Y
-                    if (exposed_faces & (1 << 2)) {
-                        int nx = world_x;
-                        int ny = world_y + 1;
-                        int nz = world_z;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[2] = (skyl > blockl) ? skyl : blockl;
-                    }
-                    // -Y
-                    if (exposed_faces & (1 << 3)) {
-                        int nx = world_x;
-                        int ny = world_y - 1;
-                        int nz = world_z;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[3] = (skyl > blockl) ? skyl : blockl;
-                    }
-                    // +Z
-                    if (exposed_faces & (1 << 4)) {
-                        int nx = world_x;
-                        int ny = world_y;
-                        int nz = world_z + 1;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[4] = (skyl > blockl) ? skyl : blockl;
-                    }
-                    // -Z
-                    if (exposed_faces & (1 << 5)) {
-                        int nx = world_x;
-                        int ny = world_y;
-                        int nz = world_z - 1;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[5] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[face] = 15;  // Placeholder - ignored at render time
                     }
 
                     temp_count++;

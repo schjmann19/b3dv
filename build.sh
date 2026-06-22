@@ -11,4 +11,8 @@ cp zig-out/bin/b3dv ./b3dv
 
 echo "Done! Binary available at ./b3dv"
 
+if [ $1 == "run" ]; then
+    echo "Running b3dv..."
+    mangohud ./b3dv run
+fi
 

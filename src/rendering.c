@@ -199,15 +199,76 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
         0.8f     // -Z (back) - slightly darker
     };
 
-    // OPTIMIZED: Calculate per-face lighting based on adjacent air block skylight
-    // Instead of averaging all faces, each face gets its own neighbor's light
+    // DYNAMIC LIGHTING: Look up lighting at render time from active lighting buffers
+    // No lighting calculations during meshing - allows instant mesh updates without stutter
+    // Reading from double-buffered lighting is thread-safe without locks
     Color face_colors[6];
+    
+    // Get the chunk containing this block to read lighting directly
+    int32_t chunk_x = block_x < 0 ? (block_x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : block_x / CHUNK_WIDTH;
+    int32_t chunk_y = block_y < 0 ? (block_y - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : block_y / CHUNK_HEIGHT;
+    int32_t chunk_z = block_z < 0 ? (block_z - CHUNK_DEPTH + 1) / CHUNK_DEPTH : block_z / CHUNK_DEPTH;
+    
+    Chunk* block_chunk = NULL;
+    // Find chunk without locking (chunk array doesn't resize, safe to iterate)
+    for (int i = 0; i < world->chunk_cache.chunk_count; i++) {
+        Chunk* c = &world->chunk_cache.chunks[i];
+        if (c->chunk_x == chunk_x && c->chunk_y == chunk_y && c->chunk_z == chunk_z) {
+            block_chunk = c;
+            break;
+        }
+    }
+    
+    // For each face, look up current lighting from adjacent air block
     for (int i = 0; i < 6; i++) {
-        // Use pre-baked per-face light provided by meshing step
-        uint8_t fl = face_light[i];
-        // Convert to brightness: 0=dark(0.3), 15=bright(1.0)
-        float face_brightness = face_shading[i] * (0.3f + (fl / 15.0f) * 0.7f);
-
+        // Face neighbor offsets
+        int adj_offsets[6][3] = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}};
+        int adj_x = block_x + adj_offsets[i][0];
+        int adj_y = block_y + adj_offsets[i][1];
+        int adj_z = block_z + adj_offsets[i][2];
+        
+        uint8_t current_light = 0;
+        
+        // Calculate which chunk the adjacent block is in
+        int32_t adj_chunk_x = adj_x < 0 ? (adj_x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : adj_x / CHUNK_WIDTH;
+        int32_t adj_chunk_y = adj_y < 0 ? (adj_y - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : adj_y / CHUNK_HEIGHT;
+        int32_t adj_chunk_z = adj_z < 0 ? (adj_z - CHUNK_DEPTH + 1) / CHUNK_DEPTH : adj_z / CHUNK_DEPTH;
+        
+        // Find the chunk containing the adjacent block
+        Chunk* adj_chunk = NULL;
+        if (adj_chunk_x == chunk_x && adj_chunk_y == chunk_y && adj_chunk_z == chunk_z && block_chunk) {
+            adj_chunk = block_chunk;  // Same chunk, use cached pointer
+        } else {
+            // Different chunk, search (rare - most faces are in-chunk)
+            for (int ci = 0; ci < world->chunk_cache.chunk_count; ci++) {
+                Chunk* c = &world->chunk_cache.chunks[ci];
+                if (c->chunk_x == adj_chunk_x && c->chunk_y == adj_chunk_y && c->chunk_z == adj_chunk_z) {
+                    adj_chunk = c;
+                    break;
+                }
+            }
+        }
+        
+        // Read lighting directly from chunk lighting array (no locking - safe from double-buffering)
+        if (adj_chunk && adj_chunk->loaded && adj_chunk->generated) {
+            int local_adj_x = adj_x - (adj_chunk_x * CHUNK_WIDTH);
+            int local_adj_y = adj_y - (adj_chunk_y * CHUNK_HEIGHT);
+            int local_adj_z = adj_z - (adj_chunk_z * CHUNK_DEPTH);
+            
+            if (local_adj_x >= 0 && local_adj_x < CHUNK_WIDTH &&
+                local_adj_y >= 0 && local_adj_y < CHUNK_HEIGHT &&
+                local_adj_z >= 0 && local_adj_z < CHUNK_DEPTH) {
+                
+                // Read from active lighting buffer atomically (no locks needed)
+                int active = __atomic_load_n(&adj_chunk->active_light_buffer, __ATOMIC_ACQUIRE);
+                uint8_t skyl = adj_chunk->skylight[active][local_adj_y][local_adj_z][local_adj_x];
+                uint8_t blockl = adj_chunk->blocklight[active][local_adj_y][local_adj_z][local_adj_x];
+                current_light = (skyl > blockl) ? skyl : blockl;
+            }
+        }
+        
+        // Apply face shading and current lighting
+        float face_brightness = face_shading[i] * (0.3f + (current_light / 15.0f) * 0.7f);
         face_colors[i].r = (unsigned char)(color.r * face_brightness);
         face_colors[i].g = (unsigned char)(color.g * face_brightness);
         face_colors[i].b = (unsigned char)(color.b * face_brightness);
