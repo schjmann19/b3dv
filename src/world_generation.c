@@ -20,6 +20,86 @@ static char CHUNK_LOAD_ERROR[256];
 static void write_players_file(World* world, void* player_ptr, const char* world_name);
 
 // ============================================================================
+// ISSUE #1: SPATIAL HASH TABLE FOR CHUNK LOOKUP (O(1) instead of O(n))
+// ============================================================================
+
+// Hash function for chunk coordinates (Issue #1)
+static uint32_t chunk_hash_func(int32_t chunk_x, int32_t chunk_y, int32_t chunk_z, uint32_t capacity)
+{
+    // Combine coordinates using FNV-1a hash-like mixing
+    uint64_t h = 2166136261u;
+    h ^= (uint32_t)chunk_x;
+    h = h * 16777619u;
+    h ^= (uint32_t)chunk_y;
+    h = h * 16777619u;
+    h ^= (uint32_t)chunk_z;
+    h = h * 16777619u;
+    return h % capacity;
+}
+
+// Insert chunk into hash table (Issue #1)
+static void chunk_hash_insert(ChunkCache* cache, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z, Chunk* chunk)
+{
+    if (!cache->hash_table) return;
+
+    uint32_t idx = chunk_hash_func(chunk_x, chunk_y, chunk_z, cache->hash_capacity);
+
+    // Linear probing with wrap-around
+    for (uint32_t i = 0; i < cache->hash_capacity; i++) {
+        uint32_t probe_idx = (idx + i) % cache->hash_capacity;
+        if (!cache->hash_table[probe_idx].chunk) {
+            cache->hash_table[probe_idx].chunk_x = chunk_x;
+            cache->hash_table[probe_idx].chunk_y = chunk_y;
+            cache->hash_table[probe_idx].chunk_z = chunk_z;
+            cache->hash_table[probe_idx].chunk = chunk;
+            return;
+        }
+    }
+}
+
+// Remove chunk from hash table (Issue #1)
+static void chunk_hash_remove(ChunkCache* cache, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z)
+{
+    if (!cache->hash_table) return;
+
+    uint32_t idx = chunk_hash_func(chunk_x, chunk_y, chunk_z, cache->hash_capacity);
+
+    // Linear probing to find and remove
+    for (uint32_t i = 0; i < cache->hash_capacity; i++) {
+        uint32_t probe_idx = (idx + i) % cache->hash_capacity;
+        if (cache->hash_table[probe_idx].chunk &&
+            cache->hash_table[probe_idx].chunk_x == chunk_x &&
+            cache->hash_table[probe_idx].chunk_y == chunk_y &&
+            cache->hash_table[probe_idx].chunk_z == chunk_z) {
+            cache->hash_table[probe_idx].chunk = NULL;
+            return;
+        }
+    }
+}
+
+// Lookup chunk in hash table (Issue #1)
+static Chunk* chunk_hash_lookup(ChunkCache* cache, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z)
+{
+    if (!cache->hash_table) return NULL;
+
+    uint32_t idx = chunk_hash_func(chunk_x, chunk_y, chunk_z, cache->hash_capacity);
+
+    // Linear probing to find entry
+    for (uint32_t i = 0; i < cache->hash_capacity; i++) {
+        uint32_t probe_idx = (idx + i) % cache->hash_capacity;
+        if (cache->hash_table[probe_idx].chunk == NULL) {
+            return NULL;  // Empty slot, not found
+        }
+        if (cache->hash_table[probe_idx].chunk_x == chunk_x &&
+            cache->hash_table[probe_idx].chunk_y == chunk_y &&
+            cache->hash_table[probe_idx].chunk_z == chunk_z) {
+            return cache->hash_table[probe_idx].chunk;
+        }
+    }
+    return NULL;
+}
+
+// ============================================================================
 // IMPROVED SEEDED RANDOM NUMBER GENERATION & NOISE FUNCTIONS
 // ============================================================================
 
@@ -229,6 +309,12 @@ World* world_create(void)
     world->chunk_cache.chunk_capacity = 4096;  // Pre-allocate space for 4096 chunks (very large)
     world->chunk_cache.chunks = (Chunk*)malloc(sizeof(Chunk) * world->chunk_cache.chunk_capacity);
     world->chunk_cache.chunk_count = 0;
+
+    // Initialize hash table for O(1) chunk lookup (Issue #1)
+    world->chunk_cache.hash_capacity = 8192;  // Hash table roughly 2x larger than max chunks to reduce collisions
+    world->chunk_cache.hash_table = (ChunkHashEntry*)malloc(sizeof(ChunkHashEntry) * world->chunk_cache.hash_capacity);
+    memset(world->chunk_cache.hash_table, 0, sizeof(ChunkHashEntry) * world->chunk_cache.hash_capacity);
+
     world->last_loaded_chunk_x = INT32_MAX;
     world->last_loaded_chunk_y = INT32_MAX;
     world->last_loaded_chunk_z = INT32_MAX;
@@ -276,9 +362,12 @@ void world_free(World* world)
             // They'll be reused when chunks are respawned or cleaned up
         }
 
-        // Free chunk cache array and cache mutex
+        // Free chunk cache array, hash table, and cache mutex
         if (world->chunk_cache.chunks) {
             free(world->chunk_cache.chunks);
+        }
+        if (world->chunk_cache.hash_table) {
+            free(world->chunk_cache.hash_table);  // Free hash table (Issue #1)
         }
         pthread_mutex_destroy(&world->cache_mutex);  // Destroy cache access mutex
 
@@ -368,15 +457,8 @@ Chunk* world_get_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t c
 {
     if (!world) return NULL;
 
-    // Search for existing chunk
-    for (int i = 0; i < world->chunk_cache.chunk_count; i++) {
-        Chunk* c = &world->chunk_cache.chunks[i];
-        if (c->chunk_x == chunk_x && c->chunk_y == chunk_y && c->chunk_z == chunk_z) {
-            return c;
-        }
-    }
-
-    return NULL;
+    // Use hash table for O(1) lookup instead of linear search (Issue #1)
+    return chunk_hash_lookup(&world->chunk_cache, chunk_x, chunk_y, chunk_z);
 }
 
 // Load or create a chunk
@@ -425,6 +507,12 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
     new_chunk->merged_mesh[0] = NULL;
     new_chunk->merged_mesh[1] = NULL;
     new_chunk->active_merged_mesh = 0;
+
+    // Initialize dirty region tracking for incremental lighting (Issue #3)
+    new_chunk->dirty_region_x = 0;
+    new_chunk->dirty_region_y = 0;
+    new_chunk->dirty_region_z = 0;
+    new_chunk->has_dirty_region = false;
 
     pthread_mutex_init(&new_chunk->mesh_swap_mutex, NULL);  // Mutex for atomic mesh swaps
     pthread_mutex_init(&new_chunk->mutex, NULL);  // Initialize chunk mutex
@@ -506,6 +594,9 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
         // The caller (world_load) will handle generation if needed
         printf("[chunk_load] Chunk not found: %s (will stay as air)\n", filepath);
     }
+
+    // Add chunk to hash table for O(1) lookup (Issue #1)
+    chunk_hash_insert(&world->chunk_cache, chunk_x, chunk_y, chunk_z, new_chunk);
 
     return new_chunk;
 }
@@ -700,12 +791,22 @@ void world_set_block(World* world, int x, int y, int z, BlockType type)
         // The visible block list doesn't depend on lighting (lighting calculated at render time)
         // chunk_cache_visible_blocks calls world_get_block which locks world->cache_mutex,
         // so we call it WITHOUT holding any locks
-        chunk_cache_visible_blocks(chunk, world);
+
+        // Issue #2: Use dirty-region remeshing instead of full chunk rebuild
+        // Only update a 3x3x3 region around the changed block, much faster for single block changes
+        chunk_update_visible_blocks_region(chunk, world, local_x, local_y, local_z, 1);
 
         // Update mesh flag to mark it as done (worker will skip mesh rebuild and only do lighting)
         pthread_mutex_lock(&chunk->mutex);
         chunk->meshed = true;  // Mark mesh as already rebuilt
         pthread_mutex_unlock(&chunk->mutex);
+
+        // Issue #3: Set dirty region for incremental lighting
+        // This tells the worker to only recalculate lighting in the affected area
+        chunk->dirty_region_x = local_x;
+        chunk->dirty_region_y = local_y;
+        chunk->dirty_region_z = local_z;
+        chunk->has_dirty_region = true;
 
         // Queue worker for lighting recalculation (mesh already updated)
         worker_queue_chunk(world, chunk);
@@ -734,16 +835,35 @@ void world_set_block(World* world, int x, int y, int z, BlockType type)
             Chunk* neighbor = world_get_chunk(world, nx, ny, nz);
             if (!neighbor || !neighbor->loaded || !neighbor->generated) continue;
 
+            // Calculate the corresponding position in the neighbor chunk (Issue #2)
+            int neighbor_local_x = local_x;
+            int neighbor_local_y = local_y;
+            int neighbor_local_z = local_z;
+
+            if (ni == 0) neighbor_local_x = 0;  // Block is at far-X edge of this chunk, at near-X of neighbor
+            else if (ni == 1) neighbor_local_x = CHUNK_WIDTH - 1;  // Block is at near-X edge, at far-X of neighbor
+            else if (ni == 2) neighbor_local_y = 0;
+            else if (ni == 3) neighbor_local_y = CHUNK_HEIGHT - 1;
+            else if (ni == 4) neighbor_local_z = 0;
+            else if (ni == 5) neighbor_local_z = CHUNK_DEPTH - 1;
+
             // Invalidate neighbor mesh and rebuild it immediately to prevent flicker
             pthread_mutex_lock(&neighbor->mutex);
             neighbor->meshed = false;
             pthread_mutex_unlock(&neighbor->mutex);
 
-            chunk_cache_visible_blocks(neighbor, world);
+            // Issue #2: Use dirty-region remeshing for neighbor too
+            chunk_update_visible_blocks_region(neighbor, world, neighbor_local_x, neighbor_local_y, neighbor_local_z, 1);
 
             pthread_mutex_lock(&neighbor->mutex);
             neighbor->meshed = true;
             pthread_mutex_unlock(&neighbor->mutex);
+
+            // Issue #3: Set dirty region for incremental lighting on neighbor
+            neighbor->dirty_region_x = neighbor_local_x;
+            neighbor->dirty_region_y = neighbor_local_y;
+            neighbor->dirty_region_z = neighbor_local_z;
+            neighbor->has_dirty_region = true;
 
             // Recalculate lighting for the neighbor chunk as well
             worker_queue_chunk(world, neighbor);
@@ -1113,9 +1233,16 @@ void world_update_chunks(World* world, Vector3 player_pos, Vector3 camera_forwar
                 // Clean up chunk resources
                 chunk_free_visible_blocks(chunk);  // Free mesh
 
+                // Remove chunk from hash table (Issue #1)
+                chunk_hash_remove(&world->chunk_cache, chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
+
                 // Remove chunk from cache (swap with last)
                 if (i < world->chunk_cache.chunk_count - 1) {
-                    world->chunk_cache.chunks[i] = world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
+                    Chunk* last_chunk = &world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
+                    // Need to update hash table entry for the swapped chunk (Issue #1)
+                    chunk_hash_remove(&world->chunk_cache, last_chunk->chunk_x, last_chunk->chunk_y, last_chunk->chunk_z);
+                    world->chunk_cache.chunks[i] = *last_chunk;
+                    chunk_hash_insert(&world->chunk_cache, last_chunk->chunk_x, last_chunk->chunk_y, last_chunk->chunk_z, &world->chunk_cache.chunks[i]);
                 }
                 world->chunk_cache.chunk_count--;
                 unloads_this_frame++;
@@ -2224,6 +2351,237 @@ void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer)
     // both skylight + blocklight are computed to avoid intermediate states.
 }
 
+// ============================================================================
+// ISSUE #3: INCREMENTAL SKYLIGHT RECALCULATION
+// ============================================================================
+// Update skylight only in a region around a changed block (Issue #3)
+// This uses the same BFS approach but starts from the changed region instead of full-chunk rescan
+// Much faster than recalculating the entire 1024-column chunk
+void calculate_chunk_skylight_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int target_buffer)
+{
+    if (!chunk) return;
+
+    uint8_t (*skylight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->skylight[target_buffer];
+    int max_propagation_distance = 16;  // Light travels up to 16 blocks in each direction (Issue #3)
+
+    // Define region bounds - expand enough to catch all affected lighting
+    int min_x = local_x - max_propagation_distance;
+    int max_x = local_x + max_propagation_distance;
+    int min_y = local_y - max_propagation_distance;
+    int max_y = local_y + max_propagation_distance;
+    int min_z = local_z - max_propagation_distance;
+    int max_z = local_z + max_propagation_distance;
+
+    // Clamp to chunk bounds
+    if (min_x < 0) min_x = 0;
+    if (max_x >= CHUNK_WIDTH) max_x = CHUNK_WIDTH - 1;
+    if (min_y < 0) min_y = 0;
+    if (max_y >= CHUNK_HEIGHT) max_y = CHUNK_HEIGHT - 1;
+    if (min_z < 0) min_z = 0;
+    if (max_z >= CHUNK_DEPTH) max_z = CHUNK_DEPTH - 1;
+
+    // Clear skylight in the affected region (will be recalculated)
+    for (int y = min_y; y <= max_y; y++) {
+        for (int z = min_z; z <= max_z; z++) {
+            for (int x = min_x; x <= max_x; x++) {
+                skylight_buf[y][z][x] = 0;
+            }
+        }
+    }
+
+    // Recalculate skylight in the region by doing column traces for affected XZ columns
+    for (int z = min_z; z <= max_z; z++) {
+        for (int x = min_x; x <= max_x; x++) {
+            int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+            int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+
+            uint8_t current_light = 15;
+
+            // Scan downward from world top - but only update blocks in affected region
+            for (int world_y = WORLD_Y_MAX; world_y >= WORLD_Y_MIN; world_y--) {
+                BlockType block = world_get_block(world, world_x, world_y, world_z);
+
+                if (block == BLOCK_AIR) {
+                    if (world_y >= chunk->chunk_y * CHUNK_HEIGHT &&
+                        world_y < chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT) {
+                        int local_y = world_y - (chunk->chunk_y * CHUNK_HEIGHT);
+                        // Only update if in affected region
+                        if (local_y >= min_y && local_y <= max_y) {
+                            skylight_buf[local_y][z][x] = current_light;
+                        }
+                    }
+                } else {
+                    current_light = 0;
+                }
+            }
+        }
+    }
+
+    // BFS propagation from affected region (Issue #3)
+    static LightQueueEntry queue[LIGHT_QUEUE_SIZE];
+    int queue_head = 0, queue_tail = 0;
+
+    // Queue all air blocks with skylight in the affected region
+    for (int y = min_y; y <= max_y; y++) {
+        for (int z = min_z; z <= max_z; z++) {
+            for (int x = min_x; x <= max_x; x++) {
+                if (chunk->blocks[y][z][x].type == BLOCK_AIR && skylight_buf[y][z][x] > 0) {
+                    if (queue_tail < LIGHT_QUEUE_SIZE) {
+                        queue[queue_tail].x = x;
+                        queue[queue_tail].y = y;
+                        queue[queue_tail].z = z;
+                        queue[queue_tail].light = skylight_buf[y][z][x];
+                        queue_tail++;
+                    }
+                }
+            }
+        }
+    }
+
+    // BFS: propagate skylight from the region outward
+    while (queue_head < queue_tail) {
+        LightQueueEntry entry = queue[queue_head++];
+        int x = entry.x, y = entry.y, z = entry.z;
+        uint8_t current_light = entry.light;
+
+        if (current_light <= 1) continue;
+
+        uint8_t new_light = current_light - 1;
+
+        int neighbors[6][3] = {
+            {x+1, y, z}, {x-1, y, z},
+            {x, y+1, z}, {x, y-1, z},
+            {x, y, z+1}, {x, y, z-1}
+        };
+
+        for (int i = 0; i < 6; i++) {
+            int nx = neighbors[i][0];
+            int ny = neighbors[i][1];
+            int nz = neighbors[i][2];
+
+            if (nx < 0 || nx >= CHUNK_WIDTH || ny < 0 || ny >= CHUNK_HEIGHT || nz < 0 || nz >= CHUNK_DEPTH) {
+                continue;
+            }
+
+            if (chunk->blocks[ny][nz][nx].type == BLOCK_AIR) {
+                if (new_light > skylight_buf[ny][nz][nx]) {
+                    skylight_buf[ny][nz][nx] = new_light;
+                    if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
+                        queue[queue_tail].x = nx;
+                        queue[queue_tail].y = ny;
+                        queue[queue_tail].z = nz;
+                        queue[queue_tail].light = new_light;
+                        queue_tail++;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// ISSUE #3: INCREMENTAL BLOCKLIGHT RECALCULATION
+// ============================================================================
+// Update blocklight only in a region around a changed block (Issue #3)
+// Faster than full-chunk blocklight recalculation for single block changes
+void calculate_chunk_blocklight_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int target_buffer)
+{
+    (void)world;
+    if (!chunk) return;
+
+    uint8_t (*blocklight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->blocklight[target_buffer];
+    int max_propagation_distance = 16;  // Blocklight travels up to 16 blocks (Issue #3)
+
+    // Define region bounds
+    int min_x = local_x - max_propagation_distance;
+    int max_x = local_x + max_propagation_distance;
+    int min_y = local_y - max_propagation_distance;
+    int max_y = local_y + max_propagation_distance;
+    int min_z = local_z - max_propagation_distance;
+    int max_z = local_z + max_propagation_distance;
+
+    // Clamp to chunk bounds
+    if (min_x < 0) min_x = 0;
+    if (max_x >= CHUNK_WIDTH) max_x = CHUNK_WIDTH - 1;
+    if (min_y < 0) min_y = 0;
+    if (max_y >= CHUNK_HEIGHT) max_y = CHUNK_HEIGHT - 1;
+    if (min_z < 0) min_z = 0;
+    if (max_z >= CHUNK_DEPTH) max_z = CHUNK_DEPTH - 1;
+
+    // Clear blocklight in the affected region
+    for (int y = min_y; y <= max_y; y++) {
+        for (int z = min_z; z <= max_z; z++) {
+            for (int x = min_x; x <= max_x; x++) {
+                blocklight_buf[y][z][x] = 0;
+            }
+        }
+    }
+
+    // BFS queue for light propagation
+    static LightQueueEntry queue[LIGHT_QUEUE_SIZE];
+    int queue_head = 0, queue_tail = 0;
+
+    // Find all light-emitting blocks in the region and add to queue
+    for (int y = min_y; y <= max_y; y++) {
+        for (int z = min_z; z <= max_z; z++) {
+            for (int x = min_x; x <= max_x; x++) {
+                BlockProperties props = get_block_properties(chunk->blocks[y][z][x].type);
+                if (props.emission > 0) {
+                    blocklight_buf[y][z][x] = props.emission;
+                    if (queue_tail < LIGHT_QUEUE_SIZE) {
+                        queue[queue_tail].x = x;
+                        queue[queue_tail].y = y;
+                        queue[queue_tail].z = z;
+                        queue[queue_tail].light = props.emission;
+                        queue_tail++;
+                    }
+                }
+            }
+        }
+    }
+
+    // BFS flood-fill: propagate light from region outward
+    while (queue_head < queue_tail) {
+        LightQueueEntry entry = queue[queue_head++];
+        int x = entry.x, y = entry.y, z = entry.z;
+        uint8_t current_light = entry.light;
+
+        if (current_light <= 1) continue;
+
+        int neighbors[6][3] = {
+            {x+1, y, z}, {x-1, y, z},
+            {x, y+1, z}, {x, y-1, z},
+            {x, y, z+1}, {x, y, z-1}
+        };
+
+        for (int i = 0; i < 6; i++) {
+            int nx = neighbors[i][0];
+            int ny = neighbors[i][1];
+            int nz = neighbors[i][2];
+
+            if (nx < 0 || nx >= CHUNK_WIDTH || ny < 0 || ny >= CHUNK_HEIGHT || nz < 0 || nz >= CHUNK_DEPTH) {
+                continue;
+            }
+
+            BlockProperties neighbor_props = get_block_properties(chunk->blocks[ny][nz][nx].type);
+            uint8_t new_light = current_light - 1;
+
+            if (neighbor_props.opacity < 15) {
+                if (new_light > blocklight_buf[ny][nz][nx]) {
+                    blocklight_buf[ny][nz][nx] = new_light;
+                    if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
+                        queue[queue_tail].x = nx;
+                        queue[queue_tail].y = ny;
+                        queue[queue_tail].z = nz;
+                        queue[queue_tail].light = new_light;
+                        queue_tail++;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // GREEDY MESHING: Merge adjacent coplanar exposed faces into larger rectangles
 // This dramatically reduces geometry - typically 60-80% reduction in face count
 // Algorithm: For each face direction, find maximal rectangles of exposed faces
@@ -2231,7 +2589,7 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
 {
     MergedMesh* mesh = (MergedMesh*)malloc(sizeof(MergedMesh));
     memset(mesh, 0, sizeof(MergedMesh));
-    
+
     // Initialize arrays for each face
     for (int f = 0; f < 6; f++) {
         mesh->quad_capacity[f] = 256;
@@ -2241,26 +2599,26 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
 
     // For each face direction, perform greedy meshing
     // Face 0: +X, Face 1: -X, Face 2: +Y, Face 3: -Y, Face 4: +Z, Face 5: -Z
-    
+
     // +Y (top faces) - process in XZ plane
     {
         bool used[CHUNK_DEPTH][CHUNK_WIDTH] = {0};  // Mark which blocks have been merged
-        
+
         for (int y = CHUNK_HEIGHT - 1; y >= 0; y--) {
             for (int z = 0; z < CHUNK_DEPTH; z++) {
                 for (int x = 0; x < CHUNK_WIDTH; x++) {
                     if (used[z][x]) continue;
-                    
+
                     BlockType block = world_chunk_get_block(chunk, x, y, z);
                     if (block == BLOCK_AIR) continue;
-                    
+
                     // Check if +Y face is exposed
                     int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
                     int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
                     int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
-                    
+
                     if (world_get_block(world, world_x, world_y + 1, world_z) != BLOCK_AIR) continue;
-                    
+
                     // Find max width
                     int w = 1;
                     while (x + w < CHUNK_WIDTH && !used[z][x + w]) {
@@ -2270,7 +2628,7 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
                         if (world_get_block(world, wx, world_y + 1, world_z) != BLOCK_AIR) break;
                         w++;
                     }
-                    
+
                     // Find max height
                     int h = 1;
                     while (z + h < CHUNK_DEPTH) {
@@ -2295,13 +2653,13 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
                         if (!can_extend) break;
                         h++;
                     }
-                    
+
                     // Add quad
                     if (mesh->quad_count[2] >= mesh->quad_capacity[2]) {
                         mesh->quad_capacity[2] *= 2;
                         mesh->quads[2] = (MergedQuad*)realloc(mesh->quads[2], sizeof(MergedQuad) * mesh->quad_capacity[2]);
                     }
-                    
+
                     MergedQuad* quad = &mesh->quads[2][mesh->quad_count[2]++];
                     quad->x = world_x;
                     quad->y = world_y;
@@ -2311,7 +2669,7 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
                     quad->face = 2;  // +Y
                     quad->type = block;
                     quad->light = world_get_skylight(world, world_x, world_y + 1, world_z);
-                    
+
                     // Mark as used
                     for (int dz = 0; dz < h; dz++) {
                         for (int dx = 0; dx < w; dx++) {
@@ -2322,25 +2680,25 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
             }
         }
     }
-    
+
     // -Y (bottom faces) - similar process
     {
         bool used[CHUNK_DEPTH][CHUNK_WIDTH] = {0};
-        
+
         for (int y = 0; y < CHUNK_HEIGHT; y++) {
             for (int z = 0; z < CHUNK_DEPTH; z++) {
                 for (int x = 0; x < CHUNK_WIDTH; x++) {
                     if (used[z][x]) continue;
-                    
+
                     BlockType block = world_chunk_get_block(chunk, x, y, z);
                     if (block == BLOCK_AIR) continue;
-                    
+
                     int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
                     int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
                     int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
-                    
+
                     if (world_get_block(world, world_x, world_y - 1, world_z) != BLOCK_AIR) continue;
-                    
+
                     int w = 1;
                     while (x + w < CHUNK_WIDTH && !used[z][x + w]) {
                         BlockType b = world_chunk_get_block(chunk, x + w, y, z);
@@ -2349,7 +2707,7 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
                         if (world_get_block(world, wx, world_y - 1, world_z) != BLOCK_AIR) break;
                         w++;
                     }
-                    
+
                     int h = 1;
                     while (z + h < CHUNK_DEPTH) {
                         bool can_extend = true;
@@ -2373,12 +2731,12 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
                         if (!can_extend) break;
                         h++;
                     }
-                    
+
                     if (mesh->quad_count[3] >= mesh->quad_capacity[3]) {
                         mesh->quad_capacity[3] *= 2;
                         mesh->quads[3] = (MergedQuad*)realloc(mesh->quads[3], sizeof(MergedQuad) * mesh->quad_capacity[3]);
                     }
-                    
+
                     MergedQuad* quad = &mesh->quads[3][mesh->quad_count[3]++];
                     quad->x = world_x;
                     quad->y = world_y;
@@ -2388,7 +2746,7 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
                     quad->face = 3;  // -Y
                     quad->type = block;
                     quad->light = world_get_skylight(world, world_x, world_y - 1, world_z);
-                    
+
                     for (int dz = 0; dz < h; dz++) {
                         for (int dx = 0; dx < w; dx++) {
                             used[z + dz][x + dx] = true;
@@ -2559,7 +2917,7 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
 
     // GREEDY MESHING: Generate merged quads for better performance
     MergedMesh* new_merged = chunk_greedy_mesh(chunk, world);
-    
+
     // Free old merged mesh in inactive buffer
     if (chunk->merged_mesh[inactive_buffer] != NULL) {
         for (int f = 0; f < 6; f++) {
@@ -2569,7 +2927,7 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
         }
         free(chunk->merged_mesh[inactive_buffer]);
     }
-    
+
     // Store new merged mesh
     chunk->merged_mesh[inactive_buffer] = new_merged;
 
@@ -2603,7 +2961,7 @@ void chunk_free_visible_blocks(Chunk* chunk)
 void chunk_free_merged_mesh(Chunk* chunk)
 {
     if (!chunk) return;
-    
+
     for (int i = 0; i < 2; i++) {
         if (chunk->merged_mesh[i] != NULL) {
             for (int f = 0; f < 6; f++) {
@@ -2615,4 +2973,200 @@ void chunk_free_merged_mesh(Chunk* chunk)
             chunk->merged_mesh[i] = NULL;
         }
     }
+}
+
+// ============================================================================
+// ISSUE #2: DIRTY-REGION REMESHING
+// ============================================================================
+// Update only the visible blocks in a region around a changed block (Issue #2)
+// This is much faster than rebuilding the entire chunk mesh for a single block change
+// Radius: how many blocks away from the change to update (typically 1-2)
+void chunk_update_visible_blocks_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int radius)
+{
+    if (!chunk) return;
+
+    // Define region bounds with radius
+    int min_x = local_x - radius;
+    int max_x = local_x + radius;
+    int min_y = local_y - radius;
+    int max_y = local_y + radius;
+    int min_z = local_z - radius;
+    int max_z = local_z + radius;
+
+    // Clamp to chunk bounds
+    if (min_x < 0) min_x = 0;
+    if (max_x >= CHUNK_WIDTH) max_x = CHUNK_WIDTH - 1;
+    if (min_y < 0) min_y = 0;
+    if (max_y >= CHUNK_HEIGHT) max_y = CHUNK_HEIGHT - 1;
+    if (min_z < 0) min_z = 0;
+    if (max_z >= CHUNK_DEPTH) max_z = CHUNK_DEPTH - 1;
+
+    // Build a temporary array for the region's visible blocks
+    int temp_capacity = 512;
+    int temp_count = 0;
+    CachedVisibleBlock* temp_blocks = (CachedVisibleBlock*)malloc(sizeof(CachedVisibleBlock) * temp_capacity);
+
+    // Only iterate over the affected region
+    for (int y = min_y; y <= max_y; y++) {
+        for (int z = min_z; z <= max_z; z++) {
+            for (int x = min_x; x <= max_x; x++) {
+                BlockType block = world_chunk_get_block(chunk, x, y, z);
+
+                // Skip air blocks
+                if (block == BLOCK_AIR) continue;
+
+                // Get world coordinates
+                int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+                int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
+                int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+
+                // Check which faces are exposed (neighbor is air)
+                uint8_t exposed_faces = 0;
+
+                if (world_get_block(world, world_x + 1, world_y, world_z) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 0);
+                }
+                if (world_get_block(world, world_x - 1, world_y, world_z) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 1);
+                }
+                if (world_get_block(world, world_x, world_y + 1, world_z) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 2);
+                }
+                if (world_get_block(world, world_x, world_y - 1, world_z) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 3);
+                }
+                if (world_get_block(world, world_x, world_y, world_z + 1) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 4);
+                }
+                if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) {
+                    exposed_faces |= (1 << 5);
+                }
+
+                if (exposed_faces != 0) {
+                    // Grow temporary array if needed
+                    if (temp_count >= temp_capacity) {
+                        temp_capacity *= 2;
+                        temp_blocks = (CachedVisibleBlock*)realloc(temp_blocks,
+                                                                   sizeof(CachedVisibleBlock) * temp_capacity);
+                    }
+
+                    // Add to temporary array
+                    temp_blocks[temp_count].x = x;
+                    temp_blocks[temp_count].y = y;
+                    temp_blocks[temp_count].z = z;
+                    temp_blocks[temp_count].exposed_faces = exposed_faces;
+                    temp_blocks[temp_count].light_level = 0;
+
+                    // Compute per-face baked lighting
+                    for (int face = 0; face < 6; face++) {
+                        temp_blocks[temp_count].face_light[face] = 0;
+                    }
+
+                    if (exposed_faces & (1 << 0)) {
+                        uint8_t skyl = world_get_skylight(world, world_x + 1, world_y, world_z);
+                        uint8_t blockl = world_get_blocklight(world, world_x + 1, world_y, world_z);
+                        temp_blocks[temp_count].face_light[0] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    if (exposed_faces & (1 << 1)) {
+                        uint8_t skyl = world_get_skylight(world, world_x - 1, world_y, world_z);
+                        uint8_t blockl = world_get_blocklight(world, world_x - 1, world_y, world_z);
+                        temp_blocks[temp_count].face_light[1] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    if (exposed_faces & (1 << 2)) {
+                        uint8_t skyl = world_get_skylight(world, world_x, world_y + 1, world_z);
+                        uint8_t blockl = world_get_blocklight(world, world_x, world_y + 1, world_z);
+                        temp_blocks[temp_count].face_light[2] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    if (exposed_faces & (1 << 3)) {
+                        uint8_t skyl = world_get_skylight(world, world_x, world_y - 1, world_z);
+                        uint8_t blockl = world_get_blocklight(world, world_x, world_y - 1, world_z);
+                        temp_blocks[temp_count].face_light[3] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    if (exposed_faces & (1 << 4)) {
+                        uint8_t skyl = world_get_skylight(world, world_x, world_y, world_z + 1);
+                        uint8_t blockl = world_get_blocklight(world, world_x, world_y, world_z + 1);
+                        temp_blocks[temp_count].face_light[4] = (skyl > blockl) ? skyl : blockl;
+                    }
+                    if (exposed_faces & (1 << 5)) {
+                        uint8_t skyl = world_get_skylight(world, world_x, world_y, world_z - 1);
+                        uint8_t blockl = world_get_blocklight(world, world_x, world_y, world_z - 1);
+                        temp_blocks[temp_count].face_light[5] = (skyl > blockl) ? skyl : blockl;
+                    }
+
+                    temp_count++;
+                }
+            }
+        }
+    }
+
+    // Now merge the updated region with existing visible blocks (Issue #2)
+    // Remove old entries in the affected region and add the new ones
+    pthread_mutex_lock(&chunk->mesh_swap_mutex);
+
+    int current_active = __atomic_load_n(&chunk->active_mesh, __ATOMIC_ACQUIRE);
+    int inactive_buffer = 1 - current_active;
+
+    // Copy current active buffer to inactive (or start fresh if needed)
+    CachedVisibleBlock* merged_blocks = NULL;
+    int merged_count = 0;
+    int merged_capacity = 1024;
+
+    // If we have an old inactive buffer, start from its size
+    if (chunk->visible_blocks[inactive_buffer] != NULL) {
+        merged_capacity = chunk->visible_capacity[inactive_buffer];
+        merged_blocks = (CachedVisibleBlock*)malloc(sizeof(CachedVisibleBlock) * merged_capacity);
+    } else {
+        merged_blocks = (CachedVisibleBlock*)malloc(sizeof(CachedVisibleBlock) * merged_capacity);
+    }
+
+    // Copy existing visible blocks that are NOT in the affected region
+    if (chunk->visible_blocks[current_active] != NULL) {
+        for (int i = 0; i < chunk->visible_count[current_active]; i++) {
+            CachedVisibleBlock* old_block = &chunk->visible_blocks[current_active][i];
+
+            // Skip if block is in the affected region (we'll replace it from temp_blocks)
+            if (old_block->x >= min_x && old_block->x <= max_x &&
+                old_block->y >= min_y && old_block->y <= max_y &&
+                old_block->z >= min_z && old_block->z <= max_z) {
+                continue;  // Skip this old entry; it will be replaced by updated region
+            }
+
+            // Grow merged array if needed
+            if (merged_count >= merged_capacity) {
+                merged_capacity *= 2;
+                merged_blocks = (CachedVisibleBlock*)realloc(merged_blocks,
+                                                             sizeof(CachedVisibleBlock) * merged_capacity);
+            }
+
+            // Copy old block
+            merged_blocks[merged_count++] = *old_block;
+        }
+    }
+
+    // Add new blocks from the updated region
+    for (int i = 0; i < temp_count; i++) {
+        if (merged_count >= merged_capacity) {
+            merged_capacity *= 2;
+            merged_blocks = (CachedVisibleBlock*)realloc(merged_blocks,
+                                                         sizeof(CachedVisibleBlock) * merged_capacity);
+        }
+        merged_blocks[merged_count++] = temp_blocks[i];
+    }
+
+    free(temp_blocks);
+
+    // Free old data in the inactive buffer if it exists
+    if (chunk->visible_blocks[inactive_buffer] != NULL) {
+        free(chunk->visible_blocks[inactive_buffer]);
+    }
+
+    // Store merged mesh into inactive buffer
+    chunk->visible_blocks[inactive_buffer] = merged_blocks;
+    chunk->visible_count[inactive_buffer] = merged_count;
+    chunk->visible_capacity[inactive_buffer] = merged_capacity;
+
+    // Atomically swap active buffer
+    __atomic_store_n(&chunk->active_mesh, inactive_buffer, __ATOMIC_RELEASE);
+
+    pthread_mutex_unlock(&chunk->mesh_swap_mutex);
 }

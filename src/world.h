@@ -123,14 +123,32 @@ typedef struct {
     MergedMesh* merged_mesh[2];  // Double-buffered merged quads (0 or 1)
     volatile int active_merged_mesh;  // Which merged mesh buffer is active
     pthread_mutex_t mesh_swap_mutex;  // Protects mesh swap to ensure atomicity
+
+    // Issue #3: Track dirty region for incremental lighting
+    volatile int dirty_region_x;  // Local X of changed block (for incremental lighting)
+    volatile int dirty_region_y;  // Local Y of changed block
+    volatile int dirty_region_z;  // Local Z of changed block
+    volatile bool has_dirty_region;  // Whether there's a specific dirty region to update
+
     pthread_mutex_t mutex;  // Protects this chunk during worker processing
 } Chunk;
 
-// Chunk cache - stores loaded chunks
+// Hash table entry for chunk lookup (Issue #1: spatial hash for chunk lookup)
+typedef struct {
+    int32_t chunk_x;
+    int32_t chunk_y;
+    int32_t chunk_z;
+    Chunk* chunk;
+} ChunkHashEntry;
+
+// Chunk cache - stores loaded chunks with spatial hash for O(1) lookup
 typedef struct {
     Chunk* chunks;
     int chunk_count;
     int chunk_capacity;
+    // Hash table for O(1) chunk lookup by coordinates (Issue #1)
+    ChunkHashEntry* hash_table;
+    int hash_capacity;
 } ChunkCache;
 
 // Worker job types: _LIGHTING_AND_MESH or _SAVE_CHUNK
@@ -211,10 +229,13 @@ BlockType world_chunk_get_block(Chunk* chunk, int x, int y, int z);
 void world_generate_chunk(Chunk* chunk, uint64_t seed);
 Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
 void chunk_cache_visible_blocks(Chunk* chunk, World* world);  // Pre-compute list of visible blocks
+void chunk_update_visible_blocks_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int radius);  // (Issue #2) Update only affected region
 void chunk_free_visible_blocks(Chunk* chunk);  // Clean up visible blocks cache
 void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer);  // Calculate proper skylight levels for chunk
+void calculate_chunk_skylight_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int target_buffer);  // (Issue #3) Incremental skylight
 uint8_t world_get_skylight(World* world, int x, int y, int z);  // Get skylight level at block position
 void calculate_chunk_blocklight(Chunk* chunk, World* world, int target_buffer);  // Calculate blocklight from emitting blocks
+void calculate_chunk_blocklight_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int target_buffer);  // (Issue #3) Incremental blocklight
 uint8_t world_get_blocklight(World* world, int x, int y, int z);  // Get blocklight level at block position
 void worker_queue_chunk(World* world, Chunk* chunk);  // Add chunk to worker queue for lighting/meshing
 void worker_queue_chunk_save(World* world, Chunk* chunk);  // Add chunk to worker queue for saving
