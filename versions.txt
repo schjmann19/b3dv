@@ -1,3 +1,9 @@
+0.0.21-beta:
+    - removed clouds and with them, the bug where you could see blocks backfaces through the terrain
+    + fixed stutter on block updates
+    * lighting is still bugged
+    + `-`, `+`, and `*` notation for these here changelogs
+
 0.0.20-beta:
     added console, player nicknames, fixed world save files, revamped clouds (+ compass)
     +bug: weird bug where you can see caves and blocks backfaces through some blocks, sometimes
