@@ -110,6 +110,13 @@ typedef struct {
     bool generated;   // Whether terrain has been generated
     bool modified;    // Whether this chunk has unsaved changes
     bool needs_relighting;  // Whether lighting needs recalculation (on block change or load)
+    bool lighting_dirty;    // Whether only a sub-region of this chunk needs relighting
+    int dirty_min_x;        // Inclusive lighting dirty region bounds
+    int dirty_max_x;
+    int dirty_min_y;
+    int dirty_max_y;
+    int dirty_min_z;
+    int dirty_max_z;
     bool meshed;      // Whether visible blocks have been cached
     bool pending_save; // Whether this chunk is queued to be saved asynchronously
     bool pending_unload; // Whether this chunk is scheduled for unload after save completes
@@ -123,13 +130,6 @@ typedef struct {
     MergedMesh* merged_mesh[2];  // Double-buffered merged quads (0 or 1)
     volatile int active_merged_mesh;  // Which merged mesh buffer is active
     pthread_mutex_t mesh_swap_mutex;  // Protects mesh swap to ensure atomicity
-
-    // Issue #3: Track dirty region for incremental lighting
-    volatile int dirty_region_x;  // Local X of changed block (for incremental lighting)
-    volatile int dirty_region_y;  // Local Y of changed block
-    volatile int dirty_region_z;  // Local Z of changed block
-    volatile bool has_dirty_region;  // Whether there's a specific dirty region to update
-
     pthread_mutex_t mutex;  // Protects this chunk during worker processing
 } Chunk;
 
@@ -231,11 +231,9 @@ Chunk* world_load_or_create_chunk(World* world, int32_t chunk_x, int32_t chunk_y
 void chunk_cache_visible_blocks(Chunk* chunk, World* world);  // Pre-compute list of visible blocks
 void chunk_update_visible_blocks_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int radius);  // (Issue #2) Update only affected region
 void chunk_free_visible_blocks(Chunk* chunk);  // Clean up visible blocks cache
-void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer);  // Calculate proper skylight levels for chunk
-void calculate_chunk_skylight_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int target_buffer);  // (Issue #3) Incremental skylight
+void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer, bool dirty_region, int min_x, int max_x, int min_z, int max_z);  // Calculate proper skylight levels for chunk
 uint8_t world_get_skylight(World* world, int x, int y, int z);  // Get skylight level at block position
 void calculate_chunk_blocklight(Chunk* chunk, World* world, int target_buffer);  // Calculate blocklight from emitting blocks
-void calculate_chunk_blocklight_region(Chunk* chunk, World* world, int local_x, int local_y, int local_z, int target_buffer);  // (Issue #3) Incremental blocklight
 uint8_t world_get_blocklight(World* world, int x, int y, int z);  // Get blocklight level at block position
 void worker_queue_chunk(World* world, Chunk* chunk);  // Add chunk to worker queue for lighting/meshing
 void worker_queue_chunk_save(World* world, Chunk* chunk);  // Add chunk to worker queue for saving

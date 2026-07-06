@@ -129,11 +129,28 @@ static void* worker_thread_main(void* arg)
         // The atomic swap at the end of chunk_cache_visible_blocks ensures thread safety.
 
         // Save relighting requirement and release mutex BEFORE expensive calculations
-        bool needs_relighting = chunk->needs_relighting && chunk->generated && chunk->loaded;
+        bool lighting_dirty = chunk->lighting_dirty;
+        int dirty_min_x = chunk->dirty_min_x;
+        int dirty_max_x = chunk->dirty_max_x;
+        int dirty_min_y = chunk->dirty_min_y;
+        int dirty_max_y = chunk->dirty_max_y;
+        int dirty_min_z = chunk->dirty_min_z;
+        int dirty_max_z = chunk->dirty_max_z;
+
+        bool needs_relighting = (chunk->needs_relighting || lighting_dirty) && chunk->generated && chunk->loaded;
         bool needs_meshing = !chunk->meshed && chunk->generated && chunk->loaded;
 
         if (needs_relighting) {
             chunk->needs_relighting = false;  // Mark as being processed
+        }
+        if (lighting_dirty) {
+            chunk->lighting_dirty = false;  // Will be handled by this job
+            chunk->dirty_min_x = CHUNK_WIDTH;
+            chunk->dirty_max_x = -1;
+            chunk->dirty_min_y = CHUNK_HEIGHT;
+            chunk->dirty_max_y = -1;
+            chunk->dirty_min_z = CHUNK_DEPTH;
+            chunk->dirty_max_z = -1;
         }
 
         pthread_mutex_unlock(&chunk->mutex);
@@ -148,17 +165,12 @@ static void* worker_thread_main(void* arg)
             int active = __atomic_load_n(&chunk->active_light_buffer, __ATOMIC_ACQUIRE);
             int inactive = 1 - active;
 
-            // Issue #3: Use incremental lighting if we have a dirty region
-            if (chunk->has_dirty_region) {
-                // Incremental recalculation - much faster for single block changes
-                calculate_chunk_skylight_region(chunk, world, chunk->dirty_region_x, chunk->dirty_region_y, chunk->dirty_region_z, inactive);
-                calculate_chunk_blocklight_region(chunk, world, chunk->dirty_region_x, chunk->dirty_region_y, chunk->dirty_region_z, inactive);
-                chunk->has_dirty_region = false;  // Clear dirty region after processing
-            } else {
-                // Full-chunk recalculation (for initial chunk generation, chunk loading, etc)
-                calculate_chunk_skylight(chunk, world, inactive);
-                calculate_chunk_blocklight(chunk, world, inactive);
-            }
+            calculate_chunk_skylight(chunk, world, inactive, lighting_dirty,
+                                    lighting_dirty ? dirty_min_x : 0,
+                                    lighting_dirty ? dirty_max_x : CHUNK_WIDTH - 1,
+                                    lighting_dirty ? dirty_min_z : 0,
+                                    lighting_dirty ? dirty_max_z : CHUNK_DEPTH - 1);
+            calculate_chunk_blocklight(chunk, world, inactive);
 
             // Swap the active buffer once (both skylight+blocklight now updated)
             pthread_mutex_lock(&chunk->light_swap_mutex);
