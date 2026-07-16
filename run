@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-./b3dv run
+./build.sh && ./b3dv run

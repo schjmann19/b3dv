@@ -68,7 +68,7 @@
             </p>
             <p>
                 <strong><em>Get/update:</em></strong><br>
-                You can always `git clone` the repo and build it, but if you want an <i>"actual"</i> release, head over to <a href="https://texturawasd.ddns.net/files/b3dv/releases/" target="_blank">https://texturawasd.ddns.net/files/b3dv/releases/</a><br>
+                You can always `git clone` the repo and build it, but if you want an <i>"actual"</i> release, head over to <a href="https://b3dv.texturawasd.net/releases/" target="_blank">https://b3dv.texturawasd.net/releases/</a><br>
                 To be honest, I may forget to build the windows executable sometimes, but it's guaranteed to be there in the release .zip.
             </p>
         </section> <!-- general information -->
@@ -163,7 +163,8 @@
             <summary>
                 While a quick & dirty change log can be found in the repo (./versions.txt); here are the changes listed plainly [expand to see]:<br>
             </summary>
-                Latest is 0.0.20-beta;<br>
+                Latest is 0.0.21-beta;<br>
+                0.0.21-beta: removed clouds, fixed rendering bugs,
                 0.0.20-beta: added console, player nicknames, fixed world save files, revamped clouds
                 0.0.18-beta: added inventory and /give command (no explanation needed)<br>
                 0.0.17-beta: use proper semantic versioning; drop windows support (too annoying.)<br>
@@ -233,7 +234,7 @@
         <section> <!-- Build & Dependencies -->
             <h2>Build system:</h2>
             <p>
-                It's just a makefile. run `make` and that's it. (linux)<br>
+                Uses Zig build system. `zig build` or the wrapper script (linux)<br>
                 You need raylib. And clang.<br>
                 If you're on windows: <s>why?</s> go on a linux machine (or use <a href="https://learn.microsoft.com/windows/wsl/install" target="_blank">WSL2</a>) and use the "windows" make target. (Just run `make windows`)
             </p>

@@ -15,6 +15,7 @@
 #include "menu.h"
 //#include "clouds.h"
 #include "console.h"
+#include "aux.h"
 
 #if defined(PLATFORM_DESKTOP)
 #define SDF_GLSL_VER 330
@@ -23,7 +24,6 @@
 #endif
 
 static Shader sdf_shader = {0};
-static bool sdf_font_is_sdf = false;
 
 // graphics and player constants
 #define WINDOW_WIDTH 1200
@@ -33,144 +33,12 @@ static bool sdf_font_is_sdf = false;
 #define FOG_START 30.0f
 #define CULLING_FOV 110.0f
 
-
-// Helper function to load a specific font variant
-static Font load_font_variant(const char* font_family, const char* font_variant)
-{
-    char font_path[512];
-    snprintf(font_path, sizeof(font_path), "./assets/fonts/%s/ttf/%s", font_family, font_variant);
-
-    // Build codepoint array with all ASCII and common extended characters
-    int codepoints[1024] = {0};
-    int codepoint_count = 0;
-
-    // Full ASCII range (0-127)
-    for (int i = 0; i < 128; i++) {
-        codepoints[codepoint_count++] = i;
-    }
-    // Latin-1 Supplement (128-255)
-    for (int i = 128; i < 256; i++) {
-        codepoints[codepoint_count++] = i;
-    }
-    // Latin Extended-A (256-383)
-    for (int i = 256; i < 384; i++) {
-        codepoints[codepoint_count++] = i;
-    }
-    // Cyrillic block (0x0400-0x04FF)
-    for (int i = 0x0400; i <= 0x04FF && codepoint_count < 1024; i++) {
-        codepoints[codepoint_count++] = i;
-    }
-
-    // Load font at a large base_size to generate high-quality glyphs
-    // Now that HIGHDPI is disabled, we can use a moderate base_size for smooth scaling.
-    int base_size = 256;
-    Font font = LoadFontEx(font_path, base_size, codepoints, codepoint_count);
-    if (font.glyphCount > 0) {
-        // Use bilinear filtering for smooth downsampling
-        SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
-        GenTextureMipmaps(&font.texture);
-        sdf_font_is_sdf = false;
-        TraceLog(LOG_INFO, "Loaded high-quality font %s size=%d glyphs=%d (bilinear + mipmaps)", font_path, base_size, font.glyphCount);
-        return font;
-    }
-
-    // Fallback to default if font not found
-    sdf_font_is_sdf = false;
-    TraceLog(LOG_WARNING, "Failed to load font %s, using default font", font_path);
-    return GetFontDefault();
-}
-
-// Helper function to load a font by family (uses first variant found)
-static Font load_font_by_name(const char* font_name)
-{
-    char ttf_dir[512];
-    snprintf(ttf_dir, sizeof(ttf_dir), "./assets/fonts/%s/ttf", font_name);
-
-    // Open the ttf directory and find the first .ttf file
-    DIR* dir = opendir(ttf_dir);
-
-    if (dir) {
-        struct dirent* entry;
-        while ((entry = readdir(dir))) {
-            // Look for .ttf files
-            char* dot = strrchr(entry->d_name, '.');
-            if (dot && strcmp(dot, ".ttf") == 0) {
-                // Found a .ttf file, try to load it
-                closedir(dir);
-                return load_font_variant(font_name, entry->d_name);
-            }
-        }
-        closedir(dir);
-    }
-
-    // Fallback to default if no font found
-    return GetFontDefault();
-}
-
-// Wrapper that draws `font` - fonts rasterized at 256px with mipmaps for smooth scaling
-void DrawTextExCustom(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint)
-{
-    // High-quality rasterization with mipmaps produces crisp text at various sizes
-    DrawTextEx(font, text, position, fontSize, spacing, tint);
-}
-
-static const char* get_cardinal_direction(float heading_deg)
-{
-    if (heading_deg < 22.5f || heading_deg >= 337.5f) return "N";
-    if (heading_deg < 67.5f) return "NE";
-    if (heading_deg < 112.5f) return "E";
-    if (heading_deg < 157.5f) return "SE";
-    if (heading_deg < 202.5f) return "S";
-    if (heading_deg < 247.5f) return "SW";
-    if (heading_deg < 292.5f) return "W";
-    return "NW";
-}
-
-static void draw_compass_hud(Font font, float yaw_radians)
-{
-    float heading_deg = yaw_radians * (180.0f / 3.14159265f);
-    heading_deg = fmodf(heading_deg, 360.0f);
-    if (heading_deg < 0.0f) heading_deg += 360.0f;
-
-    const char* cardinal = get_cardinal_direction(heading_deg);
-    char heading_text[64];
-    snprintf(heading_text, sizeof(heading_text), "Heading: %.0f° %s", heading_deg, cardinal);
-
-    int screen_w = GetScreenWidth();
-    Vector2 text_size = MeasureTextEx(font, heading_text, 28, 1);
-    Vector2 text_pos = { (float)(screen_w - (int)text_size.x - 20), 20.0f };
-
-    DrawRectangle((int)text_pos.x - 10, (int)text_pos.y - 8, (int)text_size.x + 20, (int)text_size.y + 16, (Color){0, 0, 0, 150});
-    DrawTextExCustom(font, heading_text, text_pos, 28, 1, WHITE);
-}
-
 int b3dv_main(int argc, char **argv)
-{   
-    // if no args, print version and help
-    if (argc == 1) {
-        //puts("b3dv version 0.0.20-beta");
-        puts("Usage:");
-        puts("       b3dv [--version|-v] - version info");
-        puts("       b3dv run - launch game");
-        return 0;
-    }
+{
 
-    // version argument
-    if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
-            puts("b3dv version 0.0.20-beta");
-            puts("By Jimena Neumann; BSD-3-Clause License");
-            #ifdef DEBUG
-            puts("compiled on " __DATE__ " at " __TIME__);
-            #endif
-        return 0;
-    }
-
-    // run
-    if (argc > 1 && strcmp(argv[1], "run") == 0) {
-        // continue to launch game
-    } else {
-        fprintf(stderr, "Unknown argument: %s\n", argv[1]);
-        return 1;
+    do_args(argc, *&argv);
+    if (neutrino_detection) {
+        return wait_for_neutrino();
     }
 
     // Disable HIGHDPI to avoid fractional scaling issues with Hyprland's 1.2x compositor scaling
@@ -319,7 +187,7 @@ int b3dv_main(int argc, char **argv)
     float fov_half_vert_tan = 0.0f;
     float fov_half_horiz_tan = 0.0f;
 
-    B3DV_MAIN_LOOP 
+    B3DV_MAIN_LOOP
     while (!WindowShouldClose() && !should_quit)
     {
         float dt = GetFrameTime();
@@ -602,7 +470,7 @@ int b3dv_main(int argc, char **argv)
                             else if (strcmp(item_buf, "grass") == 0) bt = BLOCK_GRASS;
                             else if (strcmp(item_buf, "sand") == 0) bt = BLOCK_SAND;
                             else if (strcmp(item_buf, "wood") == 0) bt = BLOCK_WOOD;
-                            else if (strcmp(item_buf, "glowstone") == 0) bt = BLOCK_GLOWSTONE;                                                                                                      
+                            else if (strcmp(item_buf, "glowstone") == 0) bt = BLOCK_GLOWSTONE;
 
                             if (bt == BLOCK_AIR) {
                                 char msg[256];
@@ -746,11 +614,11 @@ int b3dv_main(int argc, char **argv)
         while (console_get_next_command(&console_cmd)) {
             // Process console commands (simplified - console can only run certain commands)
             //printf("[console] Executing: %s\n", console_cmd.raw_input);
-            
+
             // Determine target player - for now, always use current player
             // (In future, could support multiple players)
             Player* target_player = player;
-            
+
             // Process by command type
             switch (console_cmd.type) {
                 case CMD_QUIT:
@@ -777,23 +645,23 @@ int b3dv_main(int argc, char **argv)
                         }
                     }
                     break;
-                    
+
                 case CMD_GIVE:
                     if (target_player && console_cmd.args[0] != '\0') {
                         char item_buf[64] = {0};
                         int count = 1;
                         sscanf(console_cmd.args, "%63s %d", item_buf, &count);
-                        
+
                         BlockType block_type = BLOCK_AIR;
                         const char* type_str = NULL;
-                        
+
                         if (strcmp(item_buf, "stone") == 0) { block_type = BLOCK_STONE; type_str = "stone"; }
                         else if (strcmp(item_buf, "dirt") == 0) { block_type = BLOCK_DIRT; type_str = "dirt"; }
                         else if (strcmp(item_buf, "grass") == 0) { block_type = BLOCK_GRASS; type_str = "grass"; }
                         else if (strcmp(item_buf, "sand") == 0) { block_type = BLOCK_SAND; type_str = "sand"; }
                         else if (strcmp(item_buf, "wood") == 0) { block_type = BLOCK_WOOD; type_str = "wood"; }
                         else if (strcmp(item_buf, "glowstone") == 0) { block_type = BLOCK_GLOWSTONE; type_str = "glowstone"; }
-                        
+
                         if (type_str && inventory_give(target_player, block_type, count)) {
                             printf("[console] Gave %d of %s to %s\n", count, type_str, target_player->nickname);
                             char msg[256];
@@ -804,7 +672,7 @@ int b3dv_main(int argc, char **argv)
                         }
                     }
                     break;
-                    
+
                 case CMD_SELECT:
                     if (target_player && console_cmd.args[0] != '\0') {
                         const char* block_name = console_cmd.args;
@@ -817,7 +685,7 @@ int b3dv_main(int argc, char **argv)
                         else { printf("[console] Unknown block: %s\n", block_name); }
                     }
                     break;
-                    
+
                 case CMD_HELP:
                     printf("[console] Available commands:\n");
                     printf("  /tp <x> <y> <z>           - Teleport to coordinates\n");
@@ -826,11 +694,11 @@ int b3dv_main(int argc, char **argv)
                     printf("  /quit                      - Quit the game\n");
                     printf("  /help                      - Show this help message\n");
                     break;
-                    
+
                 case CMD_UNKNOWN:
                     printf("[console] Unknown command: %s\n", console_cmd.raw_input);
                     break;
-                    
+
                 default:
                     printf("[console] Command not yet supported from console\n");
                     break;
@@ -2044,10 +1912,10 @@ int b3dv_main(int argc, char **argv)
         world_free(world);
     }
     if (sdf_shader.id != 0) UnloadShader(sdf_shader);
-    
+
     // Shutdown console input system
     console_shutdown();
-    
+
     CloseWindow();
     return 0;
 }
