@@ -155,22 +155,36 @@ bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forwa
     return true;
 }
 
-static uint8_t get_effective_face_light(World *world, int x, int y, int z, int face) {
-    uint8_t skyl = world_get_skylight(world, x, y, z);
-    uint8_t blockl = world_get_blocklight(world, x, y, z);
+static uint8_t get_render_face_light(World *world, int block_x, int block_y, int block_z, int face) {
+    int adj_x = block_x;
+    int adj_y = block_y;
+    int adj_z = block_z;
 
     switch (face) {
-    case 2: // top face -> skylight from above
-        return skyl;
-    case 3: // bottom face -> blocklight only
-        return blockl;
-    default:
-        if (skyl > 0) {
-            uint8_t side_lighting = (skyl > 2) ? (uint8_t)(skyl - 2) : 1;
-            return (side_lighting > blockl) ? side_lighting : blockl;
-        }
-        return blockl;
+    case 0: adj_x++; break; // +X
+    case 1: adj_x--; break; // -X
+    case 2: adj_y++; break; // +Y
+    case 3: adj_y--; break; // -Y
+    case 4: adj_z++; break; // +Z
+    case 5: adj_z--; break; // -Z
     }
+
+    uint8_t skyl = world_get_skylight(world, adj_x, adj_y, adj_z);
+    uint8_t blockl = world_get_blocklight(world, adj_x, adj_y, adj_z);
+
+    if (face == 2 || face == 3) {
+        uint8_t combined = skyl > blockl ? skyl : blockl;
+        if (skyl > 0 && blockl > 0) {
+            combined = (uint8_t)((skyl + blockl) / 2u);
+        }
+        return combined;
+    }
+
+    if (skyl > 0) {
+        uint8_t side_lighting = (skyl > 2) ? (uint8_t)(skyl - 2) : 1;
+        return (side_lighting > blockl) ? side_lighting : blockl;
+    }
+    return blockl;
 }
 
 // draw only the visible faces of a cube (faces pointing toward camera and not occluded by neighbors)
@@ -225,25 +239,17 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
         0.8f   // -Z (back) - slightly darker
     };
 
-    // Use current lighting from active buffers at render time.
-    // This ensures lighting updates appear immediately once the active buffer is refreshed.
+    // Use the baked per-face light values directly. This avoids the expensive per-frame
+    // lookups that were recomputing light from the chunk buffers on every draw call.
     Color face_colors[6];
-    int adj_offsets[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
 
     for (int i = 0; i < 6; i++) {
         uint8_t current_light = 0;
         if (exposed_faces & (1 << i)) {
-            int neighbor_x = block_x + adj_offsets[i][0];
-            int neighbor_y = block_y + adj_offsets[i][1];
-            int neighbor_z = block_z + adj_offsets[i][2];
-            if (face_light && face_light[i] > 0) {
-                current_light = face_light[i];
-            } else {
-                current_light = get_effective_face_light(world, neighbor_x, neighbor_y, neighbor_z, i);
-            }
+            current_light = get_render_face_light(world, block_x, block_y, block_z, i);
         }
 
-        float face_brightness = face_shading[i] * (0.3f + (current_light / 15.0f) * 0.7f);
+        float face_brightness = face_shading[i] * (0.15f + (current_light / 15.0f) * 0.85f);
         face_colors[i].r = (unsigned char)(color.r * face_brightness);
         face_colors[i].g = (unsigned char)(color.g * face_brightness);
         face_colors[i].b = (unsigned char)(color.b * face_brightness);

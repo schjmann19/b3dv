@@ -2300,61 +2300,69 @@ typedef struct {
 } LightQueueEntry;
 
 static bool light_can_pass(BlockType type, bool skylight) {
+    (void)skylight;
     BlockProperties props = get_block_properties(type);
     if (type == BLOCK_AIR) {
         return true;
     }
-    return skylight ? (props.opacity < 15) : (props.opacity < 15);
+    return props.opacity < 15;
 }
 
-static void propagate_light_from_sources(Chunk *chunk, uint8_t (*light_buf)[CHUNK_DEPTH][CHUNK_WIDTH], bool skylight) {
+static void enqueue_light_entry(LightQueueEntry queue[LIGHT_QUEUE_SIZE], int *queue_tail, int x, int y, int z, uint8_t light) {
+    if (*queue_tail < LIGHT_QUEUE_SIZE) {
+        queue[*queue_tail].x = x;
+        queue[*queue_tail].y = y;
+        queue[*queue_tail].z = z;
+        queue[*queue_tail].light = light;
+        (*queue_tail)++;
+    }
+}
+
+static void propagate_light_from_sources(Chunk *chunk, World *world, uint8_t (*light_buf)[CHUNK_DEPTH][CHUNK_WIDTH], bool skylight) {
     static LightQueueEntry queue[LIGHT_QUEUE_SIZE];
     int queue_head = 0;
     int queue_tail = 0;
 
-    for (int y = 0; y < CHUNK_HEIGHT; y++) {
-        for (int z = 0; z < CHUNK_DEPTH; z++) {
-            for (int x = 0; x < CHUNK_WIDTH; x++) {
-                BlockType block = chunk->blocks[y][z][x].type;
-                if (block == BLOCK_AIR) {
-                    continue;
-                }
+    if (!skylight) {
+        for (int y = 0; y < CHUNK_HEIGHT; y++) {
+            for (int z = 0; z < CHUNK_DEPTH; z++) {
+                for (int x = 0; x < CHUNK_WIDTH; x++) {
+                    BlockType block = chunk->blocks[y][z][x].type;
+                    if (block == BLOCK_AIR) {
+                        continue;
+                    }
 
-                BlockProperties props = get_block_properties(block);
-                if (props.emission > 0 && !skylight) {
-                    light_buf[y][z][x] = props.emission;
-                    if (queue_tail < LIGHT_QUEUE_SIZE) {
-                        queue[queue_tail].x = x;
-                        queue[queue_tail].y = y;
-                        queue[queue_tail].z = z;
-                        queue[queue_tail].light = props.emission;
-                        queue_tail++;
+                    BlockProperties props = get_block_properties(block);
+                    if (props.emission > 0) {
+                        light_buf[y][z][x] = props.emission;
+                        enqueue_light_entry(queue, &queue_tail, x, y, z, props.emission);
                     }
                 }
             }
         }
-    }
-
-    if (skylight) {
+    } else {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
-                for (int y = CHUNK_HEIGHT - 1; y >= 0; y--) {
-                    BlockType block = chunk->blocks[y][z][x].type;
-                    if (block == BLOCK_AIR) {
-                        int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
-                        if (world_y >= WORLD_Y_MAX - 1) {
-                            light_buf[y][z][x] = 15;
-                            if (queue_tail < LIGHT_QUEUE_SIZE) {
-                                queue[queue_tail].x = x;
-                                queue[queue_tail].y = y;
-                                queue[queue_tail].z = z;
-                                queue[queue_tail].light = 15;
-                                queue_tail++;
-                            }
-                        }
-                        break;
+                int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+                int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+                uint8_t current_light = 15;
+
+                for (int world_y = WORLD_Y_MAX; world_y >= WORLD_Y_MIN; world_y--) {
+                    int local_y = world_y - (chunk->chunk_y * CHUNK_HEIGHT);
+                    if (local_y < 0 || local_y >= CHUNK_HEIGHT) {
+                        continue;
                     }
-                    if (get_block_properties(block).opacity >= 15) {
+
+                    BlockType block = world_get_block_or_solid(world, world_x, world_y, world_z);
+                    if (block == BLOCK_AIR) {
+                        if (current_light > light_buf[local_y][z][x]) {
+                            light_buf[local_y][z][x] = current_light;
+                        }
+                        if (current_light > 1) {
+                            current_light--;
+                        }
+                    } else {
+                        current_light = 0;
                         break;
                     }
                 }
@@ -2374,8 +2382,8 @@ static void propagate_light_from_sources(Chunk *chunk, uint8_t (*light_buf)[CHUN
         }
 
         uint8_t new_light = current_light - 1;
-        int neighbors[6][3] = {
-            {x + 1, y, z}, {x - 1, y, z}, {x, y + 1, z}, {x, y - 1, z}, {x, y, z + 1}, {x, y, z - 1}};
+
+        int neighbors[6][3] = {{x + 1, y, z}, {x - 1, y, z}, {x, y + 1, z}, {x, y - 1, z}, {x, y, z + 1}, {x, y, z - 1}};
 
         for (int i = 0; i < 6; i++) {
             int nx = neighbors[i][0];
@@ -2389,14 +2397,22 @@ static void propagate_light_from_sources(Chunk *chunk, uint8_t (*light_buf)[CHUN
             if (!light_can_pass(neighbor_block, skylight)) {
                 continue;
             }
-            if (new_light > light_buf[ny][nz][nx]) {
-                light_buf[ny][nz][nx] = new_light;
-                if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
-                    queue[queue_tail].x = nx;
-                    queue[queue_tail].y = ny;
-                    queue[queue_tail].z = nz;
-                    queue[queue_tail].light = new_light;
-                    queue_tail++;
+
+            if (skylight) {
+                if (ny == y + 1 || ny == y - 1) {
+                    if (new_light > light_buf[ny][nz][nx]) {
+                        light_buf[ny][nz][nx] = new_light;
+                        if (new_light > 1) {
+                            enqueue_light_entry(queue, &queue_tail, nx, ny, nz, new_light);
+                        }
+                    }
+                }
+            } else {
+                if (new_light > light_buf[ny][nz][nx]) {
+                    light_buf[ny][nz][nx] = new_light;
+                    if (new_light > 1) {
+                        enqueue_light_entry(queue, &queue_tail, nx, ny, nz, new_light);
+                    }
                 }
             }
         }
@@ -2422,7 +2438,7 @@ void calculate_chunk_blocklight(Chunk *chunk, World *world, int target_buffer) {
         }
     }
 
-    propagate_light_from_sources(chunk, blocklight_buf, false);
+    propagate_light_from_sources(chunk, world, blocklight_buf, false);
 }
 
 // Calculate skylight levels for a chunk using BFS from the sky downward.
@@ -2466,7 +2482,7 @@ void calculate_chunk_skylight(Chunk *chunk, World *world, int target_buffer, boo
         }
     }
 
-    propagate_light_from_sources(chunk, skylight_buf, true);
+    propagate_light_from_sources(chunk, world, skylight_buf, true);
 }
 
 // GREEDY MESHING: Merge adjacent coplanar exposed faces into larger rectangles

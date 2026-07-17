@@ -259,10 +259,6 @@ static void game_server_apply_command(GameServer *srv,
     if (flight_enabled && *flight_enabled) {
         player->is_flying = true;
     }
-
-    if (show_chunk_borders) {
-        *show_chunk_borders = true;
-    }
 }
 
 void game_server_init(GameServer *srv, World *world, Player *player) {

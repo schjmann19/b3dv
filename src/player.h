@@ -55,7 +55,6 @@ typedef struct Player {
 Player *player_create(float x, float y, float z);
 Player *player_create_with_uid(float x, float y, float z, uint32_t uid, const char *nickname);
 void player_free(Player *player);
-void player_move_input(Player *player, Vector3 forward, Vector3 right, bool flight_enabled);
 void player_update(Player *player, World *world, float dt, bool flight_enabled);
 bool world_check_collision_box(World *world, Vector3 center_pos, float width, float height, float depth);
 

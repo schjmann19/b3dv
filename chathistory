@@ -773,3 +773,9 @@ asd
 /setblock 1 1 1 stone
 /give
 /give glowstone 30
+/give glowstone 30
+/give glowstone 30
+/give player glowstone 30
+/fly enable
+/help
+/give player glowstone 30

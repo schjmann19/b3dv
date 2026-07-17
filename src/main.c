@@ -523,129 +523,29 @@ int b3dv_main(int argc, char **argv) {
         // Console system - check for commands from terminal
         ConsoleCommand console_cmd;
         while (console_get_next_command(&console_cmd)) {
-            // Process console commands (simplified - console can only run certain commands)
-            // printf("[console] Executing: %s\n", console_cmd.raw_input);
+            bool should_quit_cmd = false;
+            bool flight_enabled_cmd = flight_enabled;
+            bool show_chunk_borders_cmd = show_chunk_borders;
+            char command_msg[512] = {0};
+            World *world_after = world;
+            Player *player_after = player;
 
-            // Determine target player - for now, always use current player
-            // (In future, could support multiple players)
-            Player *target_player = player;
-
-            // Process by command type
-            switch (console_cmd.type) {
-            case CMD_QUIT:
-                printf("[console] Quitting...\n");
-                should_quit = true;
-                break;
-
-            case CMD_CHAT:
-                add_chat_message(console_cmd.args);
-                break;
-
-            case CMD_TP:
-                if (target_player) {
-                    float x, y, z;
-                    if (sscanf(console_cmd.args, "%f %f %f", &x, &y, &z) == 3) {
-                        target_player->position = (Vector3){x, y, z};
-                        target_player->velocity = (Vector3){0, 0, 0};
-                        printf("[console] Teleported %s to (%.1f, %.1f, %.1f)\n", target_player->nickname, x, y, z);
-                        char msg[256];
-                        snprintf(msg, sizeof(msg), "[console] Teleported to (%.1f, %.1f, %.1f)", x, y, z);
-                        add_chat_message(msg);
-                    } else {
-                        printf("[console] Usage: /tp <x> <y> <z>\n");
-                    }
+            if (game_server_submit_command(&game_server, player->uid, &console_cmd, console_cmd.raw_input,
+                                           &should_quit_cmd, &flight_enabled_cmd,
+                                           &show_chunk_borders_cmd, &world_after, &player_after,
+                                           command_msg, sizeof(command_msg))) {
+                if (command_msg[0] != '\0') {
+                    add_chat_message(command_msg);
                 }
-                break;
-
-            case CMD_GIVE:
-                if (target_player && console_cmd.args[0] != '\0') {
-                    char item_buf[64] = {0};
-                    int count = 1;
-                    sscanf(console_cmd.args, "%63s %d", item_buf, &count);
-
-                    BlockType block_type = BLOCK_AIR;
-                    const char *type_str = NULL;
-
-                    if (strcmp(item_buf, "stone") == 0) {
-                        block_type = BLOCK_STONE;
-                        type_str = "stone";
-                    } else if (strcmp(item_buf, "dirt") == 0) {
-                        block_type = BLOCK_DIRT;
-                        type_str = "dirt";
-                    } else if (strcmp(item_buf, "grass") == 0) {
-                        block_type = BLOCK_GRASS;
-                        type_str = "grass";
-                    } else if (strcmp(item_buf, "sand") == 0) {
-                        block_type = BLOCK_SAND;
-                        type_str = "sand";
-                    } else if (strcmp(item_buf, "wood") == 0) {
-                        block_type = BLOCK_WOOD;
-                        type_str = "wood";
-                    } else if (strcmp(item_buf, "glowstone") == 0) {
-                        block_type = BLOCK_GLOWSTONE;
-                        type_str = "glowstone";
-                    }
-
-                    if (type_str && inventory_give(target_player, block_type, count)) {
-                        printf("[console] Gave %d of %s to %s\n", count, type_str, target_player->nickname);
-                        char msg[256];
-                        snprintf(msg, sizeof(msg), "[console] Gave %d of %s", count, type_str);
-                        add_chat_message(msg);
-                    } else {
-                        printf("[console] Failed to give item: %s\n", item_buf);
-                    }
+                if (should_quit_cmd) {
+                    should_quit = true;
                 }
-                break;
-
-            case CMD_SELECT:
-                if (target_player && console_cmd.args[0] != '\0') {
-                    const char *block_name = console_cmd.args;
-                    if (strcmp(block_name, "stone") == 0) {
-                        target_player->selected_block = BLOCK_STONE;
-                        printf("[console] Selected stone\n");
-                        add_chat_message("[console] Selected stone");
-                    } else if (strcmp(block_name, "dirt") == 0) {
-                        target_player->selected_block = BLOCK_DIRT;
-                        printf("[console] Selected dirt\n");
-                        add_chat_message("[console] Selected dirt");
-                    } else if (strcmp(block_name, "grass") == 0) {
-                        target_player->selected_block = BLOCK_GRASS;
-                        printf("[console] Selected grass\n");
-                        add_chat_message("[console] Selected grass");
-                    } else if (strcmp(block_name, "sand") == 0) {
-                        target_player->selected_block = BLOCK_SAND;
-                        printf("[console] Selected sand\n");
-                        add_chat_message("[console] Selected sand");
-                    } else if (strcmp(block_name, "wood") == 0) {
-                        target_player->selected_block = BLOCK_WOOD;
-                        printf("[console] Selected wood\n");
-                        add_chat_message("[console] Selected wood");
-                    } else if (strcmp(block_name, "glowstone") == 0) {
-                        target_player->selected_block = BLOCK_GLOWSTONE;
-                        printf("[console] Selected glowstone\n");
-                        add_chat_message("[console] Selected glowstone");
-                    } else {
-                        printf("[console] Unknown block: %s\n", block_name);
-                    }
-                }
-                break;
-
-            case CMD_HELP:
-                printf("[console] Available commands:\n");
-                printf("  /tp <x> <y> <z>           - Teleport to coordinates\n");
-                printf("  /give <block> [count]      - Give items (stone, dirt, grass, sand, wood, glowstone)\n");
-                printf("  /select <block>            - Select block type\n");
-                printf("  /quit                      - Quit the game\n");
-                printf("  /help                      - Show this help message\n");
-                break;
-
-            case CMD_UNKNOWN:
-                printf("[console] Unknown command: %s\n", console_cmd.raw_input);
-                break;
-
-            default:
-                printf("[console] Command not yet supported from console\n");
-                break;
+                world = world_after;
+                player = player_after;
+                flight_enabled = flight_enabled_cmd;
+                show_chunk_borders = show_chunk_borders_cmd;
+            } else {
+                add_chat_message("[console] Failed to process command");
             }
         }
 
