@@ -896,8 +896,9 @@ BlockType world_get_block(World* world, int x, int y, int z)
     return result;
 }
 
-// Get block, treating unloaded chunks as STONE (for lighting calculations)
-// This prevents false positives where light penetrates through unloaded chunks
+// Get block, treating unloaded chunks as air for skylight calculations.
+// This preserves daylight for the generated world instead of accidentally shadowing
+// everything when chunks above the player are not loaded yet.
 BlockType world_get_block_or_solid(World* world, int x, int y, int z)
 {
     // Calculate chunk coordinates
@@ -915,7 +916,7 @@ BlockType world_get_block_or_solid(World* world, int x, int y, int z)
     Chunk* chunk = world_get_chunk(world, chunk_x, chunk_y, chunk_z);
     if (!chunk || !chunk->loaded) {
         pthread_mutex_unlock(&world->cache_mutex);
-        return BLOCK_STONE;  // Unloaded chunks are treated as solid (prevents false light propagation)
+        return BLOCK_AIR;  // Unloaded chunks behave like empty air for sunlight.
     }
 
     BlockType result = world_chunk_get_block(chunk, local_x, local_y, local_z);
@@ -2172,37 +2173,28 @@ typedef struct {
     uint8_t light;
 } LightQueueEntry;
 
-// Calculate blocklight levels for a chunk using flood-fill from light-emitting blocks
-// Uses BFS propagation like Minecraft: light spreads from emitters (glowstone)
-// Note: uses double-buffering so render thread never reads partially-updated lighting data.
-void calculate_chunk_blocklight(Chunk* chunk, World* world, int target_buffer)
+static bool light_can_pass(BlockType type, bool skylight)
 {
-    (void)world;
-    if (!chunk) return;
+    BlockProperties props = get_block_properties(type);
+    if (type == BLOCK_AIR) return true;
+    return skylight ? (props.opacity < 15) : (props.opacity < 15);
+}
 
-    uint8_t (*blocklight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->blocklight[target_buffer];
-
-    // Initialize blocklight to 0 in the target buffer
-    for (int y = 0; y < CHUNK_HEIGHT; y++) {
-        for (int z = 0; z < CHUNK_DEPTH; z++) {
-            for (int x = 0; x < CHUNK_WIDTH; x++) {
-                blocklight_buf[y][z][x] = 0;
-            }
-        }
-    }
-
-    // BFS queue for light propagation
+static void propagate_light_from_sources(Chunk* chunk, uint8_t (*light_buf)[CHUNK_DEPTH][CHUNK_WIDTH], bool skylight)
+{
     static LightQueueEntry queue[LIGHT_QUEUE_SIZE];
-    int queue_head = 0, queue_tail = 0;
+    int queue_head = 0;
+    int queue_tail = 0;
 
-    // Find all light-emitting blocks and add to queue
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
-                BlockProperties props = get_block_properties(chunk->blocks[y][z][x].type);
-                if (props.emission > 0) {
-                    blocklight_buf[y][z][x] = props.emission;
-                    // Add to queue
+                BlockType block = chunk->blocks[y][z][x].type;
+                if (block == BLOCK_AIR) continue;
+
+                BlockProperties props = get_block_properties(block);
+                if (props.emission > 0 && !skylight) {
+                    light_buf[y][z][x] = props.emission;
                     if (queue_tail < LIGHT_QUEUE_SIZE) {
                         queue[queue_tail].x = x;
                         queue[queue_tail].y = y;
@@ -2215,63 +2207,99 @@ void calculate_chunk_blocklight(Chunk* chunk, World* world, int target_buffer)
         }
     }
 
-    // BFS flood-fill: propagate light to neighbors
-    while (queue_head < queue_tail) {
-        LightQueueEntry entry = queue[queue_head++];
-        int x = entry.x, y = entry.y, z = entry.z;
-        uint8_t current_light = entry.light;
-
-        // Skip if light would be absorbed to 0
-        if (current_light <= 1) continue;
-
-        // Propagate to 6 neighbors (±X, ±Y, ±Z)
-        int neighbors[6][3] = {
-            {x+1, y, z}, {x-1, y, z},  // ±X
-            {x, y+1, z}, {x, y-1, z},  // ±Y
-            {x, y, z+1}, {x, y, z-1}   // ±Z
-        };
-
-        for (int i = 0; i < 6; i++) {
-            int nx = neighbors[i][0];
-            int ny = neighbors[i][1];
-            int nz = neighbors[i][2];
-
-            // Bounds check
-            if (nx < 0 || nx >= CHUNK_WIDTH || ny < 0 || ny >= CHUNK_HEIGHT || nz < 0 || nz >= CHUNK_DEPTH) {
-                continue;  // Cross-chunk lighting not handled in this pass
-            }
-
-            BlockProperties neighbor_props = get_block_properties(chunk->blocks[ny][nz][nx].type);
-            uint8_t new_light = current_light - 1;  // Light reduces by 1 for each block distance
-
-            // Check if we should update this neighbor
-            if (neighbor_props.opacity < 15) {  // Only propagate through non-opaque blocks
-                if (new_light > blocklight_buf[ny][nz][nx]) {
-                    blocklight_buf[ny][nz][nx] = new_light;
-                    // Add to queue if there's still light to propagate
-                    if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
-                        queue[queue_tail].x = nx;
-                        queue[queue_tail].y = ny;
-                        queue[queue_tail].z = nz;
-                        queue[queue_tail].light = new_light;
-                        queue_tail++;
+    if (skylight) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                for (int y = CHUNK_HEIGHT - 1; y >= 0; y--) {
+                    BlockType block = chunk->blocks[y][z][x].type;
+                    if (block == BLOCK_AIR) {
+                        int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
+                        if (world_y >= WORLD_Y_MAX - 1) {
+                            light_buf[y][z][x] = 15;
+                            if (queue_tail < LIGHT_QUEUE_SIZE) {
+                                queue[queue_tail].x = x;
+                                queue[queue_tail].y = y;
+                                queue[queue_tail].z = z;
+                                queue[queue_tail].light = 15;
+                                queue_tail++;
+                            }
+                        }
+                        break;
+                    }
+                    if (get_block_properties(block).opacity >= 15) {
+                        break;
                     }
                 }
             }
         }
     }
 
-    // Note: the caller (worker thread) swaps the active lighting buffer after
-    // both skylight + blocklight are computed to avoid intermediate states.
+    while (queue_head < queue_tail) {
+        LightQueueEntry entry = queue[queue_head++];
+        int x = entry.x;
+        int y = entry.y;
+        int z = entry.z;
+        uint8_t current_light = entry.light;
+
+        if (current_light <= 1) continue;
+
+        uint8_t new_light = current_light - 1;
+        int neighbors[6][3] = {
+            {x + 1, y, z}, {x - 1, y, z},
+            {x, y + 1, z}, {x, y - 1, z},
+            {x, y, z + 1}, {x, y, z - 1}
+        };
+
+        for (int i = 0; i < 6; i++) {
+            int nx = neighbors[i][0];
+            int ny = neighbors[i][1];
+            int nz = neighbors[i][2];
+            if (nx < 0 || nx >= CHUNK_WIDTH || ny < 0 || ny >= CHUNK_HEIGHT || nz < 0 || nz >= CHUNK_DEPTH) {
+                continue;
+            }
+
+            BlockType neighbor_block = chunk->blocks[ny][nz][nx].type;
+            if (!light_can_pass(neighbor_block, skylight)) {
+                continue;
+            }
+            if (new_light > light_buf[ny][nz][nx]) {
+                light_buf[ny][nz][nx] = new_light;
+                if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
+                    queue[queue_tail].x = nx;
+                    queue[queue_tail].y = ny;
+                    queue[queue_tail].z = nz;
+                    queue[queue_tail].light = new_light;
+                    queue_tail++;
+                }
+            }
+        }
+    }
 }
 
-// Calculate skylight levels for a chunk using BFS from the sky downward
-// Algorithm:
-// 1. Start from y=top of world, skylight = 15 (fully lit)
-// 2. Propagate downward through air blocks
-// 3. Opaque blocks block skylight completely
-// 4. Result: caves have 0 skylight UNLESS they have direct line to sky
+// Calculate blocklight levels for a chunk using flood-fill from light-emitting blocks
+// Uses BFS propagation like Minecraft: light spreads from emitters (glowstone)
 // Note: uses double-buffering so render thread never reads partially-updated lighting data.
+void calculate_chunk_blocklight(Chunk* chunk, World* world, int target_buffer)
+{
+    (void)world;
+    if (!chunk) return;
+
+    uint8_t (*blocklight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->blocklight[target_buffer];
+
+    for (int y = 0; y < CHUNK_HEIGHT; y++) {
+        for (int z = 0; z < CHUNK_DEPTH; z++) {
+            for (int x = 0; x < CHUNK_WIDTH; x++) {
+                blocklight_buf[y][z][x] = 0;
+            }
+        }
+    }
+
+    propagate_light_from_sources(chunk, blocklight_buf, false);
+}
+
+// Calculate skylight levels for a chunk using BFS from the sky downward.
+// This follows the same core idea as Minecraft: sunlight starts at the top of the world,
+// passes through air, and is blocked by opaque blocks.
 void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer, bool dirty_region, int min_x, int max_x, int min_z, int max_z)
 {
     if (!chunk) return;
@@ -2279,7 +2307,6 @@ void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer, boo
     uint8_t (*skylight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->skylight[target_buffer];
 
     if (!dirty_region) {
-        // Full chunk skylight recomputation
         for (int y = 0; y < CHUNK_HEIGHT; y++) {
             for (int z = 0; z < CHUNK_DEPTH; z++) {
                 for (int x = 0; x < CHUNK_WIDTH; x++) {
@@ -2288,7 +2315,6 @@ void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer, boo
             }
         }
     } else {
-        // Only clear dirty XZ columns across all Y if region is specified
         if (min_x < 0) min_x = 0;
         if (max_x >= CHUNK_WIDTH) max_x = CHUNK_WIDTH - 1;
         if (min_z < 0) min_z = 0;
@@ -2303,102 +2329,7 @@ void calculate_chunk_skylight(Chunk* chunk, World* world, int target_buffer, boo
         }
     }
 
-    // For each XZ column, trace from top downward
-    for (int z = min_z; z <= max_z; z++) {
-        for (int x = min_x; x <= max_x; x++) {
-            int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
-            int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
-
-            // Start from top of world, bounded by WORLD_Y_MAX (no light above world limits)
-            uint8_t current_light = 15;
-
-            // Scan downward from world top to world bottom - enforces hard Y limits
-            // This prevents unloaded chunks above from leaking light into caves
-            for (int world_y = WORLD_Y_MAX; world_y >= WORLD_Y_MIN; world_y--) {
-                BlockType block = world_get_block_or_solid(world, world_x, world_y, world_z);
-
-                if (block == BLOCK_AIR) {
-                    // Air transmits skylight fully
-                    if (world_y >= chunk->chunk_y * CHUNK_HEIGHT &&
-                        world_y < chunk->chunk_y * CHUNK_HEIGHT + CHUNK_HEIGHT) {
-                        int local_y = world_y - (chunk->chunk_y * CHUNK_HEIGHT);
-                        skylight_buf[local_y][z][x] = current_light;
-                    }
-                } else {
-                    // Solid block blocks skylight and all blocks below until exposed to air again
-                    current_light = 0;  // No more skylight below this block
-                }
-            }
-        }
-    }
-
-    // Second pass: propagate skylight horizontally into cavities from exposed air
-    // This uses BFS to spread light into caves that open to the sky
-    static LightQueueEntry queue[LIGHT_QUEUE_SIZE];
-    int queue_head = 0, queue_tail = 0;
-
-    // Find all air blocks with skylight and queue them
-    for (int y = 0; y < CHUNK_HEIGHT; y++) {
-        for (int z = 0; z < CHUNK_DEPTH; z++) {
-            for (int x = 0; x < CHUNK_WIDTH; x++) {
-                if (chunk->blocks[y][z][x].type == BLOCK_AIR && skylight_buf[y][z][x] > 0) {
-                    if (queue_tail < LIGHT_QUEUE_SIZE) {
-                        queue[queue_tail].x = x;
-                        queue[queue_tail].y = y;
-                        queue[queue_tail].z = z;
-                        queue[queue_tail].light = skylight_buf[y][z][x];
-                        queue_tail++;
-                    }
-                }
-            }
-        }
-    }
-
-    // BFS: propagate skylight horizontally to adjacent air blocks
-    while (queue_head < queue_tail) {
-        LightQueueEntry entry = queue[queue_head++];
-        int x = entry.x, y = entry.y, z = entry.z;
-        uint8_t current_light = entry.light;
-
-        // Skip if light would be absorbed to 0
-        if (current_light <= 1) continue;
-
-        uint8_t new_light = current_light - 1;
-
-        // Check 4 horizontal neighbors and 2 vertical (all 6 directions)
-        int neighbors[6][3] = {
-            {x+1, y, z}, {x-1, y, z},  // ±X
-            {x, y+1, z}, {x, y-1, z},  // ±Y
-            {x, y, z+1}, {x, y, z-1}   // ±Z
-        };
-
-        for (int i = 0; i < 6; i++) {
-            int nx = neighbors[i][0];
-            int ny = neighbors[i][1];
-            int nz = neighbors[i][2];
-
-            // Bounds check
-            if (nx < 0 || nx >= CHUNK_WIDTH || ny < 0 || ny >= CHUNK_HEIGHT || nz < 0 || nz >= CHUNK_DEPTH) {
-                continue;  // Cross-chunk not handled in this pass
-            }
-
-            if (chunk->blocks[ny][nz][nx].type == BLOCK_AIR) {
-                if (new_light > skylight_buf[ny][nz][nx]) {
-                    skylight_buf[ny][nz][nx] = new_light;
-                    if (queue_tail < LIGHT_QUEUE_SIZE && new_light > 1) {
-                        queue[queue_tail].x = nx;
-                        queue[queue_tail].y = ny;
-                        queue[queue_tail].z = nz;
-                        queue[queue_tail].light = new_light;
-                        queue_tail++;
-                    }
-                }
-            }
-        }
-    }
-
-    // Note: the caller (worker thread) swaps the active lighting buffer after
-    // both skylight + blocklight are computed to avoid intermediate states.
+    propagate_light_from_sources(chunk, skylight_buf, true);
 }
 
 // GREEDY MESHING: Merge adjacent coplanar exposed faces into larger rectangles
@@ -2579,6 +2510,26 @@ MergedMesh* chunk_greedy_mesh(Chunk* chunk, World* world)
     return mesh;
 }
 
+static uint8_t get_face_light_value(World* world, int world_x, int world_y, int world_z, int face)
+{
+    uint8_t skyl = world_get_skylight(world, world_x, world_y, world_z);
+    uint8_t blockl = world_get_blocklight(world, world_x, world_y, world_z);
+
+    switch (face) {
+        case 2: // +Y (top) -> skylight from above
+            return skyl;
+        case 3: // -Y (bottom) -> blocklight only
+            return blockl;
+        default: {
+            if (skyl > 0) {
+                uint8_t side_lighting = (skyl > 2) ? (uint8_t)(skyl - 2) : 1;
+                return (side_lighting > blockl) ? side_lighting : blockl;
+            }
+            return blockl;
+        }
+    }
+}
+
 // OPTIMIZED MESHING FOR VOXEL RENDERING
 // Pre-compute and cache all visible blocks in a chunk (blocks with exposed faces)
 // This avoids the per-frame triple-nested loop and provides massive performance improvement
@@ -2678,54 +2629,42 @@ void chunk_cache_visible_blocks(Chunk* chunk, World* world)
                         int nx = world_x + 1;
                         int ny = world_y;
                         int nz = world_z;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[0] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[0] = get_face_light_value(world, nx, ny, nz, 0);
                     }
                     // -X
                     if (exposed_faces & (1 << 1)) {
                         int nx = world_x - 1;
                         int ny = world_y;
                         int nz = world_z;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[1] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[1] = get_face_light_value(world, nx, ny, nz, 1);
                     }
                     // +Y
                     if (exposed_faces & (1 << 2)) {
                         int nx = world_x;
                         int ny = world_y + 1;
                         int nz = world_z;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[2] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[2] = get_face_light_value(world, nx, ny, nz, 2);
                     }
                     // -Y
                     if (exposed_faces & (1 << 3)) {
                         int nx = world_x;
                         int ny = world_y - 1;
                         int nz = world_z;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[3] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[3] = get_face_light_value(world, nx, ny, nz, 3);
                     }
                     // +Z
                     if (exposed_faces & (1 << 4)) {
                         int nx = world_x;
                         int ny = world_y;
                         int nz = world_z + 1;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[4] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[4] = get_face_light_value(world, nx, ny, nz, 4);
                     }
                     // -Z
                     if (exposed_faces & (1 << 5)) {
                         int nx = world_x;
                         int ny = world_y;
                         int nz = world_z - 1;
-                        uint8_t skyl = world_get_skylight(world, nx, ny, nz);
-                        uint8_t blockl = world_get_blocklight(world, nx, ny, nz);
-                        temp_blocks[temp_count].face_light[5] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[5] = get_face_light_value(world, nx, ny, nz, 5);
                     }
 
                     temp_count++;
@@ -2903,34 +2842,22 @@ void chunk_update_visible_blocks_region(Chunk* chunk, World* world, int local_x,
                     }
 
                     if (exposed_faces & (1 << 0)) {
-                        uint8_t skyl = world_get_skylight(world, world_x + 1, world_y, world_z);
-                        uint8_t blockl = world_get_blocklight(world, world_x + 1, world_y, world_z);
-                        temp_blocks[temp_count].face_light[0] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[0] = get_face_light_value(world, world_x + 1, world_y, world_z, 0);
                     }
                     if (exposed_faces & (1 << 1)) {
-                        uint8_t skyl = world_get_skylight(world, world_x - 1, world_y, world_z);
-                        uint8_t blockl = world_get_blocklight(world, world_x - 1, world_y, world_z);
-                        temp_blocks[temp_count].face_light[1] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[1] = get_face_light_value(world, world_x - 1, world_y, world_z, 1);
                     }
                     if (exposed_faces & (1 << 2)) {
-                        uint8_t skyl = world_get_skylight(world, world_x, world_y + 1, world_z);
-                        uint8_t blockl = world_get_blocklight(world, world_x, world_y + 1, world_z);
-                        temp_blocks[temp_count].face_light[2] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[2] = get_face_light_value(world, world_x, world_y + 1, world_z, 2);
                     }
                     if (exposed_faces & (1 << 3)) {
-                        uint8_t skyl = world_get_skylight(world, world_x, world_y - 1, world_z);
-                        uint8_t blockl = world_get_blocklight(world, world_x, world_y - 1, world_z);
-                        temp_blocks[temp_count].face_light[3] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[3] = get_face_light_value(world, world_x, world_y - 1, world_z, 3);
                     }
                     if (exposed_faces & (1 << 4)) {
-                        uint8_t skyl = world_get_skylight(world, world_x, world_y, world_z + 1);
-                        uint8_t blockl = world_get_blocklight(world, world_x, world_y, world_z + 1);
-                        temp_blocks[temp_count].face_light[4] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[4] = get_face_light_value(world, world_x, world_y, world_z + 1, 4);
                     }
                     if (exposed_faces & (1 << 5)) {
-                        uint8_t skyl = world_get_skylight(world, world_x, world_y, world_z - 1);
-                        uint8_t blockl = world_get_blocklight(world, world_x, world_y, world_z - 1);
-                        temp_blocks[temp_count].face_light[5] = (skyl > blockl) ? skyl : blockl;
+                        temp_blocks[temp_count].face_light[5] = get_face_light_value(world, world_x, world_y, world_z - 1, 5);
                     }
 
                     temp_count++;

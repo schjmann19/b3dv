@@ -766,3 +766,10 @@ asd
 /fill -120 80 75 -70 100 120 \
 asd
 asd
+/fly enable
+/fly enable
+/fly
+/setblock
+/setblock 1 1 1 stone
+/give
+/give glowstone 30

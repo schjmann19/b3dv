@@ -1,2 +1,8 @@
 #!/usr/bin/env bash
-./build.sh && ./b3dv run
+./build.sh 
+
+if [[ $1 == "mangohud" ]]; then
+    mangohud ./b3dv run
+else
+    ./b3dv run
+fi

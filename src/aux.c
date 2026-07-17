@@ -1,9 +1,9 @@
+#include <dirent.h>
+#include <math.h>
 #include <raylib.h>
 #include <stdio.h>
-#include <dirent.h>
-#include <string.h>
 #include <stdlib.h>
-#include <math.h>
+#include <string.h>
 
 #include "../common_utils/args.h"
 
@@ -13,10 +13,10 @@
 
 bool neutrino_detection = false;
 
-void do_args(int argc, char** argv) {
+void do_args(int argc, char **argv) {
     // if no args, print version and help
     if (argc == 1) {
-        //puts("b3dv version 0.0.20-beta");
+        // puts("b3dv version 0.0.22-beta");
         puts("Usage:");
         puts("       b3dv [--version, -v] - version info");
         puts("       b3dv run             - launch game");
@@ -25,16 +25,16 @@ void do_args(int argc, char** argv) {
 
     // version argument
     if (arg_is_present("version", argc, &*argv) || arg_is_present("v", argc, &*argv)) {
-        puts("b3dv version 0.0.20-beta");
+        puts("b3dv version 0.0.22-beta");
         puts("By Jimena Neumann; BSD-3-Clause License");
-        #ifdef DEBUG
+#ifdef DEBUG
         puts("compiled on " __DATE__ " at " __TIME__);
-        #endif
+#endif
         exit(0);
-    } 
+    }
 
     // neutrino detection mode
-    
+
     if (arg_is_present("neutrino_detect", argc, &*argv)) {
         neutrino_detection = true;
     }
@@ -50,8 +50,7 @@ void do_args(int argc, char** argv) {
 bool sdf_font_is_sdf = false;
 
 // Helper function to load a specific font variant
-Font load_font_variant(const char* font_family, const char* font_variant)
-{
+Font load_font_variant(const char *font_family, const char *font_variant) {
     char font_path[512];
     snprintf(font_path, sizeof(font_path), "./assets/fonts/%s/ttf/%s", font_family, font_variant);
 
@@ -96,19 +95,18 @@ Font load_font_variant(const char* font_family, const char* font_variant)
 }
 
 // Helper function to load a font by family (uses first variant found)
-Font load_font_by_name(const char* font_name)
-{
+Font load_font_by_name(const char *font_name) {
     char ttf_dir[512];
     snprintf(ttf_dir, sizeof(ttf_dir), "./assets/fonts/%s/ttf", font_name);
 
     // Open the ttf directory and find the first .ttf file
-    DIR* dir = opendir(ttf_dir);
+    DIR *dir = opendir(ttf_dir);
 
     if (dir) {
-        struct dirent* entry;
+        struct dirent *entry;
         while ((entry = readdir(dir))) {
             // Look for .ttf files
-            char* dot = strrchr(entry->d_name, '.');
+            char *dot = strrchr(entry->d_name, '.');
             if (dot && strcmp(dot, ".ttf") == 0) {
                 // Found a .ttf file, try to load it
                 closedir(dir);
@@ -123,37 +121,50 @@ Font load_font_by_name(const char* font_name)
 }
 
 // Wrapper that draws `font` - fonts rasterized at 256px with mipmaps for smooth scaling
-void DrawTextExCustom(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint)
-{
+void DrawTextExCustom(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint) {
     // High-quality rasterization with mipmaps produces crisp text at various sizes
     DrawTextEx(font, text, position, fontSize, spacing, tint);
 }
 
-const char* get_cardinal_direction(float heading_deg)
-{
-    if (heading_deg < 22.5f || heading_deg >= 337.5f) return "N";
-    if (heading_deg < 67.5f) return "NE";
-    if (heading_deg < 112.5f) return "E";
-    if (heading_deg < 157.5f) return "SE";
-    if (heading_deg < 202.5f) return "S";
-    if (heading_deg < 247.5f) return "SW";
-    if (heading_deg < 292.5f) return "W";
+const char *get_cardinal_direction(float heading_deg) {
+    if (heading_deg < 22.5f || heading_deg >= 337.5f) {
+        return "N";
+    }
+    if (heading_deg < 67.5f) {
+        return "NE";
+    }
+    if (heading_deg < 112.5f) {
+        return "E";
+    }
+    if (heading_deg < 157.5f) {
+        return "SE";
+    }
+    if (heading_deg < 202.5f) {
+        return "S";
+    }
+    if (heading_deg < 247.5f) {
+        return "SW";
+    }
+    if (heading_deg < 292.5f) {
+        return "W";
+    }
     return "NW";
 }
 
-void draw_compass_hud(Font font, float yaw_radians)
-{
+void draw_compass_hud(Font font, float yaw_radians) {
     float heading_deg = yaw_radians * (180.0f / 3.14159265f);
     heading_deg = fmodf(heading_deg, 360.0f);
-    if (heading_deg < 0.0f) heading_deg += 360.0f;
+    if (heading_deg < 0.0f) {
+        heading_deg += 360.0f;
+    }
 
-    const char* cardinal = get_cardinal_direction(heading_deg);
+    const char *cardinal = get_cardinal_direction(heading_deg);
     char heading_text[64];
     snprintf(heading_text, sizeof(heading_text), "Heading: %.0f° %s", heading_deg, cardinal);
 
     int screen_w = GetScreenWidth();
     Vector2 text_size = MeasureTextEx(font, heading_text, 28, 1);
-    Vector2 text_pos = { (float)(screen_w - (int)text_size.x - 20), 20.0f };
+    Vector2 text_pos = {(float)(screen_w - (int)text_size.x - 20), 20.0f};
 
     DrawRectangle((int)text_pos.x - 10, (int)text_pos.y - 8, (int)text_size.x + 20, (int)text_size.y + 16, (Color){0, 0, 0, 150});
     DrawTextExCustom(font, heading_text, text_pos, 28, 1, WHITE);

@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
 
     exe.use_llvm = true;
 
-    const sources = &.{ "src/main.c", "src/world_generation.c", "src/worker.c", "src/player.c", "src/vec_math.c", "src/rendering.c", "src/utils.c", "src/menu.c", "src/clouds.c", "src/console.c", "src/aux.c", "src/neutrino_detect.c", "common_utils/src/args.c", "common_utils/src/strings.c" };
+    const sources = &.{ "src/main.c", "src/world_generation.c", "src/worker.c", "src/player.c", "src/game_server.c", "src/vec_math.c", "src/rendering.c", "src/utils.c", "src/menu.c", "src/clouds.c", "src/console.c", "src/aux.c", "src/neutrino_detect.c", "common_utils/src/args.c", "common_utils/src/strings.c" };
 
     mod.addCSourceFiles(.{
         .files = sources,

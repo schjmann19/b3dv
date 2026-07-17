@@ -1,21 +1,22 @@
+#include <dirent.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
-#include "raylib.h"
-#include "world.h"
+#include "menu.h"
 #include "player.h"
-#include "vec_math.h"
+#include "raylib.h"
 #include "rendering.h"
 #include "utils.h"
-#include "menu.h"
-//#include "clouds.h"
-#include "console.h"
+#include "vec_math.h"
+#include "world.h"
+// #include "clouds.h"
 #include "aux.h"
+#include "console.h"
+#include "game_server.h"
 
 #if defined(PLATFORM_DESKTOP)
 #define SDF_GLSL_VER 330
@@ -33,8 +34,7 @@ static Shader sdf_shader = {0};
 #define FOG_START 30.0f
 #define CULLING_FOV 110.0f
 
-int b3dv_main(int argc, char **argv)
-{
+int b3dv_main(int argc, char **argv) {
 
     do_args(argc, *&argv);
     if (neutrino_detection) {
@@ -44,14 +44,16 @@ int b3dv_main(int argc, char **argv)
     // Disable HIGHDPI to avoid fractional scaling issues with Hyprland's 1.2x compositor scaling
     // Render at 1200x800 logical pixels; let window manager handle physical scaling
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.20-beta");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.22-beta");
 
     // Load SDF shader from project assets (avoid external/ references)
     sdf_shader = (Shader){0};
-    int try_versions[] = { 330, 120, 100 };
+    int try_versions[] = {330, 120, 100};
     for (int i = 0; i < 3; i++) {
         int ver = try_versions[i];
-        if (ver == 0) continue;
+        if (ver == 0) {
+            continue;
+        }
         char vsPath[256];
         char fsPath[256];
         snprintf(vsPath, sizeof(vsPath), "assets/shaders/glsl%d/sdf.vs", ver);
@@ -81,7 +83,7 @@ int b3dv_main(int argc, char **argv)
     world_system_init();
 
     // Create menu system
-    MenuSystem* menu = menu_system_create();
+    MenuSystem *menu = menu_system_create();
 
     // Initialize console input system
     console_init();
@@ -101,17 +103,19 @@ int b3dv_main(int argc, char **argv)
     last_loaded_variant[sizeof(last_loaded_variant) - 1] = '\0';
 
     Camera3D camera = {
-        .position = (Vector3){ 20, 15, 20 },
-        .target = (Vector3){ 8, 4, 8 },
-        .up = (Vector3){ 0, 1, 0 },
+        .position = (Vector3){20, 15, 20},
+        .target = (Vector3){8, 4, 8},
+        .up = (Vector3){0, 1, 0},
         .fovy = 90,
-        .projection = CAMERA_PERSPECTIVE
-    };
+        .projection = CAMERA_PERSPECTIVE};
 
     // World and player will be created after menu selection
-    World* world = NULL;
-    Player* player = NULL;
-    //CloudSystem* clouds = NULL;
+    World *world = NULL;
+    Player *player = NULL;
+    GameServer game_server = {0};
+    float server_accumulator = 0.0f;
+    const float SERVER_FIXED_DT = 1.0f / 60.0f;
+    // CloudSystem* clouds = NULL;
 
     // enable mouse capture (will be disabled in menu)
     bool mouse_captured = false;
@@ -119,7 +123,7 @@ int b3dv_main(int argc, char **argv)
     // HUD mode (0 = default, 1 = performance metrics 2 = player, 3 = system info)
     int hud_mode = 0;
     int prev_hud_mode = -1;  // Track previous mode to detect changes
-    bool hud_visible = true;  // Toggle HUD visibility with F1
+    bool hud_visible = true; // Toggle HUD visibility with F1
     char cached_cpu[128] = {0};
     char cached_gpu[128] = {0};
     char cached_kernel[128] = {0};
@@ -140,29 +144,29 @@ int b3dv_main(int argc, char **argv)
     bool chat_active = false;
     char chat_input[256] = {0};
     int chat_input_len = 0;
-    int chat_cursor_pos = 0;  // cursor position in input string
-    int history_index = 0;    // 0 means no history entry selected, 1+ means Nth-from-last
+    int chat_cursor_pos = 0; // cursor position in input string
+    int history_index = 0;   // 0 means no history entry selected, 1+ means Nth-from-last
 
-    // Chat message display (feedback messages)
-    #define CHAT_MESSAGE_BUFFER_SIZE 16
-    #define CHAT_MESSAGE_MAX_LEN 512
+// Chat message display (feedback messages)
+#define CHAT_MESSAGE_BUFFER_SIZE 16
+#define CHAT_MESSAGE_MAX_LEN 512
     char chat_messages[CHAT_MESSAGE_BUFFER_SIZE][CHAT_MESSAGE_MAX_LEN] = {0};
     double chat_message_times[CHAT_MESSAGE_BUFFER_SIZE] = {0};
     int chat_message_count = 0;
 
-    // Macro to add a chat message to the buffer
-    #define add_chat_message(message) \
-    do { \
-        int _msg_idx = chat_message_count % CHAT_MESSAGE_BUFFER_SIZE; \
+// Macro to add a chat message to the buffer
+#define add_chat_message(message)                                              \
+    do {                                                                       \
+        int _msg_idx = chat_message_count % CHAT_MESSAGE_BUFFER_SIZE;          \
         strncpy(chat_messages[_msg_idx], (message), CHAT_MESSAGE_MAX_LEN - 1); \
-        chat_messages[_msg_idx][CHAT_MESSAGE_MAX_LEN - 1] = '\0'; \
-        chat_message_times[_msg_idx] = GetTime(); \
-        chat_message_count++; \
-    } while(0)
+        chat_messages[_msg_idx][CHAT_MESSAGE_MAX_LEN - 1] = '\0';              \
+        chat_message_times[_msg_idx] = GetTime();                              \
+        chat_message_count++;                                                  \
+    } while (0)
 
     // Camera angle tracking (in radians)
-    float camera_yaw = 0.0f;    // horizontal rotation around Y axis
-    float camera_pitch = 0.0f;  // vertical rotation (pitch)
+    float camera_yaw = 0.0f;   // horizontal rotation around Y axis
+    float camera_pitch = 0.0f; // vertical rotation (pitch)
 
     // Persistent camera basis vectors (to handle gimbal lock)
     Vector3 camera_right = {1, 0, 0};
@@ -188,33 +192,21 @@ int b3dv_main(int argc, char **argv)
     float fov_half_horiz_tan = 0.0f;
 
     B3DV_MAIN_LOOP
-    while (!WindowShouldClose() && !should_quit)
-    {
+    while (!WindowShouldClose() && !should_quit) {
         float dt = GetFrameTime();
 
-        // Temporary debug overlay: show magenta clear for first 120 frames
-        static int debug_frames = 120;
-        if (debug_frames > 0) {
-            debug_frames--;
-            BeginDrawing();
-            ClearBackground(MAGENTA);
-            DrawText("DEBUG OVERLAY", 50, 50, 40, WHITE);
-            EndDrawing();
-            continue;
-        }
-
         // Check if font family or variant changed in settings and reload if needed
-            if (strcmp(menu->font_families[menu->current_font_family_index], last_loaded_family) != 0 ||
-                strcmp(menu->font_variants[menu->current_font_variant_index], last_loaded_variant) != 0) {
-                // Unload old font if it's not the default
-                if (custom_font.glyphCount > 0 && custom_font.glyphCount != GetFontDefault().glyphCount) {
-                    UnloadFont(custom_font);
-                }
-                // Reset SDF flag when font changes
-                sdf_font_is_sdf = false;
+        if (strcmp(menu->font_families[menu->current_font_family_index], last_loaded_family) != 0 ||
+            strcmp(menu->font_variants[menu->current_font_variant_index], last_loaded_variant) != 0) {
+            // Unload old font if it's not the default
+            if (custom_font.glyphCount > 0 && custom_font.glyphCount != GetFontDefault().glyphCount) {
+                UnloadFont(custom_font);
+            }
+            // Reset SDF flag when font changes
+            sdf_font_is_sdf = false;
             // Load new font variant
             custom_font = load_font_variant(menu->font_families[menu->current_font_family_index],
-                                           menu->font_variants[menu->current_font_variant_index]);
+                                            menu->font_variants[menu->current_font_variant_index]);
             strcpy(last_loaded_family, menu->font_families[menu->current_font_family_index]);
             strcpy(last_loaded_variant, menu->font_variants[menu->current_font_variant_index]);
         }
@@ -226,36 +218,31 @@ int b3dv_main(int argc, char **argv)
             EndDrawing();
             menu_update_input(menu);
             continue;
-        }
-        else if (menu->current_state == MENU_STATE_WORLD_SELECT) {
+        } else if (menu->current_state == MENU_STATE_WORLD_SELECT) {
             BeginDrawing();
             menu_draw_world_select(menu, custom_font);
             EndDrawing();
             menu_update_input(menu);
             continue;
-        }
-        else if (menu->current_state == MENU_STATE_CREATE_WORLD) {
+        } else if (menu->current_state == MENU_STATE_CREATE_WORLD) {
             BeginDrawing();
             menu_draw_create_world(menu, custom_font);
             EndDrawing();
             menu_update_input(menu);
             continue;
-        }
-        else if (menu->current_state == MENU_STATE_CREDITS) {
+        } else if (menu->current_state == MENU_STATE_CREDITS) {
             BeginDrawing();
             menu_draw_credits(menu, custom_font);
             EndDrawing();
             menu_update_input(menu);
             continue;
-        }
-        else if (menu->current_state == MENU_STATE_SETTINGS) {
+        } else if (menu->current_state == MENU_STATE_SETTINGS) {
             BeginDrawing();
             menu_draw_settings(menu, custom_font);
             EndDrawing();
             menu_update_input(menu);
             continue;
-        }
-        else if (menu->current_state == MENU_STATE_GAME && menu->should_start_game) {
+        } else if (menu->current_state == MENU_STATE_GAME && menu->should_start_game) {
             // Initialize game with selected world
             if (!world) {
                 world = world_create();
@@ -271,11 +258,12 @@ int b3dv_main(int argc, char **argv)
 
                 // Create player at saved position (or default if no save)
                 player = player_create(world->last_player_position.x,
-                                      world->last_player_position.y,
-                                      world->last_player_position.z);
+                                       world->last_player_position.y,
+                                       world->last_player_position.z);
                 // Register player with world and apply saved inventory if present
                 world->current_player = player;
                 world_apply_players_to(world, player);
+                game_server_reset(&game_server, world, player);
                 if (menu->nickname[0] != '\0') {
                     strncpy(world->player_nickname, menu->nickname, sizeof(world->player_nickname) - 1);
                     world->player_nickname[sizeof(world->player_nickname) - 1] = '\0';
@@ -327,7 +315,9 @@ int b3dv_main(int argc, char **argv)
             int key = GetCharPressed();
             while (key > 0) {
                 if ((key >= 32 && key <= 125) && chat_input_len < 255) {
-                    for (int i = chat_input_len; i > chat_cursor_pos; i--) chat_input[i] = chat_input[i - 1];
+                    for (int i = chat_input_len; i > chat_cursor_pos; i--) {
+                        chat_input[i] = chat_input[i - 1];
+                    }
                     chat_input[chat_cursor_pos++] = (char)key;
                     chat_input_len++;
                     chat_input[chat_input_len] = '\0';
@@ -336,14 +326,20 @@ int b3dv_main(int argc, char **argv)
             }
 
             if (IsKeyPressed(KEY_BACKSPACE) && chat_cursor_pos > 0) {
-                for (int i = chat_cursor_pos - 1; i < chat_input_len; i++) chat_input[i] = chat_input[i + 1];
+                for (int i = chat_cursor_pos - 1; i < chat_input_len; i++) {
+                    chat_input[i] = chat_input[i + 1];
+                }
                 chat_cursor_pos--;
                 chat_input_len--;
                 chat_input[chat_input_len] = '\0';
             }
 
-            if (IsKeyPressed(KEY_LEFT) && chat_cursor_pos > 0) chat_cursor_pos--;
-            if (IsKeyPressed(KEY_RIGHT) && chat_cursor_pos < chat_input_len) chat_cursor_pos++;
+            if (IsKeyPressed(KEY_LEFT) && chat_cursor_pos > 0) {
+                chat_cursor_pos--;
+            }
+            if (IsKeyPressed(KEY_RIGHT) && chat_cursor_pos < chat_input_len) {
+                chat_cursor_pos++;
+            }
 
             if (IsKeyPressed(KEY_UP)) {
                 history_index++;
@@ -353,13 +349,18 @@ int b3dv_main(int argc, char **argv)
                     chat_input[sizeof(chat_input) - 1] = '\0';
                     chat_input_len = strlen(chat_input);
                     chat_cursor_pos = chat_input_len;
-                } else history_index--;
+                } else {
+                    history_index--;
+                }
             }
 
             if (IsKeyPressed(KEY_DOWN)) {
                 history_index--;
                 if (history_index <= 0) {
-                    history_index = 0; chat_input[0] = '\0'; chat_input_len = 0; chat_cursor_pos = 0;
+                    history_index = 0;
+                    chat_input[0] = '\0';
+                    chat_input_len = 0;
+                    chat_cursor_pos = 0;
                 } else {
                     char history_line[256] = {0};
                     if (get_chat_history_line(history_index, history_line, sizeof(history_line))) {
@@ -373,124 +374,32 @@ int b3dv_main(int argc, char **argv)
 
             if (IsKeyPressed(KEY_ENTER)) {
                 if (chat_input_len > 0) {
-                    FILE* log_file = fopen("./chathistory", "a");
-                    if (log_file) { fprintf(log_file, "%s\n", chat_input); fclose(log_file); }
+                    FILE *log_file = fopen("./chathistory", "a");
+                    if (log_file) {
+                        fprintf(log_file, "%s\n", chat_input);
+                        fclose(log_file);
+                    }
                 }
 
                 // Process command or chat
                 if (chat_input[0] == '/') {
-                    // delegate to existing command handlers by reusing the original blocks
-                    // (kept identical to previous implementation)
-                    if (strncmp(chat_input, "/quit", 5) == 0) { add_chat_message(menu->game_text.msg_quitting); should_quit = true; }
-                    else if (strncmp(chat_input, "/tp ", 4) == 0) {
-                        float x, y, z;
-                        if (sscanf(chat_input, "/tp %f %f %f", &x, &y, &z) == 3) { player->position = (Vector3){ x, y, z }; player->velocity = (Vector3){0,0,0}; char msg[256]; snprintf(msg, sizeof(msg), menu->game_text.msg_teleported, x, y, z); add_chat_message(msg); }
-                        else add_chat_message(menu->game_text.msg_teleport_usage);
-                    }
-                    else if (strncmp(chat_input, "/save ", 6) == 0) {
-                        char world_name_buf[256]; strncpy(world_name_buf, chat_input + 6, sizeof(world_name_buf) - 1); world_name_buf[255] = '\0'; trim_string(world_name_buf); const char* world_name = world_name_buf;
-                        if (world_save(world, world_name)) { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_saved, world_name); add_chat_message(msg); }
-                        else { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_save_failed, world_name); add_chat_message(msg); }
-                    }
-                    else if (strncmp(chat_input, "/load ", 6) == 0) {
-                        char world_name_buf[256]; strncpy(world_name_buf, chat_input + 6, sizeof(world_name_buf) - 1); world_name_buf[255] = '\0'; trim_string(world_name_buf); const char* world_name = world_name_buf;
-                        if (strlen(world->world_name) > 0) world_save(world, world->world_name);
-                        if (world_load(world, world_name)) { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_loaded, world_name); add_chat_message(msg); }
-                        else { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_load_failed, world_name); add_chat_message(msg); world_generate_prism(world); }
-                    }
-                    else if (strncmp(chat_input, "/createworld ", 13) == 0) {
-                        char world_name_buf[256]; strncpy(world_name_buf, chat_input + 13, sizeof(world_name_buf) - 1); world_name_buf[255] = '\0'; trim_string(world_name_buf); const char* world_name = world_name_buf;
-                        bool valid_name = true; if (world_name[0] == '\0') valid_name = false; else for (int i = 0; world_name[i]; i++) { char c = world_name[i]; if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')) { valid_name = false; break; }}
-                        if (!valid_name) add_chat_message("Invalid world name. Use only alphanumeric characters and underscore."); else { world_free(world);/* clouds_reset(clouds);*/ world = world_create(); world_load_textures(world); strncpy(world->world_name, world_name, sizeof(world->world_name) - 1); world->world_name[sizeof(world->world_name) - 1] = '\0'; world_generate_prism(world); if (world_save(world, world_name)) { char msg[512]; snprintf(msg, sizeof(msg), "World '%s' created and saved successfully.", world_name); add_chat_message(msg); player->position = (Vector3){0,105,0}; player->velocity = (Vector3){0,0,0}; } else { char msg[512]; snprintf(msg, sizeof(msg), "Failed to create world '%s'.", world_name); add_chat_message(msg); } }
-                    }
-                    else if (strncmp(chat_input, "/loadworld ", 11) == 0) {
-                        char world_name_buf[256]; strncpy(world_name_buf, chat_input + 11, sizeof(world_name_buf) - 1); world_name_buf[255] = '\0'; trim_string(world_name_buf); const char* world_name = world_name_buf;
-                        bool valid_name = true; if (world_name[0] == '\0') valid_name = false; else for (int i = 0; world_name[i]; i++) { char c = world_name[i]; if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')) { valid_name = false; break; }}
-                        if (!valid_name) add_chat_message(menu->game_text.msg_invalid_world_name); else { world_free(world); /* clouds_reset(clouds);*/ world = world_create(); world_load_textures(world); float spawn_x = 8.0f; float spawn_z = 8.0f; float h1 = sinf(spawn_x * 0.1f) * cosf(spawn_z * 0.1f) * 8.0f; float h2 = sinf(spawn_x * 0.05f) * cosf(spawn_z * 0.05f) * 6.0f; float terrain_h = h1 + h2 + 10.0f + 5.0f; float spawn_y = terrain_h + 1.5f; player = player_create(spawn_x, spawn_y, spawn_z); if (world_load(world, world_name)) { player->position = (Vector3){0,105,0}; player->velocity = (Vector3){0,0,0}; char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_loaded, world_name); add_chat_message(msg); } else { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_world_load_failed, world_name); add_chat_message(msg); world_generate_prism(world); } }
-                    }
-                    else if (strncmp(chat_input, "/select ", 8) == 0) {
-                        char block_name_buf[32]; strncpy(block_name_buf, chat_input + 8, sizeof(block_name_buf) - 1); block_name_buf[31] = '\0'; trim_string(block_name_buf); const char* block_name = block_name_buf;
-                        if (strcmp(block_name, "stone") == 0) { player->selected_block = BLOCK_STONE; char msg[256]; snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "stone"); add_chat_message(msg); }
-                        else if (strcmp(block_name, "dirt") == 0) { player->selected_block = BLOCK_DIRT; char msg[256]; snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "dirt"); add_chat_message(msg); }
-                        else if (strcmp(block_name, "grass") == 0) { player->selected_block = BLOCK_GRASS; char msg[256]; snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "grass"); add_chat_message(msg); }
-                        else if (strcmp(block_name, "sand") == 0) { player->selected_block = BLOCK_SAND; char msg[256]; snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "sand"); add_chat_message(msg); }
-                        else if (strcmp(block_name, "wood") == 0) { player->selected_block = BLOCK_WOOD; char msg[256]; snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "wood"); add_chat_message(msg); }
-                        else if (strcmp(block_name, "glowstone") == 0) { player->selected_block = BLOCK_GLOWSTONE; char msg[256]; snprintf(msg, sizeof(msg), menu->game_text.msg_block_selected, "glowstone"); add_chat_message(msg); }
-                        else { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_block, block_name); add_chat_message(msg); }
-                    }
-                    else if (strncmp(chat_input, "/fly ", 5) == 0) { char fly_cmd_buf[32]; strncpy(fly_cmd_buf, chat_input + 5, sizeof(fly_cmd_buf) - 1); fly_cmd_buf[31] = '\0'; trim_string(fly_cmd_buf); const char* fly_cmd = fly_cmd_buf; if (strcmp(fly_cmd, "enable") == 0) { flight_enabled = true; add_chat_message(menu->game_text.msg_flight_enabled); } else if (strcmp(fly_cmd, "disable") == 0) { flight_enabled = false; player->is_flying = false; add_chat_message(menu->game_text.msg_flight_disabled); } else add_chat_message(menu->game_text.msg_fly_usage); }
-                    else if (strncmp(chat_input, "/noclip ", 8) == 0) { char noclip_cmd_buf[32]; strncpy(noclip_cmd_buf, chat_input + 8, sizeof(noclip_cmd_buf) - 1); noclip_cmd_buf[31] = '\0'; trim_string(noclip_cmd_buf); const char* noclip_cmd = noclip_cmd_buf; if (strcmp(noclip_cmd, "enable") == 0) { player->no_clip = true; add_chat_message(menu->game_text.msg_noclip_enabled); } else if (strcmp(noclip_cmd, "disable") == 0) { player->no_clip = false; add_chat_message(menu->game_text.msg_noclip_disabled); } else add_chat_message(menu->game_text.msg_noclip_usage); }
-                    else if (strncmp(chat_input, "/show_chunk_borders", 19) == 0) {
-                        const char* arg = chat_input + 19;
-                        while (*arg == ' ') arg++;
-                        if (*arg == '\0') {
-                            show_chunk_borders = !show_chunk_borders;
-                            add_chat_message(show_chunk_borders ? menu->game_text.msg_chunk_borders_enabled : menu->game_text.msg_chunk_borders_disabled);
-                        } else if (strncmp(arg, "on", 2) == 0 && (arg[2] == '\0' || arg[2] == ' ')) {
-                            show_chunk_borders = true;
-                            add_chat_message(menu->game_text.msg_chunk_borders_enabled);
-                        } else if (strncmp(arg, "off", 3) == 0 && (arg[3] == '\0' || arg[3] == ' ')) {
-                            show_chunk_borders = false;
-                            add_chat_message(menu->game_text.msg_chunk_borders_disabled);
-                        } else {
-                            add_chat_message(menu->game_text.msg_chunk_borders_usage);
+                    ConsoleCommand parsed_cmd = console_parse_command(chat_input);
+                    bool should_quit_cmd = false;
+                    bool flight_enabled_cmd = flight_enabled;
+                    bool show_chunk_borders_cmd = show_chunk_borders;
+                    char command_msg[512] = {0};
+                    if (game_server_submit_command(&game_server, player->uid, &parsed_cmd, chat_input,
+                                                   &should_quit_cmd, &flight_enabled_cmd,
+                                                   &show_chunk_borders_cmd, &world, &player,
+                                                   command_msg, sizeof(command_msg))) {
+                        if (command_msg[0] != '\0') {
+                            add_chat_message(command_msg);
                         }
-                    }
-                    else if (strncmp(chat_input, "/setblock ", 10) == 0) {
-                        float fx, fy, fz; char block_name[32] = {0}; int parsed = sscanf(chat_input, "/setblock %f %f %f %31s", &fx, &fy, &fz, block_name);
-                        if (parsed >= 3) {
-                            if (parsed == 4) trim_string(block_name);
-                            int ix = (int)floorf(fx); int iy = (int)floorf(fy); int iz = (int)floorf(fz);
-                            BlockType block_type = BLOCK_AIR; const char* type_str = "air";
-                            if (parsed == 3) { block_type = player->selected_block; if (block_type == BLOCK_STONE) type_str = "stone"; else if (block_type == BLOCK_DIRT) type_str = "dirt"; else if (block_type == BLOCK_GRASS) type_str = "grass"; else if (block_type == BLOCK_SAND) type_str = "sand"; else if (block_type == BLOCK_WOOD) type_str = "wood"; else if (block_type == BLOCK_GLOWSTONE) type_str = "glowstone"; }
-                            else {
-                                if (strcmp(block_name, "stone") == 0) { block_type = BLOCK_STONE; type_str = "stone"; }
-                                else if (strcmp(block_name, "dirt") == 0) { block_type = BLOCK_DIRT; type_str = "dirt"; }
-                                else if (strcmp(block_name, "sand") == 0) { block_type = BLOCK_SAND; type_str = "sand"; }
-                                else if (strcmp(block_name, "wood") == 0) { block_type = BLOCK_WOOD; type_str = "wood"; }
-                                else if (strcmp(block_name, "grass") == 0) { block_type = BLOCK_GRASS; type_str = "grass"; }
-                                else if (strcmp(block_name, "glowstone") == 0) { block_type = BLOCK_GLOWSTONE; type_str = "glowstone"; }
-                                else if (strcmp(block_name, "air") == 0) { block_type = BLOCK_AIR; type_str = "air"; }
-                                else { char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_block, block_name); add_chat_message(msg); ix = -1; }
-                            }
-                            if (iy >= 0 && iy < 256) { world_set_block(world, ix, iy, iz, block_type); char msg[512]; snprintf(msg, sizeof(msg), menu->game_text.msg_block_set, fx, fy, fz, type_str); add_chat_message(msg); } else if (ix != -1) add_chat_message(menu->game_text.msg_out_of_bounds);
-                        } else add_chat_message(menu->game_text.msg_setblock_usage);
-                    }
-                    else if (strncmp(chat_input, "/give ", 6) == 0) {
-                        char item_buf[64] = {0};
-                        int count = 1;
-                        int parsed = sscanf(chat_input + 6, "%63s %d", item_buf, &count);
-                        if (parsed >= 1) {
-                            trim_string(item_buf);
-                            if (parsed == 1) count = 1;
-
-                            BlockType bt = BLOCK_AIR;
-                            if (strcmp(item_buf, "stone") == 0) bt = BLOCK_STONE;
-                            else if (strcmp(item_buf, "dirt") == 0) bt = BLOCK_DIRT;
-                            else if (strcmp(item_buf, "grass") == 0) bt = BLOCK_GRASS;
-                            else if (strcmp(item_buf, "sand") == 0) bt = BLOCK_SAND;
-                            else if (strcmp(item_buf, "wood") == 0) bt = BLOCK_WOOD;
-                            else if (strcmp(item_buf, "glowstone") == 0) bt = BLOCK_GLOWSTONE;
-
-                            if (bt == BLOCK_AIR) {
-                                char msg[256];
-                                snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_block, item_buf);
-                                add_chat_message(msg);
-                            } else {
-                                if (inventory_give(player, bt, count)) {
-                                    char msg[256];
-                                    if (count == 1)
-                                        snprintf(msg, sizeof(msg), "Gave 1 %s.", item_buf);
-                                    else
-                                        snprintf(msg, sizeof(msg), "Gave %d %s.", count, item_buf);
-                                    add_chat_message(msg);
-                                } else {
-                                    add_chat_message("Not enough inventory space to give items.");
-                                }
-                            }
-                        } else {
-                            add_chat_message("Usage: /give <item> [count]");
+                        if (should_quit_cmd) {
+                            should_quit = true;
                         }
+                        flight_enabled = flight_enabled_cmd;
+                        show_chunk_borders = show_chunk_borders_cmd;
                     } else {
                         char msg[512];
                         snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_command, chat_input);
@@ -498,7 +407,7 @@ int b3dv_main(int argc, char **argv)
                     }
                 } else {
                     char out_msg[1024];
-                    const char* nick = (world->player_nickname[0] != '\0') ? world->player_nickname : "Player";
+                    const char *nick = (world->player_nickname[0] != '\0') ? world->player_nickname : "Player";
                     snprintf(out_msg, sizeof(out_msg), "<%s> %s", nick, chat_input);
                     add_chat_message(out_msg);
                 }
@@ -521,187 +430,222 @@ int b3dv_main(int argc, char **argv)
             }
         } else {
             // Only process game keys when chat is not active
-        // HUD visibility toggle with F1
-        if (IsKeyPressed(KEY_F1)) {
-            hud_visible = !hud_visible;  // Toggle HUD on/off
-        }
+            // HUD visibility toggle with F1
+            if (IsKeyPressed(KEY_F1)) {
+                hud_visible = !hud_visible; // Toggle HUD on/off
+            }
             // HUD mode toggle with F2/F3/F4/F5
-        if (IsKeyPressed(KEY_F2)) {
-            hud_mode = 0;  // default HUD
-        }
-        if (IsKeyPressed(KEY_F3)) {
-            hud_mode = 1;  // performance metrics
-        }
-        if (IsKeyPressed(KEY_F4)) {
-            hud_mode = 2;  // player
-        }
-        if (IsKeyPressed(KEY_F5)) {
-            hud_mode = 3;  // system info
-            // Fetch system info only when entering this mode
-            if (prev_hud_mode != 3) {
-                get_cpu_model(cached_cpu, sizeof(cached_cpu));
-                get_gpu_model(cached_gpu, sizeof(cached_gpu));
-                get_kernel_info(cached_kernel, sizeof(cached_kernel));
+            if (IsKeyPressed(KEY_F2)) {
+                hud_mode = 0; // default HUD
             }
-        }
-        if (IsKeyPressed(KEY_F7)) {
-            show_wireframe = !show_wireframe;  // Toggle wireframe rendering
-        }
-        prev_hud_mode = hud_mode;
-
-        // If inventory is open and ESC pressed, close inventory (don't toggle pause)
-        if (IsKeyPressed(KEY_ESCAPE) && inventory_is_big_open(player)) {
-            inventory_toggle_big(player);
-            // When closing inventory, recapture mouse if gameplay had it captured
-            if (inventory_is_big_open(player)) {
-                // still open -> ensure cursor enabled
-                mouse_captured = false;
-                EnableCursor();
-            } else {
-                // closed -> restore capture state
-                if (!paused && mouse_captured) DisableCursor();
+            if (IsKeyPressed(KEY_F3)) {
+                hud_mode = 1; // performance metrics
             }
-        } else {
-            // toggle pause with P key or ESC (only if inventory wasn't handled above)
-            if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
-                paused = !paused;
-                // Automatically uncapture mouse when pausing, recapture when resuming
-                if (paused) {
-                    mouse_captured = false;
-                    EnableCursor();
-                } else if (mouse_captured) {
-                    DisableCursor();
+            if (IsKeyPressed(KEY_F4)) {
+                hud_mode = 2; // player
+            }
+            if (IsKeyPressed(KEY_F5)) {
+                hud_mode = 3; // system info
+                // Fetch system info only when entering this mode
+                if (prev_hud_mode != 3) {
+                    get_cpu_model(cached_cpu, sizeof(cached_cpu));
+                    get_gpu_model(cached_gpu, sizeof(cached_gpu));
+                    get_kernel_info(cached_kernel, sizeof(cached_kernel));
                 }
             }
-        }
+            if (IsKeyPressed(KEY_F7)) {
+                show_wireframe = !show_wireframe; // Toggle wireframe rendering
+            }
+            prev_hud_mode = hud_mode;
 
-        // Auto-manage mouse capture: captured only when gameplay (not paused/chat/inventory)
-        {
-            bool should_capture = (!paused && !chat_active && !inventory_is_big_open(player));
-            if (should_capture && !mouse_captured) {
-                mouse_captured = true;
-                DisableCursor();
-            } else if (!should_capture && mouse_captured) {
+            // If inventory is open and ESC pressed, close inventory (don't toggle pause)
+            if (IsKeyPressed(KEY_ESCAPE) && inventory_is_big_open(player)) {
+                inventory_toggle_big(player);
+                // When closing inventory, recapture mouse if gameplay had it captured
+                if (inventory_is_big_open(player)) {
+                    // still open -> ensure cursor enabled
+                    mouse_captured = false;
+                    EnableCursor();
+                } else {
+                    // closed -> restore capture state
+                    if (!paused && mouse_captured) {
+                        DisableCursor();
+                    }
+                }
+            } else {
+                // toggle pause with P key or ESC (only if inventory wasn't handled above)
+                if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
+                    paused = !paused;
+                    // Automatically uncapture mouse when pausing, recapture when resuming
+                    if (paused) {
+                        mouse_captured = false;
+                        EnableCursor();
+                    } else if (mouse_captured) {
+                        DisableCursor();
+                    }
+                }
+            }
+
+            // Auto-manage mouse capture: captured only when gameplay (not paused/chat/inventory)
+            {
+                bool should_capture = (!paused && !chat_active && !inventory_is_big_open(player));
+                if (should_capture && !mouse_captured) {
+                    mouse_captured = true;
+                    DisableCursor();
+                } else if (!should_capture && mouse_captured) {
+                    mouse_captured = false;
+                    EnableCursor();
+                }
+            }
+
+            // toggle fullscreen with F11
+            if (IsKeyPressed(KEY_F11)) {
+                ToggleFullscreen();
+            }
+
+            // teleport with R key
+            if (IsKeyPressed(KEY_R)) {
+                player->position = (Vector3){8.0f, 105.0f, 8.0f};
+                player->velocity = (Vector3){0, 0, 0};
+            }
+
+            // Chat system - open with T key
+            if (IsKeyPressed(KEY_T) && !paused) {
+                chat_active = true;
+                chat_input_len = 0;
+                chat_input[0] = '\0';
+                history_index = 0;
                 mouse_captured = false;
                 EnableCursor();
             }
-        }
-
-        // toggle fullscreen with F11
-        if (IsKeyPressed(KEY_F11)) {
-            ToggleFullscreen();
-        }
-
-        // teleport with R key
-        if (IsKeyPressed(KEY_R)) {
-            player->position = (Vector3){ 8.0f, 105.0f, 8.0f };
-            player->velocity = (Vector3){ 0, 0, 0 };
-        }
-
-        // Chat system - open with T key
-        if (IsKeyPressed(KEY_T) && !paused) {
-            chat_active = true;
-            chat_input_len = 0;
-            chat_input[0] = '\0';
-            history_index = 0;
-            mouse_captured = false;
-            EnableCursor();
-        }
-        }  // End of else block for non-chat input
+        } // End of else block for non-chat input
 
         // Console system - check for commands from terminal
         ConsoleCommand console_cmd;
         while (console_get_next_command(&console_cmd)) {
             // Process console commands (simplified - console can only run certain commands)
-            //printf("[console] Executing: %s\n", console_cmd.raw_input);
+            // printf("[console] Executing: %s\n", console_cmd.raw_input);
 
             // Determine target player - for now, always use current player
             // (In future, could support multiple players)
-            Player* target_player = player;
+            Player *target_player = player;
 
             // Process by command type
             switch (console_cmd.type) {
-                case CMD_QUIT:
-                    printf("[console] Quitting...\n");
-                    should_quit = true;
-                    break;
+            case CMD_QUIT:
+                printf("[console] Quitting...\n");
+                should_quit = true;
+                break;
 
-                case CMD_CHAT:
-                    add_chat_message(console_cmd.args);
-                    break;
+            case CMD_CHAT:
+                add_chat_message(console_cmd.args);
+                break;
 
-                case CMD_TP:
-                    if (target_player) {
-                        float x, y, z;
-                        if (sscanf(console_cmd.args, "%f %f %f", &x, &y, &z) == 3) {
-                            target_player->position = (Vector3){ x, y, z };
-                            target_player->velocity = (Vector3){0,0,0};
-                            printf("[console] Teleported %s to (%.1f, %.1f, %.1f)\n", target_player->nickname, x, y, z);
-                            char msg[256];
-                            snprintf(msg, sizeof(msg), "[console] Teleported to (%.1f, %.1f, %.1f)", x, y, z);
-                            add_chat_message(msg);
-                        } else {
-                            printf("[console] Usage: /tp <x> <y> <z>\n");
-                        }
+            case CMD_TP:
+                if (target_player) {
+                    float x, y, z;
+                    if (sscanf(console_cmd.args, "%f %f %f", &x, &y, &z) == 3) {
+                        target_player->position = (Vector3){x, y, z};
+                        target_player->velocity = (Vector3){0, 0, 0};
+                        printf("[console] Teleported %s to (%.1f, %.1f, %.1f)\n", target_player->nickname, x, y, z);
+                        char msg[256];
+                        snprintf(msg, sizeof(msg), "[console] Teleported to (%.1f, %.1f, %.1f)", x, y, z);
+                        add_chat_message(msg);
+                    } else {
+                        printf("[console] Usage: /tp <x> <y> <z>\n");
                     }
-                    break;
+                }
+                break;
 
-                case CMD_GIVE:
-                    if (target_player && console_cmd.args[0] != '\0') {
-                        char item_buf[64] = {0};
-                        int count = 1;
-                        sscanf(console_cmd.args, "%63s %d", item_buf, &count);
+            case CMD_GIVE:
+                if (target_player && console_cmd.args[0] != '\0') {
+                    char item_buf[64] = {0};
+                    int count = 1;
+                    sscanf(console_cmd.args, "%63s %d", item_buf, &count);
 
-                        BlockType block_type = BLOCK_AIR;
-                        const char* type_str = NULL;
+                    BlockType block_type = BLOCK_AIR;
+                    const char *type_str = NULL;
 
-                        if (strcmp(item_buf, "stone") == 0) { block_type = BLOCK_STONE; type_str = "stone"; }
-                        else if (strcmp(item_buf, "dirt") == 0) { block_type = BLOCK_DIRT; type_str = "dirt"; }
-                        else if (strcmp(item_buf, "grass") == 0) { block_type = BLOCK_GRASS; type_str = "grass"; }
-                        else if (strcmp(item_buf, "sand") == 0) { block_type = BLOCK_SAND; type_str = "sand"; }
-                        else if (strcmp(item_buf, "wood") == 0) { block_type = BLOCK_WOOD; type_str = "wood"; }
-                        else if (strcmp(item_buf, "glowstone") == 0) { block_type = BLOCK_GLOWSTONE; type_str = "glowstone"; }
-
-                        if (type_str && inventory_give(target_player, block_type, count)) {
-                            printf("[console] Gave %d of %s to %s\n", count, type_str, target_player->nickname);
-                            char msg[256];
-                            snprintf(msg, sizeof(msg), "[console] Gave %d of %s", count, type_str);
-                            add_chat_message(msg);
-                        } else {
-                            printf("[console] Failed to give item: %s\n", item_buf);
-                        }
+                    if (strcmp(item_buf, "stone") == 0) {
+                        block_type = BLOCK_STONE;
+                        type_str = "stone";
+                    } else if (strcmp(item_buf, "dirt") == 0) {
+                        block_type = BLOCK_DIRT;
+                        type_str = "dirt";
+                    } else if (strcmp(item_buf, "grass") == 0) {
+                        block_type = BLOCK_GRASS;
+                        type_str = "grass";
+                    } else if (strcmp(item_buf, "sand") == 0) {
+                        block_type = BLOCK_SAND;
+                        type_str = "sand";
+                    } else if (strcmp(item_buf, "wood") == 0) {
+                        block_type = BLOCK_WOOD;
+                        type_str = "wood";
+                    } else if (strcmp(item_buf, "glowstone") == 0) {
+                        block_type = BLOCK_GLOWSTONE;
+                        type_str = "glowstone";
                     }
-                    break;
 
-                case CMD_SELECT:
-                    if (target_player && console_cmd.args[0] != '\0') {
-                        const char* block_name = console_cmd.args;
-                        if (strcmp(block_name, "stone") == 0) { target_player->selected_block = BLOCK_STONE; printf("[console] Selected stone\n"); add_chat_message("[console] Selected stone"); }
-                        else if (strcmp(block_name, "dirt") == 0) { target_player->selected_block = BLOCK_DIRT; printf("[console] Selected dirt\n"); add_chat_message("[console] Selected dirt"); }
-                        else if (strcmp(block_name, "grass") == 0) { target_player->selected_block = BLOCK_GRASS; printf("[console] Selected grass\n"); add_chat_message("[console] Selected grass"); }
-                        else if (strcmp(block_name, "sand") == 0) { target_player->selected_block = BLOCK_SAND; printf("[console] Selected sand\n"); add_chat_message("[console] Selected sand"); }
-                        else if (strcmp(block_name, "wood") == 0) { target_player->selected_block = BLOCK_WOOD; printf("[console] Selected wood\n"); add_chat_message("[console] Selected wood"); }
-                        else if (strcmp(block_name, "glowstone") == 0) { target_player->selected_block = BLOCK_GLOWSTONE; printf("[console] Selected glowstone\n"); add_chat_message("[console] Selected glowstone"); }
-                        else { printf("[console] Unknown block: %s\n", block_name); }
+                    if (type_str && inventory_give(target_player, block_type, count)) {
+                        printf("[console] Gave %d of %s to %s\n", count, type_str, target_player->nickname);
+                        char msg[256];
+                        snprintf(msg, sizeof(msg), "[console] Gave %d of %s", count, type_str);
+                        add_chat_message(msg);
+                    } else {
+                        printf("[console] Failed to give item: %s\n", item_buf);
                     }
-                    break;
+                }
+                break;
 
-                case CMD_HELP:
-                    printf("[console] Available commands:\n");
-                    printf("  /tp <x> <y> <z>           - Teleport to coordinates\n");
-                    printf("  /give <block> [count]      - Give items (stone, dirt, grass, sand, wood, glowstone)\n");
-                    printf("  /select <block>            - Select block type\n");
-                    printf("  /quit                      - Quit the game\n");
-                    printf("  /help                      - Show this help message\n");
-                    break;
+            case CMD_SELECT:
+                if (target_player && console_cmd.args[0] != '\0') {
+                    const char *block_name = console_cmd.args;
+                    if (strcmp(block_name, "stone") == 0) {
+                        target_player->selected_block = BLOCK_STONE;
+                        printf("[console] Selected stone\n");
+                        add_chat_message("[console] Selected stone");
+                    } else if (strcmp(block_name, "dirt") == 0) {
+                        target_player->selected_block = BLOCK_DIRT;
+                        printf("[console] Selected dirt\n");
+                        add_chat_message("[console] Selected dirt");
+                    } else if (strcmp(block_name, "grass") == 0) {
+                        target_player->selected_block = BLOCK_GRASS;
+                        printf("[console] Selected grass\n");
+                        add_chat_message("[console] Selected grass");
+                    } else if (strcmp(block_name, "sand") == 0) {
+                        target_player->selected_block = BLOCK_SAND;
+                        printf("[console] Selected sand\n");
+                        add_chat_message("[console] Selected sand");
+                    } else if (strcmp(block_name, "wood") == 0) {
+                        target_player->selected_block = BLOCK_WOOD;
+                        printf("[console] Selected wood\n");
+                        add_chat_message("[console] Selected wood");
+                    } else if (strcmp(block_name, "glowstone") == 0) {
+                        target_player->selected_block = BLOCK_GLOWSTONE;
+                        printf("[console] Selected glowstone\n");
+                        add_chat_message("[console] Selected glowstone");
+                    } else {
+                        printf("[console] Unknown block: %s\n", block_name);
+                    }
+                }
+                break;
 
-                case CMD_UNKNOWN:
-                    printf("[console] Unknown command: %s\n", console_cmd.raw_input);
-                    break;
+            case CMD_HELP:
+                printf("[console] Available commands:\n");
+                printf("  /tp <x> <y> <z>           - Teleport to coordinates\n");
+                printf("  /give <block> [count]      - Give items (stone, dirt, grass, sand, wood, glowstone)\n");
+                printf("  /select <block>            - Select block type\n");
+                printf("  /quit                      - Quit the game\n");
+                printf("  /help                      - Show this help message\n");
+                break;
 
-                default:
-                    printf("[console] Command not yet supported from console\n");
-                    break;
+            case CMD_UNKNOWN:
+                printf("[console] Unknown command: %s\n", console_cmd.raw_input);
+                break;
+
+            default:
+                printf("[console] Command not yet supported from console\n");
+                break;
             }
         }
 
@@ -714,9 +658,13 @@ int b3dv_main(int argc, char **argv)
             float new_pitch = camera_pitch - mouse_delta.y * mouse_speed;
 
             // Clamp pitch to very close to ±90 degrees (e.g., 89.9°)
-            float pitch_limit = 1.56905f;  // ~89.9 degrees in radians
-            if (new_pitch > pitch_limit) new_pitch = pitch_limit;
-            if (new_pitch < -pitch_limit) new_pitch = -pitch_limit;
+            float pitch_limit = 1.56905f; // ~89.9 degrees in radians
+            if (new_pitch > pitch_limit) {
+                new_pitch = pitch_limit;
+            }
+            if (new_pitch < -pitch_limit) {
+                new_pitch = -pitch_limit;
+            }
             camera_pitch = new_pitch;
 
             // Update yaw (horizontal rotation)
@@ -731,8 +679,7 @@ int b3dv_main(int argc, char **argv)
             Vector3 new_forward = (Vector3){
                 sin_yaw * cos_pitch,
                 sin_pitch,
-                cos_yaw * cos_pitch
-            };
+                cos_yaw * cos_pitch};
             new_forward = vec3_normalize(new_forward);
 
             // Store actual look direction
@@ -751,31 +698,73 @@ int b3dv_main(int argc, char **argv)
                 // Gimbal lock: compute right directly from current yaw
                 // right is perpendicular to world up, pointing in the direction of yaw
                 camera_right = (Vector3){cosf(camera_yaw), 0, -sinf(camera_yaw)};
-                camera_up = (Vector3){0, 1, 0};  // Keep world up
+                camera_up = (Vector3){0, 1, 0}; // Keep world up
             }
         }
 
-        // Movement should follow the camera's horizontal basis. Project the computed
-        // `camera_right` to the XZ plane and derive a horizontal forward from it.
-        // Movement should always be parallel to the XZ plane, regardless of pitch
-        // Invert right and forward to match standard FPS controls
-        Vector3 right = (Vector3){ -cosf(camera_yaw), 0.0f, sinf(camera_yaw) };
-        right = vec3_normalize(right);
-
-        Vector3 forward = (Vector3){ -sinf(camera_yaw), 0.0f, -cosf(camera_yaw) };
-        forward = vec3_normalize(forward);
-
-        // Update physics and world always (unless game is paused), even if chat is active
-        if (!paused) {
-            player_update(player, world, dt, flight_enabled);
-            // Pass current render distance (in blocks) so chunk loading scales with it
-            world_update_chunks(world, player->position, camera_forward, menu->render_distance);  // Load/unload chunks based on player position and camera direction
-            //clouds_update(clouds, player->position);  // Update cloud positions
+        // Movement should follow the camera's horizontal basis. Project the camera
+        // basis vectors onto the XZ plane so movement stays consistent even when
+        // looking up or down.
+        Vector3 right = camera_right;
+        right.y = 0.0f;
+        float right_len = sqrtf(right.x * right.x + right.z * right.z);
+        if (right_len < 1e-6f) {
+            right = (Vector3){-cosf(camera_yaw), 0.0f, sinf(camera_yaw)};
+        } else {
+            right.x /= right_len;
+            right.z /= right_len;
         }
 
-        // Handle player input only if chat is not active and inventory is not open
+        Vector3 forward = camera_forward;
+        forward.y = 0.0f;
+        float forward_len = sqrtf(forward.x * forward.x + forward.z * forward.z);
+        if (forward_len < 1e-6f) {
+            forward = (Vector3){-sinf(camera_yaw), 0.0f, -cosf(camera_yaw)};
+        } else {
+            forward.x /= forward_len;
+            forward.z /= forward_len;
+        }
+
+        // Handle player input first so the server tick receives the latest movement command.
         if (!paused && !chat_active && !inventory_is_big_open(player)) {
-            player_move_input(player, forward, right, flight_enabled);
+            PlayerInputCommand input_cmd = {0};
+            input_cmd.selected_slot = player->selected_slot;
+            input_cmd.shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+            input_cmd.sprint = IsKeyDown(KEY_LEFT_CONTROL);
+            input_cmd.jump = IsKeyDown(KEY_SPACE);
+            input_cmd.fly_toggle = IsKeyPressed(KEY_SPACE);
+
+            float move_speed = PLAYER_SPEED;
+            if (input_cmd.shift) {
+                move_speed *= 0.5f;
+            } else if (input_cmd.sprint) {
+                move_speed *= 1.5f;
+            }
+
+            Vector3 move = {0, 0, 0};
+            if (IsKeyDown(KEY_W)) {
+                move = vec3_add(move, vec3_scale(forward, move_speed));
+            }
+            if (IsKeyDown(KEY_S)) {
+                move = vec3_add(move, vec3_scale(forward, -move_speed));
+            }
+            if (IsKeyDown(KEY_D)) {
+                move = vec3_add(move, vec3_scale(right, move_speed));
+            }
+            if (IsKeyDown(KEY_A)) {
+                move = vec3_add(move, vec3_scale(right, -move_speed));
+            }
+
+            float move_len = sqrtf(move.x * move.x + move.z * move.z);
+            if (move_len > move_speed) {
+                float scale = move_speed / move_len;
+                move.x *= scale;
+                move.z *= scale;
+            }
+
+            input_cmd.move_x = move.x;
+            input_cmd.move_z = move.z;
+            game_server_submit_input(&game_server, player->uid, &input_cmd);
 
             // Handle block breaking (left click)
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -803,14 +792,13 @@ int b3dv_main(int argc, char **argv)
                         Vector3 block_center = (Vector3){
                             adj_x + 0.5f,
                             adj_y + 0.5f,
-                            adj_z + 0.5f
-                        };
+                            adj_z + 0.5f};
 
                         // Simple AABB collision check: block (1x1x1) vs player (radius 0.35 cylinder with height 1.9)
                         // Check if block center is within player's horizontal radius
                         float dx = player->position.x - block_center.x;
                         float dz = player->position.z - block_center.z;
-                        float horizontal_dist = sqrtf(dx*dx + dz*dz);
+                        float horizontal_dist = sqrtf(dx * dx + dz * dz);
 
                         // Check vertical overlap (player head at position.y, feet at position.y - PLAYER_HEIGHT)
                         float player_bottom = player->position.y - PLAYER_HEIGHT;
@@ -819,7 +807,7 @@ int b3dv_main(int argc, char **argv)
                         float block_top = adj_y + 1.0f;
 
                         bool vertical_overlap = (block_bottom < player_top && block_top > player_bottom);
-                        bool horizontal_overlap = (horizontal_dist < PLAYER_RADIUS + 0.5f);  // 0.5 is half block width
+                        bool horizontal_overlap = (horizontal_dist < PLAYER_RADIUS + 0.5f); // 0.5 is half block width
 
                         // Only place if it doesn't intersect with player
                         if (!(vertical_overlap && horizontal_overlap)) {
@@ -851,15 +839,33 @@ int b3dv_main(int argc, char **argv)
             }
 
             // Handle inventory slot selection (keys 1-9)
-            if (IsKeyPressed(KEY_ONE)) player->selected_slot = 0;
-            if (IsKeyPressed(KEY_TWO)) player->selected_slot = 1;
-            if (IsKeyPressed(KEY_THREE)) player->selected_slot = 2;
-            if (IsKeyPressed(KEY_FOUR)) player->selected_slot = 3;
-            if (IsKeyPressed(KEY_FIVE)) player->selected_slot = 4;
-            if (IsKeyPressed(KEY_SIX)) player->selected_slot = 5;
-            if (IsKeyPressed(KEY_SEVEN)) player->selected_slot = 6;
-            if (IsKeyPressed(KEY_EIGHT)) player->selected_slot = 7;
-            if (IsKeyPressed(KEY_NINE)) player->selected_slot = 8;
+            if (IsKeyPressed(KEY_ONE)) {
+                player->selected_slot = 0;
+            }
+            if (IsKeyPressed(KEY_TWO)) {
+                player->selected_slot = 1;
+            }
+            if (IsKeyPressed(KEY_THREE)) {
+                player->selected_slot = 2;
+            }
+            if (IsKeyPressed(KEY_FOUR)) {
+                player->selected_slot = 3;
+            }
+            if (IsKeyPressed(KEY_FIVE)) {
+                player->selected_slot = 4;
+            }
+            if (IsKeyPressed(KEY_SIX)) {
+                player->selected_slot = 5;
+            }
+            if (IsKeyPressed(KEY_SEVEN)) {
+                player->selected_slot = 6;
+            }
+            if (IsKeyPressed(KEY_EIGHT)) {
+                player->selected_slot = 7;
+            }
+            if (IsKeyPressed(KEY_NINE)) {
+                player->selected_slot = 8;
+            }
 
             // Handle big inventory toggle (I key)
             if (IsKeyPressed(KEY_I)) {
@@ -870,9 +876,22 @@ int b3dv_main(int argc, char **argv)
                     EnableCursor();
                 } else {
                     // Closed inventory: restore capture if gameplay expects it
-                    if (!paused && mouse_captured) DisableCursor();
+                    if (!paused && mouse_captured) {
+                        DisableCursor();
+                    }
                 }
             }
+        }
+
+        // Update physics and world always (unless game is paused), even if chat is active
+        if (!paused) {
+            game_server_set_interest(&game_server, player->position, camera_forward, menu->render_distance);
+            server_accumulator += dt;
+            while (server_accumulator >= SERVER_FIXED_DT) {
+                game_server_tick(&game_server, SERVER_FIXED_DT);
+                server_accumulator -= SERVER_FIXED_DT;
+            }
+            // clouds_update(clouds, player->position);  // Update cloud positions
         }
 
         // update camera to follow player (position it at eye level, slightly above center)
@@ -880,14 +899,12 @@ int b3dv_main(int argc, char **argv)
         camera.position = (Vector3){
             player->position.x,
             player->position.y + eye_height,
-            player->position.z
-        };
+            player->position.z};
         // Use the actual look direction for camera target (includes pitch)
         camera.target = (Vector3){
             player->position.x + camera_forward.x,
             player->position.y + eye_height + camera_forward.y,
-            player->position.z + camera_forward.z
-        };
+            player->position.z + camera_forward.z};
 
         // (mouse look handled earlier in the loop)
 
@@ -900,8 +917,7 @@ int b3dv_main(int argc, char **argv)
         Vector3 camera_offset = (Vector3){
             floorf(camera.position.x),
             0,
-            floorf(camera.position.z)
-        };
+            floorf(camera.position.z)};
 
         // Shift camera and target for rendering (only for graphics)
         camera.position.x -= camera_offset.x;
@@ -914,182 +930,188 @@ int b3dv_main(int argc, char **argv)
         // Use shifted camera position for visibility checks
         Vector3 shifted_cam_pos = camera.position;
 
-        int blocks_rendered = 0;  // Declared here so it's accessible after the if block
+        int blocks_rendered = 0; // Declared here so it's accessible after the if block
 
         BeginMode3D(camera);
-            // Use the actual camera orientation for rendering/frustum culling
-            Vector3 cam_forward = camera_forward;
-            Vector3 cam_right = camera_right;
+        // Use the actual camera orientation for rendering/frustum culling
+        Vector3 cam_forward = camera_forward;
+        Vector3 cam_right = camera_right;
 
-            // CRITICAL: Take a snapshot of chunk pointers while holding cache_mutex
-            // This prevents chunks from being unloaded during rendering
-            pthread_mutex_lock(&world->cache_mutex);
-            int chunk_count_snapshot = world->chunk_cache.chunk_count;
-            // Allocate temporary array for chunk pointers
-            Chunk** chunks_snapshot = (Chunk**)malloc(chunk_count_snapshot * sizeof(Chunk*));
-            for (int i = 0; i < chunk_count_snapshot; i++) {
-                chunks_snapshot[i] = &world->chunk_cache.chunks[i];
+        // CRITICAL: Take a snapshot of chunk pointers while holding cache_mutex
+        // This prevents chunks from being unloaded during rendering
+        pthread_mutex_lock(&world->cache_mutex);
+        int chunk_count_snapshot = world->chunk_cache.chunk_count;
+        // Allocate temporary array for chunk pointers
+        Chunk **chunks_snapshot = (Chunk **)malloc(chunk_count_snapshot * sizeof(Chunk *));
+        for (int i = 0; i < chunk_count_snapshot; i++) {
+            chunks_snapshot[i] = &world->chunk_cache.chunks[i];
+        }
+        pthread_mutex_unlock(&world->cache_mutex);
+
+        // draw all chunks and their blocks with frustum culling and face culling
+        for (int c = 0; c < chunk_count_snapshot; c++) {
+            Chunk *chunk = chunks_snapshot[c];
+
+            // Skip unloaded chunks
+            if (!chunk->loaded) {
+                continue;
             }
-            pthread_mutex_unlock(&world->cache_mutex);
 
-            // draw all chunks and their blocks with frustum culling and face culling
-            for (int c = 0; c < chunk_count_snapshot; c++) {
-                Chunk* chunk = chunks_snapshot[c];
+            // Skip chunks that haven't been generated yet
+            if (!chunk->generated) {
+                continue;
+            }
 
-                // Skip unloaded chunks
-                if (!chunk->loaded) continue;
+            // OPTIMIZATION: Iterate only through cached visible blocks instead of all blocks
+            // This is the main performance win - avoids triple-nested loop of 2048 blocks per chunk
+            // Lock chunk while accessing visible_blocks to avoid race with worker thread
+            pthread_mutex_lock(&chunk->mesh_swap_mutex);
 
-                // Skip chunks that haven't been generated yet
-                if (!chunk->generated) continue;
+            // Get active mesh buffer (updated by worker thread via double-buffer swap)
+            // Use atomic load with acquire semantics to ensure we see the latest update
+            int active = __atomic_load_n(&chunk->active_mesh, __ATOMIC_ACQUIRE);
 
-                // OPTIMIZATION: Iterate only through cached visible blocks instead of all blocks
-                // This is the main performance win - avoids triple-nested loop of 2048 blocks per chunk
-                // Lock chunk while accessing visible_blocks to avoid race with worker thread
-                pthread_mutex_lock(&chunk->mesh_swap_mutex);
-
-                // Get active mesh buffer (updated by worker thread via double-buffer swap)
-                // Use atomic load with acquire semantics to ensure we see the latest update
-                int active = __atomic_load_n(&chunk->active_mesh, __ATOMIC_ACQUIRE);
-
-                // Safety checks after locking
-                // Render even if worker is updating - we see consistent data from active buffer
-                // to prevent use-after-free if worker thread updates the other buffer
-                int visible_count = chunk->visible_count[active];
-                CachedVisibleBlock* visible_blocks_copy = (CachedVisibleBlock*)malloc(visible_count * sizeof(CachedVisibleBlock));
-                if (!visible_blocks_copy) {
-                    pthread_mutex_unlock(&chunk->mesh_swap_mutex);
-                    continue;
-                }
-
-                // CRITICAL: Hold lock during memcpy to prevent another thread from updating
-                // chunk->visible_blocks[active] or visible_count[active] while we're copying
-                // This prevents reading beyond buffer bounds or using freed memory
-                if (chunk->visible_blocks[active] != NULL && visible_count > 0) {
-                    memcpy(visible_blocks_copy, chunk->visible_blocks[active], visible_count * sizeof(CachedVisibleBlock));
-                } else {
-                    // Buffer not ready yet, skip rendering this chunk
-                    free(visible_blocks_copy);
-                    pthread_mutex_unlock(&chunk->mesh_swap_mutex);
-                    continue;
-                }
-
+            // Safety checks after locking
+            // Render even if worker is updating - we see consistent data from active buffer
+            // to prevent use-after-free if worker thread updates the other buffer
+            int visible_count = chunk->visible_count[active];
+            CachedVisibleBlock *visible_blocks_copy = (CachedVisibleBlock *)malloc(visible_count * sizeof(CachedVisibleBlock));
+            if (!visible_blocks_copy) {
                 pthread_mutex_unlock(&chunk->mesh_swap_mutex);
+                continue;
+            }
 
-                // Render blocks with the copied data (no lock held)
-                // Pre-compute render distance thresholds for LOD
-                float aggressive_lod_dist = menu->render_distance * 0.75f;
-                float aggressive_lod_dist_sq = aggressive_lod_dist * aggressive_lod_dist;
-                float render_dist_sq = menu->render_distance * menu->render_distance;
-
-                for (int i = 0; i < visible_count; i++) {
-                    int x = visible_blocks_copy[i].x;
-                    int y = visible_blocks_copy[i].y;
-                    int z = visible_blocks_copy[i].z;
-                    BlockType block = world_chunk_get_block(chunk, x, y, z);
-
-                    // Calculate world coordinates
-                    int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
-                    int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
-                    int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
-
-                                Vector3 world_pos = (Vector3){
-                                    world_x + 0.5f - camera_offset.x,
-                                    world_y + 0.5f - camera_offset.y,
-                                    world_z + 0.5f - camera_offset.z
-                                };
-                                // distance-based LOD: use squared distance to avoid sqrt
-                                Vector3 to_block = vec3_sub(world_pos, shifted_cam_pos);
-                                float dist_sq = to_block.x*to_block.x + to_block.y*to_block.y + to_block.z*to_block.z;
-
-                                // hard render distance limit
-                                if (dist_sq > render_dist_sq) {
-                                    continue;
-                                }
-
-                                // AGGRESSIVE LOD: Skip blocks beyond 75% of render distance
-                                // This culls ~60% of blocks while maintaining visual quality
-                                // Blocks at render_distance are mostly fog-shrouded anyway
-                                if (dist_sq > aggressive_lod_dist_sq) {
-                                    continue;
-                                }
-
-                                // OPTIMIZATION: Skip is_block_visible_fast() - chunk frustum culling is sufficient
-                                // OPTIMIZATION: Skip is_block_occluded() - visible_blocks cache already filters these
-
-                                float dist = sqrtf(dist_sq);  // Only calc sqrt if we're actually rendering
-                                Color color = world_get_block_color(block);
-
-                                // apply fog effect: fade color towards sky blue based on distance
-                                float fog_factor = 0.0f;
-                                float fog_start = menu->render_distance * 0.6f;  // Fog starts at 60% of render distance
-                                if (dist > fog_start) {
-                                    fog_factor = (dist - fog_start) / (menu->render_distance - fog_start);
-                                    fog_factor = fog_factor > 1.0f ? 1.0f : fog_factor;  // Clamp to 0-1
-
-                                    // blend color towards sky blue
-                                    color.r = (unsigned char)(color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
-                                    color.g = (unsigned char)(color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);
-                                    color.b = (unsigned char)(color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
-                                }
-
-                                // apply fog to wireframe too
-                                Color wire_color = DARKGRAY;
-                                if (fog_factor > 0.0f) {
-                                    wire_color.r = (unsigned char)(wire_color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
-                                    wire_color.g = (unsigned char)(wire_color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);
-                                    wire_color.b = (unsigned char)(wire_color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
-                                    wire_color.a = (unsigned char)(255 * (1.0f - fog_factor));  // Fade out alpha too
-                                }
-                        // draw only visible faces
-                        draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, visible_blocks_copy[i].face_light, show_wireframe);
-
-                        blocks_rendered++;
-                    }
-
-                // Free the temporary copy
+            // CRITICAL: Hold lock during memcpy to prevent another thread from updating
+            // chunk->visible_blocks[active] or visible_count[active] while we're copying
+            // This prevents reading beyond buffer bounds or using freed memory
+            if (chunk->visible_blocks[active] != NULL && visible_count > 0) {
+                memcpy(visible_blocks_copy, chunk->visible_blocks[active], visible_count * sizeof(CachedVisibleBlock));
+            } else {
+                // Buffer not ready yet, skip rendering this chunk
                 free(visible_blocks_copy);
+                pthread_mutex_unlock(&chunk->mesh_swap_mutex);
+                continue;
             }
 
-            // Draw highlighting box around the block being looked at
-            if (has_highlighted_block) {
-                Vector3 block_pos = (Vector3){
-                    highlighted_block_x + 0.5f - camera_offset.x,
-                    highlighted_block_y + 0.5f - camera_offset.y,
-                    highlighted_block_z + 0.5f - camera_offset.z
-                };
-                DrawCubeWires(block_pos, 1.0f, 1.0f, 1.0f, YELLOW);
-            }
-            DrawGrid(30, 1.0f);
+            pthread_mutex_unlock(&chunk->mesh_swap_mutex);
 
-            if (show_chunk_borders) {
-                Color border_color = (Color){255, 255, 0, 150};
-                Color fill_color = (Color){255, 255, 0, 45};
+            // Render blocks with the copied data (no lock held)
+            // Pre-compute render distance thresholds for LOD
+            float aggressive_lod_dist = menu->render_distance * 0.75f;
+            float aggressive_lod_dist_sq = aggressive_lod_dist * aggressive_lod_dist;
+            float render_dist_sq = menu->render_distance * menu->render_distance;
 
-                int player_chunk_x = (int)floorf(original_camera_pos.x / CHUNK_WIDTH);
-                int player_chunk_z = (int)floorf(original_camera_pos.z / CHUNK_DEPTH);
+            for (int i = 0; i < visible_count; i++) {
+                int x = visible_blocks_copy[i].x;
+                int y = visible_blocks_copy[i].y;
+                int z = visible_blocks_copy[i].z;
+                BlockType block = world_chunk_get_block(chunk, x, y, z);
 
-                for (int c = 0; c < chunk_count_snapshot; c++) {
-                    Chunk* chunk = chunks_snapshot[c];
-                    if (!chunk->loaded || !chunk->generated) continue;
-                    if (chunk->chunk_x < player_chunk_x - 1 || chunk->chunk_x > player_chunk_x + 1) continue;
-                    if (chunk->chunk_z < player_chunk_z - 1 || chunk->chunk_z > player_chunk_z + 1) continue;
+                // Calculate world coordinates
+                int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+                int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
+                int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
 
-                    Vector3 chunk_min = (Vector3){
-                        chunk->chunk_x * CHUNK_WIDTH - camera_offset.x,
-                        chunk->chunk_y * CHUNK_HEIGHT - camera_offset.y,
-                        chunk->chunk_z * CHUNK_DEPTH - camera_offset.z
-                    };
-                    Vector3 chunk_center = (Vector3){
-                        chunk_min.x + CHUNK_WIDTH * 0.5f,
-                        chunk_min.y + CHUNK_HEIGHT * 0.5f,
-                        chunk_min.z + CHUNK_DEPTH * 0.5f
-                    };
+                Vector3 world_pos = (Vector3){
+                    world_x + 0.5f - camera_offset.x,
+                    world_y + 0.5f - camera_offset.y,
+                    world_z + 0.5f - camera_offset.z};
+                // distance-based LOD: use squared distance to avoid sqrt
+                Vector3 to_block = vec3_sub(world_pos, shifted_cam_pos);
+                float dist_sq = to_block.x * to_block.x + to_block.y * to_block.y + to_block.z * to_block.z;
 
-                    // Draw translucent faces to show full chunk bounds
-                    DrawCube(chunk_center, (float)CHUNK_WIDTH, (float)CHUNK_HEIGHT, (float)CHUNK_DEPTH, fill_color);
-                    DrawCubeWires(chunk_center, (float)CHUNK_WIDTH, (float)CHUNK_HEIGHT, (float)CHUNK_DEPTH, border_color);
+                // hard render distance limit
+                if (dist_sq > render_dist_sq) {
+                    continue;
                 }
+
+                // AGGRESSIVE LOD: Skip blocks beyond 75% of render distance
+                // This culls ~60% of blocks while maintaining visual quality
+                // Blocks at render_distance are mostly fog-shrouded anyway
+                if (dist_sq > aggressive_lod_dist_sq) {
+                    continue;
+                }
+
+                // OPTIMIZATION: Skip is_block_visible_fast() - chunk frustum culling is sufficient
+                // OPTIMIZATION: Skip is_block_occluded() - visible_blocks cache already filters these
+
+                float dist = sqrtf(dist_sq); // Only calc sqrt if we're actually rendering
+                Color color = world_get_block_color(block);
+
+                // apply fog effect: fade color towards sky blue based on distance
+                float fog_factor = 0.0f;
+                float fog_start = menu->render_distance * 0.6f; // Fog starts at 60% of render distance
+                if (dist > fog_start) {
+                    fog_factor = (dist - fog_start) / (menu->render_distance - fog_start);
+                    fog_factor = fog_factor > 1.0f ? 1.0f : fog_factor; // Clamp to 0-1
+
+                    // blend color towards sky blue
+                    color.r = (unsigned char)(color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
+                    color.g = (unsigned char)(color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);
+                    color.b = (unsigned char)(color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
+                }
+
+                // apply fog to wireframe too
+                Color wire_color = DARKGRAY;
+                if (fog_factor > 0.0f) {
+                    wire_color.r = (unsigned char)(wire_color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
+                    wire_color.g = (unsigned char)(wire_color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);
+                    wire_color.b = (unsigned char)(wire_color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
+                    wire_color.a = (unsigned char)(255 * (1.0f - fog_factor)); // Fade out alpha too
+                }
+                // draw only visible faces
+                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, visible_blocks_copy[i].face_light, show_wireframe);
+
+                blocks_rendered++;
             }
+
+            // Free the temporary copy
+            free(visible_blocks_copy);
+        }
+
+        // Draw highlighting box around the block being looked at
+        if (has_highlighted_block) {
+            Vector3 block_pos = (Vector3){
+                highlighted_block_x + 0.5f - camera_offset.x,
+                highlighted_block_y + 0.5f - camera_offset.y,
+                highlighted_block_z + 0.5f - camera_offset.z};
+            DrawCubeWires(block_pos, 1.0f, 1.0f, 1.0f, YELLOW);
+        }
+        DrawGrid(30, 1.0f);
+
+        if (show_chunk_borders) {
+            Color border_color = (Color){255, 255, 0, 150};
+            Color fill_color = (Color){255, 255, 0, 45};
+
+            int player_chunk_x = (int)floorf(original_camera_pos.x / CHUNK_WIDTH);
+            int player_chunk_z = (int)floorf(original_camera_pos.z / CHUNK_DEPTH);
+
+            for (int c = 0; c < chunk_count_snapshot; c++) {
+                Chunk *chunk = chunks_snapshot[c];
+                if (!chunk->loaded || !chunk->generated) {
+                    continue;
+                }
+                if (chunk->chunk_x < player_chunk_x - 1 || chunk->chunk_x > player_chunk_x + 1) {
+                    continue;
+                }
+                if (chunk->chunk_z < player_chunk_z - 1 || chunk->chunk_z > player_chunk_z + 1) {
+                    continue;
+                }
+
+                Vector3 chunk_min = (Vector3){
+                    chunk->chunk_x * CHUNK_WIDTH - camera_offset.x,
+                    chunk->chunk_y * CHUNK_HEIGHT - camera_offset.y,
+                    chunk->chunk_z * CHUNK_DEPTH - camera_offset.z};
+                Vector3 chunk_center = (Vector3){
+                    chunk_min.x + CHUNK_WIDTH * 0.5f,
+                    chunk_min.y + CHUNK_HEIGHT * 0.5f,
+                    chunk_min.z + CHUNK_DEPTH * 0.5f};
+
+                // Draw translucent faces to show full chunk bounds
+                DrawCube(chunk_center, (float)CHUNK_WIDTH, (float)CHUNK_HEIGHT, (float)CHUNK_DEPTH, fill_color);
+                DrawCubeWires(chunk_center, (float)CHUNK_WIDTH, (float)CHUNK_HEIGHT, (float)CHUNK_DEPTH, border_color);
+            }
+        }
 #if 0
             // Draw clouds (sync with menu settings)
             if (clouds) {
@@ -1142,7 +1164,7 @@ int b3dv_main(int argc, char **argv)
                 // Slot background
                 Color slot_bg = (Color){80, 80, 80, 200};
                 if (i == player->selected_slot) {
-                    slot_bg = (Color){100, 100, 100, 255};  // Highlight selected slot
+                    slot_bg = (Color){100, 100, 100, 255}; // Highlight selected slot
                 }
                 DrawRectangle(x, y, slot_size, slot_size, slot_bg);
 
@@ -1151,24 +1173,40 @@ int b3dv_main(int argc, char **argv)
                 DrawRectangleLines(x, y, slot_size, slot_size, border_color);
 
                 // Draw block indicator (colored square representing block type)
-                InventorySlot* slot = &player->inventory[i];
+                InventorySlot *slot = &player->inventory[i];
                 if (slot->count > 0) {
                     // Map block type to color
                     Color block_color;
                     switch (slot->type) {
-                        case BLOCK_STONE: block_color = (Color){128, 128, 128, 255}; break;
-                        case BLOCK_DIRT: block_color = (Color){139, 69, 19, 255}; break;
-                        case BLOCK_GRASS: block_color = (Color){34, 139, 34, 255}; break;
-                        case BLOCK_SAND: block_color = (Color){194, 178, 128, 255}; break;
-                        case BLOCK_WOOD: block_color = (Color){139, 90, 43, 255}; break;
-                        case BLOCK_BEDROCK: block_color = (Color){64, 64, 64, 255}; break;
-                        case BLOCK_GLOWSTONE: block_color = (Color){255, 255, 0, 255}; break;
-                        default: block_color = (Color){200, 200, 200, 255}; break;
+                    case BLOCK_STONE:
+                        block_color = (Color){128, 128, 128, 255};
+                        break;
+                    case BLOCK_DIRT:
+                        block_color = (Color){139, 69, 19, 255};
+                        break;
+                    case BLOCK_GRASS:
+                        block_color = (Color){34, 139, 34, 255};
+                        break;
+                    case BLOCK_SAND:
+                        block_color = (Color){194, 178, 128, 255};
+                        break;
+                    case BLOCK_WOOD:
+                        block_color = (Color){139, 90, 43, 255};
+                        break;
+                    case BLOCK_BEDROCK:
+                        block_color = (Color){64, 64, 64, 255};
+                        break;
+                    case BLOCK_GLOWSTONE:
+                        block_color = (Color){255, 255, 0, 255};
+                        break;
+                    default:
+                        block_color = (Color){200, 200, 200, 255};
+                        break;
                     }
 
                     // Draw colored block indicator (smaller than slot)
                     int block_indent = 10;
-                    DrawRectangle(x + block_indent, y + block_indent, slot_size - 2*block_indent, slot_size - 2*block_indent, block_color);
+                    DrawRectangle(x + block_indent, y + block_indent, slot_size - 2 * block_indent, slot_size - 2 * block_indent, block_color);
 
                     // Draw item count
                     char count_str[8];
@@ -1190,7 +1228,7 @@ int b3dv_main(int argc, char **argv)
             int slot_size = 40;
             int slot_spacing = 4;
             int inv_width = BIG_INVENTORY_COLS * slot_size + (BIG_INVENTORY_COLS - 1) * slot_spacing;
-            int inv_height = (BIG_INVENTORY_ROWS + 1) * slot_size + (BIG_INVENTORY_ROWS) * slot_spacing;
+            int inv_height = (BIG_INVENTORY_ROWS + 1) * slot_size + (BIG_INVENTORY_ROWS)*slot_spacing;
             int inv_x = (GetScreenWidth() - inv_width) / 2;
             int inv_y = (GetScreenHeight() - inv_height) / 2;
 
@@ -1213,22 +1251,38 @@ int b3dv_main(int argc, char **argv)
                     DrawRectangleLines(x, y, slot_size, slot_size, (Color){100, 100, 100, 255});
 
                     // Draw block indicator
-                    InventorySlot* slot = &player->big_inventory[idx];
+                    InventorySlot *slot = &player->big_inventory[idx];
                     if (slot->count > 0) {
                         Color block_color;
                         switch (slot->type) {
-                            case BLOCK_STONE: block_color = (Color){128, 128, 128, 255}; break;
-                            case BLOCK_DIRT: block_color = (Color){139, 69, 19, 255}; break;
-                            case BLOCK_GRASS: block_color = (Color){34, 139, 34, 255}; break;
-                            case BLOCK_SAND: block_color = (Color){194, 178, 128, 255}; break;
-                            case BLOCK_WOOD: block_color = (Color){139, 90, 43, 255}; break;
-                            case BLOCK_BEDROCK: block_color = (Color){64, 64, 64, 255}; break;
-                            case BLOCK_GLOWSTONE: block_color = (Color){255, 255, 0, 255}; break;
-                            default: block_color = (Color){200, 200, 200, 255}; break;
+                        case BLOCK_STONE:
+                            block_color = (Color){128, 128, 128, 255};
+                            break;
+                        case BLOCK_DIRT:
+                            block_color = (Color){139, 69, 19, 255};
+                            break;
+                        case BLOCK_GRASS:
+                            block_color = (Color){34, 139, 34, 255};
+                            break;
+                        case BLOCK_SAND:
+                            block_color = (Color){194, 178, 128, 255};
+                            break;
+                        case BLOCK_WOOD:
+                            block_color = (Color){139, 90, 43, 255};
+                            break;
+                        case BLOCK_BEDROCK:
+                            block_color = (Color){64, 64, 64, 255};
+                            break;
+                        case BLOCK_GLOWSTONE:
+                            block_color = (Color){255, 255, 0, 255};
+                            break;
+                        default:
+                            block_color = (Color){200, 200, 200, 255};
+                            break;
                         }
 
                         int block_indent = 8;
-                        DrawRectangle(x + block_indent, y + block_indent, slot_size - 2*block_indent, slot_size - 2*block_indent, block_color);
+                        DrawRectangle(x + block_indent, y + block_indent, slot_size - 2 * block_indent, slot_size - 2 * block_indent, block_color);
 
                         // Draw item count
                         char count_str[8];
@@ -1239,7 +1293,7 @@ int b3dv_main(int argc, char **argv)
                     }
                     // Handle mouse interaction for big inventory
                     Vector2 mouse_pos = GetMousePosition();
-                    Rectangle slot_rect = (Rectangle){ (float)x, (float)y, (float)slot_size, (float)slot_size };
+                    Rectangle slot_rect = (Rectangle){(float)x, (float)y, (float)slot_size, (float)slot_size};
                     if (CheckCollisionPointRec(mouse_pos, slot_rect)) {
                         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                             // Click handling: pick up or place
@@ -1299,22 +1353,38 @@ int b3dv_main(int argc, char **argv)
                 DrawRectangleLines(x, y, slot_size, slot_size, border_color);
 
                 // Draw block indicator
-                InventorySlot* slot = &player->inventory[i];
+                InventorySlot *slot = &player->inventory[i];
                 if (slot->count > 0) {
                     Color block_color;
                     switch (slot->type) {
-                        case BLOCK_STONE: block_color = (Color){128, 128, 128, 255}; break;
-                        case BLOCK_DIRT: block_color = (Color){139, 69, 19, 255}; break;
-                        case BLOCK_GRASS: block_color = (Color){34, 139, 34, 255}; break;
-                        case BLOCK_SAND: block_color = (Color){194, 178, 128, 255}; break;
-                        case BLOCK_WOOD: block_color = (Color){139, 90, 43, 255}; break;
-                        case BLOCK_BEDROCK: block_color = (Color){64, 64, 64, 255}; break;
-                        case BLOCK_GLOWSTONE: block_color = (Color){255, 255, 0, 255}; break;
-                        default: block_color = (Color){200, 200, 200, 255}; break;
+                    case BLOCK_STONE:
+                        block_color = (Color){128, 128, 128, 255};
+                        break;
+                    case BLOCK_DIRT:
+                        block_color = (Color){139, 69, 19, 255};
+                        break;
+                    case BLOCK_GRASS:
+                        block_color = (Color){34, 139, 34, 255};
+                        break;
+                    case BLOCK_SAND:
+                        block_color = (Color){194, 178, 128, 255};
+                        break;
+                    case BLOCK_WOOD:
+                        block_color = (Color){139, 90, 43, 255};
+                        break;
+                    case BLOCK_BEDROCK:
+                        block_color = (Color){64, 64, 64, 255};
+                        break;
+                    case BLOCK_GLOWSTONE:
+                        block_color = (Color){255, 255, 0, 255};
+                        break;
+                    default:
+                        block_color = (Color){200, 200, 200, 255};
+                        break;
                     }
 
                     int block_indent = 8;
-                    DrawRectangle(x + block_indent, y + block_indent, slot_size - 2*block_indent, slot_size - 2*block_indent, block_color);
+                    DrawRectangle(x + block_indent, y + block_indent, slot_size - 2 * block_indent, slot_size - 2 * block_indent, block_color);
 
                     // Draw item count
                     char count_str[8];
@@ -1336,8 +1406,8 @@ int b3dv_main(int argc, char **argv)
                 for (int i = 0; i < INVENTORY_SIZE; i++) {
                     int x = inv_x + i * (slot_size + slot_spacing);
                     int y = hotbar_y;
-                    Rectangle slot_rect = (Rectangle){ (float)x, (float)y, (float)slot_size, (float)slot_size };
-                    InventorySlot* slot = &player->inventory[i];
+                    Rectangle slot_rect = (Rectangle){(float)x, (float)y, (float)slot_size, (float)slot_size};
+                    InventorySlot *slot = &player->inventory[i];
                     if (CheckCollisionPointRec(mouse_pos, slot_rect) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                         if (!player->holding_item) {
                             if (slot->count > 0) {
@@ -1421,7 +1491,7 @@ int b3dv_main(int argc, char **argv)
                      player->position.x, player->position.y, player->position.z);
             DrawTextExCustom(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.20-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.22-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 2) {
             // player stats HUD
             DrawTextExCustom(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1440,7 +1510,7 @@ int b3dv_main(int argc, char **argv)
             float dx = player->position.x - player->prev_position.x;
             float dy = player->position.y - player->prev_position.y;
             float dz = player->position.z - player->prev_position.z;
-            float actual_speed = sqrtf(dx*dx + dy*dy + dz*dz) / dt;
+            float actual_speed = sqrtf(dx * dx + dy * dy + dz * dz) / dt;
             char speed_text[64];
             snprintf(speed_text, sizeof(speed_text), "Speed: %.2f m/s", actual_speed);
             DrawTextExCustom(custom_font, speed_text, (Vector2){10, 130}, 32, 1, BLACK);
@@ -1451,14 +1521,14 @@ int b3dv_main(int argc, char **argv)
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextExCustom(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.20-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.22-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextExCustom(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextExCustom(custom_font, "b3dv 0.0.20-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.22-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         if (hud_visible && menu->compass_enabled) {
@@ -1467,22 +1537,24 @@ int b3dv_main(int argc, char **argv)
 
         // Draw chat message history (last few messages with fade-out)
         double current_time = GetTime();
-        double message_lifetime = 5.0;  // Messages stay for 5 seconds
+        double message_lifetime = 5.0; // Messages stay for 5 seconds
         int screen_height = GetScreenHeight();
-        int message_start_y = screen_height - 200;  // Start drawing messages from bottom-left
+        int message_start_y = screen_height - 200; // Start drawing messages from bottom-left
         int messages_shown = 0;
 
         for (int i = 0; i < CHAT_MESSAGE_BUFFER_SIZE && messages_shown < 5; i++) {
             // Find the most recent messages (iterate backwards)
             int msg_index = (chat_message_count - 1 - i) % CHAT_MESSAGE_BUFFER_SIZE;
-            if (i >= chat_message_count) break;  // Don't show messages that haven't been set yet
+            if (i >= chat_message_count) {
+                break; // Don't show messages that haven't been set yet
+            }
 
             double message_age = current_time - chat_message_times[msg_index];
             if (message_age < message_lifetime && strlen(chat_messages[msg_index]) > 0) {
                 // Calculate fade: full opacity for first 4 seconds, fade out in last 1 second
                 float fade_factor = 1.0f;
                 if (message_age > 4.0) {
-                    fade_factor = 1.0f - (message_age - 4.0f);  // Fade over last 1 second
+                    fade_factor = 1.0f - (message_age - 4.0f); // Fade over last 1 second
                     fade_factor = fade_factor < 0 ? 0 : fade_factor;
                 }
 
@@ -1506,8 +1578,8 @@ int b3dv_main(int argc, char **argv)
                 // Draw title
                 Vector2 title_size = MeasureTextEx(custom_font, menu->game_text.settings, 64, 2);
                 DrawTextExCustom(custom_font, menu->game_text.settings,
-                           (Vector2){(screen_width - title_size.x) / 2, 40},
-                           64, 2, WHITE);
+                                 (Vector2){(screen_width - title_size.x) / 2, 40},
+                                 64, 2, WHITE);
 
                 // Settings panel
                 int panel_width = 700;
@@ -1578,7 +1650,7 @@ int b3dv_main(int argc, char **argv)
                 // Calculate FPS slider knob position (30-240, or 0 for uncapped)
                 float fps_normalized;
                 if (menu->max_fps == 0) {
-                    fps_normalized = 1.0f;  // Show at the right end when uncapped
+                    fps_normalized = 1.0f; // Show at the right end when uncapped
                 } else {
                     fps_normalized = (menu->max_fps - 30) / (240.0f - 30);
                     fps_normalized = fps_normalized < 0 ? 0 : (fps_normalized > 1 ? 1 : fps_normalized);
@@ -1596,10 +1668,12 @@ int b3dv_main(int argc, char **argv)
                     float new_pos = (mouse_pos.x - slider_x) / slider_width;
                     new_pos = new_pos < 0 ? 0 : (new_pos > 1 ? 1 : new_pos);
                     if (new_pos >= 0.95f) {
-                        menu->max_fps = 0;  // 0 means uncapped
+                        menu->max_fps = 0; // 0 means uncapped
                     } else {
                         menu->max_fps = (int)(30 + (new_pos * (240 - 30)));
-                        if (menu->max_fps < 30) menu->max_fps = 30;
+                        if (menu->max_fps < 30) {
+                            menu->max_fps = 30;
+                        }
                     }
                     menu_save_settings(menu);
                 }
@@ -1613,15 +1687,14 @@ int b3dv_main(int argc, char **argv)
                     (float)nickname_box_x,
                     (float)nickname_y,
                     (float)nickname_box_width,
-                    (float)nickname_box_height
-                };
+                    (float)nickname_box_height};
 
                 DrawTextExCustom(custom_font, "Nickname:", (Vector2){panel_x + 30, nickname_y - 35}, 24, 1, WHITE);
                 DrawRectangleRec(nickname_box, (Color){60, 60, 60, 255});
                 DrawRectangleLinesEx(nickname_box, 2, menu->nickname_edit_active ? YELLOW : WHITE);
                 DrawTextExCustom(custom_font, menu->nickname,
-                           (Vector2){nickname_box.x + 10, nickname_box.y + 8},
-                           24, 1, WHITE);
+                                 (Vector2){nickname_box.x + 10, nickname_box.y + 8},
+                                 24, 1, WHITE);
 
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     if (CheckCollisionPointRec(mouse_pos, nickname_box)) {
@@ -1717,14 +1790,13 @@ int b3dv_main(int argc, char **argv)
                 // Back button to return to pause menu
                 int button_width = 450;
                 int button_height = 60;
-                int button_y = nickname_y + 150;  // Adjusted position since cloud UI is now disabled
+                int button_y = nickname_y + 150; // Adjusted position since cloud UI is now disabled
 
                 Rectangle back_button = {
                     ((float)screen_width - (float)button_width) / 2.0f,
                     (float)button_y,
                     (float)button_width,
-                    (float)button_height
-                };
+                    (float)button_height};
 
                 bool back_hover = CheckCollisionPointRec(mouse_pos, back_button);
 
@@ -1732,8 +1804,8 @@ int b3dv_main(int argc, char **argv)
                 DrawRectangleLinesEx(back_button, 2, WHITE);
                 Vector2 back_text_size = MeasureTextEx(custom_font, menu->text_back, 32, 1);
                 DrawTextExCustom(custom_font, menu->text_back,
-                           (Vector2){((float)screen_width / 2.0f) - (back_text_size.x / 2.0f), (float)button_y + 12.0f},
-                           32, 1, BLACK);
+                                 (Vector2){((float)screen_width / 2.0f) - (back_text_size.x / 2.0f), (float)button_y + 12.0f},
+                                 32, 1, BLACK);
 
                 // Handle back button
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && back_hover) {
@@ -1758,8 +1830,8 @@ int b3dv_main(int argc, char **argv)
 
                 // draw title
                 DrawTextExCustom(custom_font, menu->game_text.paused,
-                           (Vector2){((float)screen_width - paused_size.x) / 2.0f, (float)screen_height / 2.0f - 120.0f},
-                           64, 2, /*RED*/WHITE);
+                                 (Vector2){((float)screen_width - paused_size.x) / 2.0f, (float)screen_height / 2.0f - 120.0f},
+                                 64, 2, /*RED*/ WHITE);
 
                 // button dimensions
                 int button_width = 450;
@@ -1773,24 +1845,21 @@ int b3dv_main(int argc, char **argv)
                     ((float)center_x - (float)button_width / 2.0f),
                     (float)center_y,
                     (float)button_width,
-                    (float)button_height
-                };
+                    (float)button_height};
 
                 // settings button
                 Rectangle settings_button = {
                     ((float)center_x - (float)button_width / 2.0f),
                     (float)(center_y + button_height + button_spacing),
                     (float)button_width,
-                    (float)button_height
-                };
+                    (float)button_height};
 
                 // quit button
                 Rectangle quit_button = {
                     ((float)center_x - (float)button_width / 2.0f),
                     (float)(center_y + 2 * (button_height + button_spacing)),
                     (float)button_width,
-                    (float)button_height
-                };
+                    (float)button_height};
 
                 // get mouse position
                 Vector2 mouse_pos = GetMousePosition();
@@ -1803,24 +1872,24 @@ int b3dv_main(int argc, char **argv)
                 DrawRectangleLinesEx(resume_button, 2, WHITE);
                 Vector2 resume_text_size = MeasureTextEx(custom_font, menu->game_text.resume, 32, 1);
                 DrawTextExCustom(custom_font, menu->game_text.resume,
-                           (Vector2){center_x - resume_text_size.x / 2, center_y + 12},
-                           32, 1, BLACK);
+                                 (Vector2){center_x - resume_text_size.x / 2, center_y + 12},
+                                 32, 1, BLACK);
 
                 // draw settings button
                 DrawRectangleRec(settings_button, settings_hover ? LIGHTGRAY : GRAY);
                 DrawRectangleLinesEx(settings_button, 2, WHITE);
                 Vector2 settings_text_size = MeasureTextEx(custom_font, menu->game_text.settings, 32, 1);
                 DrawTextExCustom(custom_font, menu->game_text.settings,
-                           (Vector2){center_x - settings_text_size.x / 2, center_y + button_height + button_spacing + 12},
-                           32, 1, BLACK);
+                                 (Vector2){center_x - settings_text_size.x / 2, center_y + button_height + button_spacing + 12},
+                                 32, 1, BLACK);
 
                 // draw quit button
                 DrawRectangleRec(quit_button, quit_hover ? LIGHTGRAY : GRAY);
                 DrawRectangleLinesEx(quit_button, 2, WHITE);
                 Vector2 quit_text_size = MeasureTextEx(custom_font, menu->game_text.back_to_menu, 32, 1);
                 DrawTextExCustom(custom_font, menu->game_text.back_to_menu,
-                           (Vector2){center_x - quit_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 12},
-                           32, 1, BLACK);
+                                 (Vector2){center_x - quit_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 12},
+                                 32, 1, BLACK);
 
                 // handle button clicks
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
@@ -1845,11 +1914,11 @@ int b3dv_main(int argc, char **argv)
                         world_unload_textures(world);
                         world_free(world);
                         player_free(player);
-                        //clouds_free(clouds);
+                        // clouds_free(clouds);
                         world = NULL;
                         player = NULL;
-                        //clouds = NULL;
-                        // Release mouse
+                        // clouds = NULL;
+                        //  Release mouse
                         mouse_captured = false;
                         EnableCursor();
                     }
@@ -1885,7 +1954,7 @@ int b3dv_main(int argc, char **argv)
 
                 Vector2 cursor_pos = MeasureTextEx(custom_font, display_before, 28, 1);
                 DrawLineEx((Vector2){20 + cursor_pos.x, chat_box_y + 8},
-                          (Vector2){20 + cursor_pos.x, chat_box_y + 38}, 2, WHITE);
+                           (Vector2){20 + cursor_pos.x, chat_box_y + 38}, 2, WHITE);
             }
         }
 
@@ -1905,13 +1974,17 @@ int b3dv_main(int argc, char **argv)
     menu_system_free(menu);
 
     UnloadFont(custom_font);
-    if (player) player_free(player);
-    //if (clouds) clouds_free(clouds);
+    if (player) {
+        player_free(player);
+    }
+    // if (clouds) clouds_free(clouds);
     if (world) {
-        world_unload_textures(world);  // Unload textures before closing
+        world_unload_textures(world); // Unload textures before closing
         world_free(world);
     }
-    if (sdf_shader.id != 0) UnloadShader(sdf_shader);
+    if (sdf_shader.id != 0) {
+        UnloadShader(sdf_shader);
+    }
 
     // Shutdown console input system
     console_shutdown();

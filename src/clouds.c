@@ -1,9 +1,9 @@
 #if 0
-#include <math.h>
-#include <stdlib.h>
 #include "clouds.h"
 #include "rlgl.h"
 #include <GL/gl.h>
+#include <math.h>
+#include <stdlib.h>
 
 static float fract(float x) {
     return x - floorf(x);

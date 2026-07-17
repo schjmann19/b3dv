@@ -1,9 +1,9 @@
 #define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200809L
-#include <stdlib.h>
-#include <stdio.h>
-#include <time.h>
 #include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 #ifdef __linux__
 #include <sched.h>
@@ -11,10 +11,9 @@
 #include "world.h"
 
 // Worker thread main function - processes chunks for lighting and meshing
-static void* worker_thread_main(void* arg)
-{
-    World* world = (World*)arg;
-    WorkerQueue* queue = &world->worker_queue;
+static void *worker_thread_main(void *arg) {
+    World *world = (World *)arg;
+    WorkerQueue *queue = &world->worker_queue;
 
     while (true) {
         WorkerJob job = {0};
@@ -28,7 +27,7 @@ static void* worker_thread_main(void* arg)
 
         if (queue->shutdown && queue->count == 0) {
             pthread_mutex_unlock(&queue->mutex);
-            break;  // Exit thread
+            break; // Exit thread
         }
 
         // Get first job from queue
@@ -43,7 +42,9 @@ static void* worker_thread_main(void* arg)
         }
         pthread_mutex_unlock(&queue->mutex);
 
-        if (!has_job) continue;
+        if (!has_job) {
+            continue;
+        }
 
         // Mark job as in-progress
         pthread_mutex_lock(&queue->mutex);
@@ -53,7 +54,7 @@ static void* worker_thread_main(void* arg)
         // CRITICAL: Lock cache_mutex BEFORE looking up chunk to prevent it being unloaded
         // This prevents the chunk from being removed from the cache while we process it
         pthread_mutex_lock(&world->cache_mutex);
-        Chunk* chunk = world_get_chunk(world, job.chunk_x, job.chunk_y, job.chunk_z);
+        Chunk *chunk = world_get_chunk(world, job.chunk_x, job.chunk_y, job.chunk_z);
         if (!chunk) {
             // Chunk was unloaded, mark job complete
             pthread_mutex_unlock(&world->cache_mutex);
@@ -79,7 +80,7 @@ static void* worker_thread_main(void* arg)
             pthread_mutex_lock(&queue->mutex);
             queue->jobs_in_progress--;
             pthread_mutex_unlock(&queue->mutex);
-            continue;  // Different chunk now at this address, skip
+            continue; // Different chunk now at this address, skip
         }
 
         // Validate chunk is still relevant (wasn't unloaded)
@@ -96,7 +97,7 @@ static void* worker_thread_main(void* arg)
         if (job.type == WORKER_JOB_SAVE_CHUNK) {
             // Save chunk to disk (same format as world_save_chunk)
             if (chunk->modified) {
-                pthread_mutex_unlock(&chunk->mutex);  // release while saving to avoid long lock hold
+                pthread_mutex_unlock(&chunk->mutex); // release while saving to avoid long lock hold
                 world_save_chunk(chunk, world->world_name, world->compress_chunk_files);
                 pthread_mutex_lock(&chunk->mutex);
                 chunk->modified = false;
@@ -141,10 +142,10 @@ static void* worker_thread_main(void* arg)
         bool needs_meshing = !chunk->meshed && chunk->generated && chunk->loaded;
 
         if (needs_relighting) {
-            chunk->needs_relighting = false;  // Mark as being processed
+            chunk->needs_relighting = false; // Mark as being processed
         }
         if (lighting_dirty) {
-            chunk->lighting_dirty = false;  // Will be handled by this job
+            chunk->lighting_dirty = false; // Will be handled by this job
             chunk->dirty_min_x = CHUNK_WIDTH;
             chunk->dirty_max_x = -1;
             chunk->dirty_min_y = CHUNK_HEIGHT;
@@ -158,7 +159,7 @@ static void* worker_thread_main(void* arg)
         // Calculate lighting WITHOUT holding chunk->mutex to avoid deadlock
         // chunk_cache_visible_blocks and lighting functions call world_get_block which needs cache_mutex
         if (needs_relighting) {
-             fprintf(stderr, "[worker] Computing lighting for chunk (%d,%d,%d)\n", chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
+            fprintf(stderr, "[worker] Computing lighting for chunk (%d,%d,%d)\n", chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
             fflush(stderr);
 
             // Compute lighting into inactive buffer (so render can read the previous buffer safely)
@@ -166,10 +167,10 @@ static void* worker_thread_main(void* arg)
             int inactive = 1 - active;
 
             calculate_chunk_skylight(chunk, world, inactive, lighting_dirty,
-                                    lighting_dirty ? dirty_min_x : 0,
-                                    lighting_dirty ? dirty_max_x : CHUNK_WIDTH - 1,
-                                    lighting_dirty ? dirty_min_z : 0,
-                                    lighting_dirty ? dirty_max_z : CHUNK_DEPTH - 1);
+                                     lighting_dirty ? dirty_min_x : 0,
+                                     lighting_dirty ? dirty_max_x : CHUNK_WIDTH - 1,
+                                     lighting_dirty ? dirty_min_z : 0,
+                                     lighting_dirty ? dirty_max_z : CHUNK_DEPTH - 1);
             calculate_chunk_blocklight(chunk, world, inactive);
 
             // Swap the active buffer once (both skylight+blocklight now updated)
@@ -212,15 +213,16 @@ static void* worker_thread_main(void* arg)
 }
 
 // Initialize worker thread system
-void worker_init(World* world)
-{
-    if (!world) return;
+void worker_init(World *world) {
+    if (!world) {
+        return;
+    }
 
-    WorkerQueue* queue = &world->worker_queue;
+    WorkerQueue *queue = &world->worker_queue;
     queue->capacity = 256;
     queue->count = 0;
-    queue->jobs_in_progress = 0;  // No jobs in progress initially
-    queue->queue = (WorkerJob*)malloc(sizeof(WorkerJob) * queue->capacity);
+    queue->jobs_in_progress = 0; // No jobs in progress initially
+    queue->queue = (WorkerJob *)malloc(sizeof(WorkerJob) * queue->capacity);
     queue->shutdown = false;
     pthread_mutex_init(&queue->mutex, NULL);
     pthread_cond_init(&queue->cond, NULL);
@@ -232,28 +234,29 @@ void worker_init(World* world)
     pthread_attr_t thread_attr;
     pthread_attr_init(&thread_attr);
 
-    // Try to pin worker thread to second core (core 1) for better cache locality
-    // Falls back gracefully if CPU affinity not supported
-    #ifdef __linux__
+// Try to pin worker thread to second core (core 1) for better cache locality
+// Falls back gracefully if CPU affinity not supported
+#ifdef __linux__
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     // Pin to core 1 (reserve core 0 for main thread)
     CPU_SET(1, &cpuset);
     pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &cpuset);
     printf("[worker] Worker thread CPU affinity set to core 1\n");
-    #endif
+#endif
 
-    pthread_create(&world->worker_thread, &thread_attr, worker_thread_main, (void*)world);
+    pthread_create(&world->worker_thread, &thread_attr, worker_thread_main, (void *)world);
     pthread_attr_destroy(&thread_attr);
     printf("[worker] Worker thread started\n");
 }
 
 // Internal helper to queue a job (with deduplication)
-static void worker_queue_job(World* world, WorkerJob job)
-{
-    if (!world) return;
+static void worker_queue_job(World *world, WorkerJob job) {
+    if (!world) {
+        return;
+    }
 
-    WorkerQueue* queue = &world->worker_queue;
+    WorkerQueue *queue = &world->worker_queue;
 
     pthread_mutex_lock(&queue->mutex);
 
@@ -264,40 +267,42 @@ static void worker_queue_job(World* world, WorkerJob job)
             queue->queue[i].chunk_z == job.chunk_z &&
             queue->queue[i].type == job.type) {
             pthread_mutex_unlock(&queue->mutex);
-            return;  // Already queued
+            return; // Already queued
         }
     }
 
     // Add to queue
     if (queue->count >= queue->capacity) {
         queue->capacity *= 2;
-        queue->queue = (WorkerJob*)realloc(queue->queue, sizeof(WorkerJob) * queue->capacity);
+        queue->queue = (WorkerJob *)realloc(queue->queue, sizeof(WorkerJob) * queue->capacity);
     }
 
     queue->queue[queue->count++] = job;
-    const char* type_name = (job.type == WORKER_JOB_SAVE_CHUNK) ? "save" : "light/mesh";
+    const char *type_name = (job.type == WORKER_JOB_SAVE_CHUNK) ? "save" : "light/mesh";
     printf("[worker] Queued %s job for chunk (%d,%d,%d)\n", type_name, job.chunk_x, job.chunk_y, job.chunk_z);
-    pthread_cond_signal(&queue->cond);  // Wake up worker thread
+    pthread_cond_signal(&queue->cond); // Wake up worker thread
 
     pthread_mutex_unlock(&queue->mutex);
 }
 
 // Queue a chunk for processing (lighting + meshing)
-void worker_queue_chunk(World* world, Chunk* chunk)
-{
-    if (!world || !chunk) return;
+void worker_queue_chunk(World *world, Chunk *chunk) {
+    if (!world || !chunk) {
+        return;
+    }
 
-    WorkerJob job = { .chunk_x = chunk->chunk_x,
-                      .chunk_y = chunk->chunk_y,
-                      .chunk_z = chunk->chunk_z,
-                      .type = WORKER_JOB_LIGHTING_AND_MESH };
+    WorkerJob job = {.chunk_x = chunk->chunk_x,
+                     .chunk_y = chunk->chunk_y,
+                     .chunk_z = chunk->chunk_z,
+                     .type = WORKER_JOB_LIGHTING_AND_MESH};
     worker_queue_job(world, job);
 }
 
 // Queue a chunk for asynchronous saving
-void worker_queue_chunk_save(World* world, Chunk* chunk)
-{
-    if (!world || !chunk) return;
+void worker_queue_chunk_save(World *world, Chunk *chunk) {
+    if (!world || !chunk) {
+        return;
+    }
 
     // Avoid requeuing if already pending save
     pthread_mutex_lock(&chunk->mutex);
@@ -308,20 +313,21 @@ void worker_queue_chunk_save(World* world, Chunk* chunk)
     chunk->pending_save = true;
     pthread_mutex_unlock(&chunk->mutex);
 
-    WorkerJob job = { .chunk_x = chunk->chunk_x,
-                      .chunk_y = chunk->chunk_y,
-                      .chunk_z = chunk->chunk_z,
-                      .type = WORKER_JOB_SAVE_CHUNK };
+    WorkerJob job = {.chunk_x = chunk->chunk_x,
+                     .chunk_y = chunk->chunk_y,
+                     .chunk_z = chunk->chunk_z,
+                     .type = WORKER_JOB_SAVE_CHUNK};
     worker_queue_job(world, job);
 }
 
 // Flush the worker queue - wait for all pending jobs to complete
 // This is important before world_load to avoid race conditions
-void worker_flush_queue(World* world)
-{
-    if (!world) return;
+void worker_flush_queue(World *world) {
+    if (!world) {
+        return;
+    }
 
-    WorkerQueue* queue = &world->worker_queue;
+    WorkerQueue *queue = &world->worker_queue;
 
     // Wait for queue to be empty AND no jobs in progress
     int wait_count = 0;
@@ -340,7 +346,7 @@ void worker_flush_queue(World* world)
         }
         wait_count++;
 
-        struct timespec ts = {0, 10000000};  // 10ms in nanoseconds
+        struct timespec ts = {0, 10000000}; // 10ms in nanoseconds
         nanosleep(&ts, NULL);
 
         // Timeout after 5 seconds to prevent infinite hang
@@ -352,11 +358,12 @@ void worker_flush_queue(World* world)
 }
 
 // Shut down worker thread cleanly
-void worker_shutdown(World* world)
-{
-    if (!world) return;
+void worker_shutdown(World *world) {
+    if (!world) {
+        return;
+    }
 
-    WorkerQueue* queue = &world->worker_queue;
+    WorkerQueue *queue = &world->worker_queue;
 
     // Signal shutdown
     pthread_mutex_lock(&queue->mutex);

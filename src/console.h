@@ -1,8 +1,8 @@
 #ifndef CONSOLE_H
 #define CONSOLE_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // Console command types
 typedef enum {
@@ -23,9 +23,9 @@ typedef enum {
 // Parsed console command
 typedef struct {
     CommandType type;
-    char player_target[64];   // Player name or UID to target (empty = current player)
-    char args[256];           // Raw argument string after command and player
-    char raw_input[256];      // Raw input line for debugging
+    char player_target[64]; // Player name or UID to target (empty = current player)
+    char args[256];         // Raw argument string after command and player
+    char raw_input[256];    // Raw input line for debugging
 } ConsoleCommand;
 
 // Initialize the console input system (starts stdin reader thread)
@@ -36,17 +36,17 @@ void console_shutdown(void);
 
 // Get next pending console command (non-blocking)
 // Returns true if a command was retrieved, false if queue is empty
-bool console_get_next_command(ConsoleCommand* out_cmd);
+bool console_get_next_command(ConsoleCommand *out_cmd);
 
 // Parse a console command line
 // Returns the parsed command
-ConsoleCommand console_parse_command(const char* input);
+ConsoleCommand console_parse_command(const char *input);
 
 // Format a player UID as 8-digit hex string (e.g., "00000001")
-void console_format_uid(uint32_t uid, char* buf, int buf_size);
+void console_format_uid(uint32_t uid, char *buf, int buf_size);
 
 // Parse UID from hex string (e.g., "00000001" -> 1)
 // Returns 0 on parse error
-uint32_t console_parse_uid(const char* uid_str);
+uint32_t console_parse_uid(const char *uid_str);
 
 #endif

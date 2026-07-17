@@ -45,8 +45,8 @@ typedef struct {
     char font_variant_label[256];
     char uncapped[64];
     char nickname_label[128];
-    //char cloud_distance_label[128];
-    //char clouds_enabled_label[128];
+    // char cloud_distance_label[128];
+    // char clouds_enabled_label[128];
     char compass_hud_label[128];
     // Credits & Info text
     char press_esc_to_return[256];
@@ -83,7 +83,7 @@ typedef struct {
 typedef struct {
     MenuState current_state;
     MenuState previous_state;
-    WorldInfo* available_worlds;
+    WorldInfo *available_worlds;
     int world_count;
     int selected_world_index;
     bool should_start_game;
@@ -98,12 +98,12 @@ typedef struct {
     Texture2D background_texture;
     bool background_loaded;
     // Splash texts
-    char splash_texts[256][512];  // Up to 256 splash texts, max 512 chars each
+    char splash_texts[256][512]; // Up to 256 splash texts, max 512 chars each
     int splash_texts_count;
     char current_splash_text[512];
     // Localization
     char current_language[32];
-    char available_languages[16][32];  // Up to 16 language codes
+    char available_languages[16][32]; // Up to 16 language codes
     int available_languages_count;
     int current_language_index;
     // Menu text
@@ -133,36 +133,36 @@ typedef struct {
     char nickname[64];
     int nickname_len;
     bool nickname_edit_active;
-    //bool clouds_enabled;
+    // bool clouds_enabled;
     bool compass_enabled;
-    //float clouds_render_distance;
-    // Font selection
-    char font_families[16][256];  // Up to 16 font families (folder names)
+    // float clouds_render_distance;
+    //  Font selection
+    char font_families[16][256]; // Up to 16 font families (folder names)
     int font_families_count;
     int current_font_family_index;
     // Font variants for current family
-    char font_variants[32][256];  // Up to 32 variants per family
+    char font_variants[32][256]; // Up to 32 variants per family
     int font_variants_count;
     int current_font_variant_index;
 } MenuSystem;
 
 // Function declarations
-MenuSystem* menu_system_create(void);
-void menu_system_free(MenuSystem* menu);
-void menu_scan_worlds(MenuSystem* menu);
-void menu_scan_fonts(MenuSystem* menu);
-void menu_scan_font_variants(MenuSystem* menu, const char* font_family);
-void menu_draw_main(MenuSystem* menu, Font font);
-void menu_draw_world_select(MenuSystem* menu, Font font);
-void menu_draw_create_world(MenuSystem* menu, Font font);
-void menu_draw_credits(MenuSystem* menu, Font font);
-void menu_draw_settings(MenuSystem* menu, Font font);
+MenuSystem *menu_system_create(void);
+void menu_system_free(MenuSystem *menu);
+void menu_scan_worlds(MenuSystem *menu);
+void menu_scan_fonts(MenuSystem *menu);
+void menu_scan_font_variants(MenuSystem *menu, const char *font_family);
+void menu_draw_main(MenuSystem *menu, Font font);
+void menu_draw_world_select(MenuSystem *menu, Font font);
+void menu_draw_create_world(MenuSystem *menu, Font font);
+void menu_draw_credits(MenuSystem *menu, Font font);
+void menu_draw_settings(MenuSystem *menu, Font font);
 // Use SDF-aware draw helper from main.c for consistent font rendering
 void DrawTextExCustom(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint);
-void menu_update_input(MenuSystem* menu);
-void menu_load_language(MenuSystem* menu, const char* language);
-bool menu_load_text_file(const char* language, const char* filename, char* out_buffer, int buffer_size);
-void menu_load_settings(MenuSystem* menu);
-void menu_save_settings(MenuSystem* menu);
+void menu_update_input(MenuSystem *menu);
+void menu_load_language(MenuSystem *menu, const char *language);
+bool menu_load_text_file(const char *language, const char *filename, char *out_buffer, int buffer_size);
+void menu_load_settings(MenuSystem *menu);
+void menu_save_settings(MenuSystem *menu);
 
 #endif

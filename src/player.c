@@ -1,56 +1,52 @@
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include "player.h"
-#include "world.h"
 #include "vec_math.h"
+#include "world.h"
 
 // Create a player
-Player* player_create(float x, float y, float z)
-{
+Player *player_create(float x, float y, float z) {
     return player_create_with_uid(x, y, z, 0x00000001, "Player");
 }
 
 // Create a player with specific UID and nickname
-Player* player_create_with_uid(float x, float y, float z, uint32_t uid, const char* nickname)
-{
-    Player* player = (Player*)malloc(sizeof(Player));
+Player *player_create_with_uid(float x, float y, float z, uint32_t uid, const char *nickname) {
+    Player *player = (Player *)malloc(sizeof(Player));
     player->uid = uid;
     strncpy(player->nickname, nickname, sizeof(player->nickname) - 1);
     player->nickname[sizeof(player->nickname) - 1] = '\0';
-    player->position = (Vector3){ x, y, z };
+    player->position = (Vector3){x, y, z};
     player->prev_position = player->position;
-    player->velocity = (Vector3){ 0, 0, 0 };
+    player->velocity = (Vector3){0, 0, 0};
     player->on_ground = false;
     player->jump_used = false;
-    player->selected_block = BLOCK_STONE;  // Default to stone
+    player->selected_block = BLOCK_STONE; // Default to stone
     player->is_flying = false;
     player->no_clip = false;
-    player->space_press_time = 1.0f;  // Initialize to high value so first press isn't a double-tap
-    inventory_init(player);  // Initialize inventory
+    player->space_press_time = 1.0f; // Initialize to high value so first press isn't a double-tap
+    inventory_init(player);          // Initialize inventory
     return player;
 }
 
 // Free player memory
-void player_free(Player* player)
-{
+void player_free(Player *player) {
     if (player) {
         free(player);
     }
 }
 
 // Handle player movement input
-void player_move_input(Player* player, Vector3 forward, Vector3 right, bool flight_enabled)
-{
+void player_move_input(Player *player, Vector3 forward, Vector3 right, bool flight_enabled) {
     // Extract horizontal (XZ) component of right vector and normalize it.
     // Then derive a stable horizontal forward from world up and right to avoid issues when
     // the camera is looking straight up/down (forward XZ component near zero).
-    Vector3 right_horiz = (Vector3){ right.x, 0, right.z };
+    Vector3 right_horiz = (Vector3){right.x, 0, right.z};
     float right_len = sqrtf(right_horiz.x * right_horiz.x + right_horiz.y * right_horiz.y + right_horiz.z * right_horiz.z);
     if (right_len < 1e-6f) {
         // Fallback: if right is degenerate, use world X axis
-        right_horiz = (Vector3){ 1.0f, 0.0f, 0.0f };
+        right_horiz = (Vector3){1.0f, 0.0f, 0.0f};
     } else {
         right_horiz.x /= right_len;
         right_horiz.y /= right_len;
@@ -61,8 +57,6 @@ void player_move_input(Player* player, Vector3 forward, Vector3 right, bool flig
     // consistent with yaw even when the camera is looking vertically.
     Vector3 forward_horiz = vec3_cross((Vector3){0, 1, 0}, right_horiz);
     forward_horiz = vec3_normalize(forward_horiz);
-
-
 
     // Shifting (sneak) and sprinting support
     player->shifting = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
@@ -88,7 +82,7 @@ void player_move_input(Player* player, Vector3 forward, Vector3 right, bool flig
         player->space_press_time = 0.0f;
     }
 
-    Vector3 move = { 0, 0, 0 };
+    Vector3 move = {0, 0, 0};
     if (IsKeyDown(KEY_W)) {
         move = vec3_add(move, vec3_scale(forward_horiz, move_speed));
     }
@@ -148,8 +142,7 @@ void player_move_input(Player* player, Vector3 forward, Vector3 right, bool flig
 }
 
 // Check collision for a rectangular prism (box) - AABB collision
-bool world_check_collision_box(World* world, Vector3 center_pos, float width, float height, float depth)
-{
+bool world_check_collision_box(World *world, Vector3 center_pos, float width, float height, float depth) {
     float half_width = width / 2.0f;
     float half_height = height / 2.0f;
     float half_depth = depth / 2.0f;
@@ -194,8 +187,7 @@ bool world_check_collision_box(World* world, Vector3 center_pos, float width, fl
 }
 
 // Update player physics
-void player_update(Player* player, World* world, float dt, bool flight_enabled)
-{
+void player_update(Player *player, World *world, float dt, bool flight_enabled) {
     // Update space press timing for double-tap detection
     if (player->space_press_time < DOUBLE_TAP_THRESHOLD) {
         player->space_press_time += dt;
@@ -216,8 +208,7 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
     Vector3 new_pos = (Vector3){
         player->position.x + player->velocity.x * dt,
         player->position.y + player->velocity.y * dt,
-        player->position.z + player->velocity.z * dt
-    };
+        player->position.z + player->velocity.z * dt};
 
     // When no-clipping, bypass collision detection
     if (player->no_clip) {
@@ -232,7 +223,7 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
         Vector3 foot_pos = new_pos;
         foot_pos.y -= PLAYER_HEIGHT - 0.1f;
         // Check a grid under the player's feet (collision box)
-        float half = 0.3f; // half width of collision box
+        float half = 0.3f;  // half width of collision box
         float step = 0.08f; // grid step (smaller = smoother)
         bool any_supported = false;
         for (float dx = -half; dx <= half; dx += step) {
@@ -245,7 +236,9 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
                     break;
                 }
             }
-            if (any_supported) break;
+            if (any_supported) {
+                break;
+            }
         }
         if (!any_supported) {
             // Don't allow movement if the entire area under the box is unsupported
@@ -265,14 +258,13 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
         Vector3 test_x = (Vector3){
             player->position.x + player->velocity.x * dt,
             player->position.y,
-            player->position.z
-        };
+            player->position.z};
         bool allow_x = !world_check_collision_box(world, test_x, 0.6f, PLAYER_HEIGHT, 0.6f);
         if (allow_x && player->shifting && player->on_ground) {
             // Edge safety for X: only allow if player would still be supported after moving
-            Vector3 below_test = (Vector3){ test_x.x, test_x.y - 0.1f, test_x.z };
+            Vector3 below_test = (Vector3){test_x.x, test_x.y - 0.1f, test_x.z};
             if (!world_check_collision_box(world, below_test, 0.6f, PLAYER_HEIGHT, 0.6f)) {
-                allow_x = false;  // Would fall, don't allow
+                allow_x = false; // Would fall, don't allow
             }
         }
         if (allow_x) {
@@ -283,8 +275,7 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
         Vector3 test_y = (Vector3){
             slide_pos.x,
             player->position.y + player->velocity.y * dt,
-            player->position.z
-        };
+            player->position.z};
         if (!world_check_collision_box(world, test_y, 0.6f, PLAYER_HEIGHT, 0.6f)) {
             slide_pos.y = test_y.y;
         } else {
@@ -299,14 +290,13 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
         Vector3 test_z = (Vector3){
             slide_pos.x,
             slide_pos.y,
-            player->position.z + player->velocity.z * dt
-        };
+            player->position.z + player->velocity.z * dt};
         bool allow_z = !world_check_collision_box(world, test_z, 0.6f, PLAYER_HEIGHT, 0.6f);
         if (allow_z && player->shifting && player->on_ground) {
             // Edge safety for Z: only allow if player would still be supported after moving
-            Vector3 below_test = (Vector3){ test_z.x, test_z.y - 0.1f, test_z.z };
+            Vector3 below_test = (Vector3){test_z.x, test_z.y - 0.1f, test_z.z};
             if (!world_check_collision_box(world, below_test, 0.6f, PLAYER_HEIGHT, 0.6f)) {
-                allow_z = false;  // Would fall, don't allow
+                allow_z = false; // Would fall, don't allow
             }
         }
         if (allow_z) {
@@ -315,7 +305,7 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
 
         player->position = slide_pos;
 
-        Vector3 below = (Vector3){ player->position.x, player->position.y - 0.1f, player->position.z };
+        Vector3 below = (Vector3){player->position.x, player->position.y - 0.1f, player->position.z};
         if (world_check_collision_box(world, below, 0.6f, PLAYER_HEIGHT, 0.6f)) {
             player->on_ground = true;
             player->velocity.y = 0;
@@ -325,8 +315,7 @@ void player_update(Player* player, World* world, float dt, bool flight_enabled)
 }
 
 // Initialize player inventory
-void inventory_init(Player* player)
-{
+void inventory_init(Player *player) {
     // Initialize hotbar
     for (int i = 0; i < INVENTORY_SIZE; i++) {
         player->inventory[i].type = BLOCK_AIR;
@@ -346,10 +335,9 @@ void inventory_init(Player* player)
 
 // Add a block to inventory
 // Returns true if successful, false if inventory is full
-bool inventory_add_block(Player* player, BlockType block_type)
-{
+bool inventory_add_block(Player *player, BlockType block_type) {
     if (block_type == BLOCK_AIR || block_type == BLOCK_BEDROCK) {
-        return false;  // Can't collect air or bedrock
+        return false; // Can't collect air or bedrock
     }
 
     // First, try to add to existing stack in hotbar
@@ -386,13 +374,12 @@ bool inventory_add_block(Player* player, BlockType block_type)
         }
     }
 
-    return false;  // Inventory full
+    return false; // Inventory full
 }
 
 // Remove a block from inventory (for placing)
 // Returns true if successful, false if block not available
-bool inventory_remove_block(Player* player, BlockType block_type)
-{
+bool inventory_remove_block(Player *player, BlockType block_type) {
     // First try hotbar
     for (int i = 0; i < INVENTORY_SIZE; i++) {
         if (player->inventory[i].type == block_type && player->inventory[i].count > 0) {
@@ -417,8 +404,7 @@ bool inventory_remove_block(Player* player, BlockType block_type)
 }
 
 // Get count of a specific block type in inventory
-int inventory_get_count(Player* player, BlockType block_type)
-{
+int inventory_get_count(Player *player, BlockType block_type) {
     int total = 0;
     for (int i = 0; i < INVENTORY_SIZE; i++) {
         if (player->inventory[i].type == block_type) {
@@ -430,9 +416,8 @@ int inventory_get_count(Player* player, BlockType block_type)
 
 // Get the currently selected block type based on selected slot
 // Only returns block if selected slot has items - otherwise returns BLOCK_AIR (no placement)
-BlockType inventory_get_selected_block(Player* player)
-{
-    InventorySlot* slot = &player->inventory[player->selected_slot];
+BlockType inventory_get_selected_block(Player *player) {
+    InventorySlot *slot = &player->inventory[player->selected_slot];
     if (slot->count > 0) {
         return slot->type;
     }
@@ -441,20 +426,17 @@ BlockType inventory_get_selected_block(Player* player)
 }
 
 // Toggle big inventory open/closed
-void inventory_toggle_big(Player* player)
-{
+void inventory_toggle_big(Player *player) {
     player->inventory_open = !player->inventory_open;
 }
 
 // Check if big inventory is open
-bool inventory_is_big_open(Player* player)
-{
+bool inventory_is_big_open(Player *player) {
     return player->inventory_open;
 }
 
 // Helper: compute total free capacity for a block type across hotbar+big inventory
-static int inventory_total_free_capacity(Player* player, BlockType block_type)
-{
+static int inventory_total_free_capacity(Player *player, BlockType block_type) {
     int total = 0;
     // existing stacks of same type
     for (int i = 0; i < INVENTORY_SIZE; i++) {
@@ -469,22 +451,31 @@ static int inventory_total_free_capacity(Player* player, BlockType block_type)
     }
     // empty slots
     for (int i = 0; i < INVENTORY_SIZE; i++) {
-        if (player->inventory[i].type == BLOCK_AIR) total += INVENTORY_MAX_STACK;
+        if (player->inventory[i].type == BLOCK_AIR) {
+            total += INVENTORY_MAX_STACK;
+        }
     }
     for (int i = 0; i < BIG_INVENTORY_SIZE; i++) {
-        if (player->big_inventory[i].type == BLOCK_AIR) total += INVENTORY_MAX_STACK;
+        if (player->big_inventory[i].type == BLOCK_AIR) {
+            total += INVENTORY_MAX_STACK;
+        }
     }
     return total;
 }
 
 // Give items to player: returns true on success
-bool inventory_give(Player* player, BlockType block_type, int count)
-{
-    if (count <= 0) return false;
-    if (block_type == BLOCK_AIR || block_type == BLOCK_BEDROCK) return false;
+bool inventory_give(Player *player, BlockType block_type, int count) {
+    if (count <= 0) {
+        return false;
+    }
+    if (block_type == BLOCK_AIR || block_type == BLOCK_BEDROCK) {
+        return false;
+    }
 
     int capacity = inventory_total_free_capacity(player, block_type);
-    if (capacity < count) return false; // not enough room
+    if (capacity < count) {
+        return false; // not enough room
+    }
 
     int remaining = count;
 
@@ -505,7 +496,9 @@ bool inventory_give(Player* player, BlockType block_type, int count)
 
     // Next: try to fill other existing stacks of same type in hotbar
     for (int i = 0; remaining > 0 && i < INVENTORY_SIZE; i++) {
-        if (i == pref) continue;
+        if (i == pref) {
+            continue;
+        }
         if (player->inventory[i].type == block_type && player->inventory[i].count < INVENTORY_MAX_STACK) {
             int can = INVENTORY_MAX_STACK - player->inventory[i].count;
             int take = (remaining <= can) ? remaining : can;

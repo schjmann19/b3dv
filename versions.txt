@@ -1,3 +1,7 @@
+0.0.22-beta:
+    * splitting client / server
+    * heavily WIP
+
 0.0.21-beta:
     - removed clouds and with them, the bug where you could see blocks backfaces through the terrain
     + fixed stutter on block updates
