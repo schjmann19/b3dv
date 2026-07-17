@@ -1,14 +1,9 @@
-#include <ctype.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "../common_utils/simple_strings.h"
 #include "game_server.h"
-#include "utils.h"
-#include "vec_math.h"
-
 static void game_server_apply_command(GameServer *srv,
                                       Player *player,
                                       const ConsoleCommand *cmd,
