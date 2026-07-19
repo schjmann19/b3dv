@@ -7,71 +7,9 @@
 #include "world.h"
 
 // Rendering constants
-#define LIGHT_CHECK_HEIGHT 240
-#define LIGHT_CHECK_RANGE 30
-#define LIGHT_LEVEL_SHADOWED 0.6f
-#define LIGHT_LEVEL_MIN 0.25f
-#define LIGHT_BRIGHTNESS_TOP 1.0f
-#define LIGHT_BRIGHTNESS_BOTTOM 0.8f
-#define LIGHT_BRIGHTNESS_SIDE 0.95f
 #define BLOCK_NEAR_EXEMPTION_DIST_SQ 225.0f // 15^2
 #define BLOCK_MIN_DIST 0.1f
 #define BLOCK_RADIUS 0.5f
-#define WORLD_HEIGHT_MAX 256
-
-// Calculate light level for a block - check for unobstructed access to sunlight
-// Uses early termination and limited search to avoid expensive iteration
-float get_block_light_level(World *world, int x, int y, int z) {
-    // Quick check: if we're at height threshold or above, assume fully lit
-    if (y >= LIGHT_CHECK_HEIGHT) {
-        return 1.0f;
-    }
-
-    // Check limited range above (most light is blocked within this range)
-    int check_limit = (y + LIGHT_CHECK_RANGE < WORLD_HEIGHT_MAX) ? y + LIGHT_CHECK_RANGE : WORLD_HEIGHT_MAX;
-
-    for (int check_y = y + 1; check_y < check_limit; check_y++) {
-        BlockType above = world_get_block(world, x, check_y, z);
-        if (above != BLOCK_AIR) {
-            // Hit a solid block - this position is shadowed
-            return LIGHT_LEVEL_SHADOWED;
-        }
-    }
-
-    // Made it all the way up without hitting obstruction
-    return 1.0f; // Fully lit - direct sky access
-}
-
-// Apply lighting to a face based on direction and adjacent air block's sky access
-// face_index: 0=+X, 1=-X, 2=+Y(top), 3=-Y(bottom), 4=+Z, 5=-Z
-// neighbor_x/y/z: coordinates of the adjacent air block this face is exposed to
-Color apply_face_lighting(Color base_color, int face_index, World *world, int neighbor_x, int neighbor_y, int neighbor_z) {
-    // Get face brightness based on orientation
-    float face_brightness = (face_index == 2) ? LIGHT_BRIGHTNESS_TOP : (face_index == 3) ? LIGHT_BRIGHTNESS_BOTTOM
-                                                                                         : LIGHT_BRIGHTNESS_SIDE;
-
-    // Check if the adjacent air block has direct sky access
-    // This determines if the face should be shadowed
-    float adjacent_light = get_block_light_level(world, neighbor_x, neighbor_y, neighbor_z);
-
-    // Apply both face brightness and adjacent block's light level, with clamping
-    float final_brightness = face_brightness * adjacent_light;
-    if (final_brightness < LIGHT_LEVEL_MIN) {
-        final_brightness = LIGHT_LEVEL_MIN;
-    }
-    if (final_brightness > 1.0f) {
-        final_brightness = 1.0f;
-    }
-
-    // Apply brightness to color
-    Color lit_color;
-    lit_color.r = (unsigned char)(base_color.r * final_brightness);
-    lit_color.g = (unsigned char)(base_color.g * final_brightness);
-    lit_color.b = (unsigned char)(base_color.b * final_brightness);
-    lit_color.a = base_color.a;
-
-    return lit_color;
-}
 
 // check if a block has any face visible (exposed to air)
 bool has_visible_face(World *world, int x, int y, int z, Vector3 block_pos, Vector3 cam_pos) {
@@ -155,40 +93,8 @@ bool is_block_visible_fast(Vector3 block_pos, Vector3 cam_pos, Vector3 cam_forwa
     return true;
 }
 
-static uint8_t get_render_face_light(World *world, int block_x, int block_y, int block_z, int face) {
-    int adj_x = block_x;
-    int adj_y = block_y;
-    int adj_z = block_z;
-
-    switch (face) {
-    case 0: adj_x++; break; // +X
-    case 1: adj_x--; break; // -X
-    case 2: adj_y++; break; // +Y
-    case 3: adj_y--; break; // -Y
-    case 4: adj_z++; break; // +Z
-    case 5: adj_z--; break; // -Z
-    }
-
-    uint8_t skyl = world_get_skylight(world, adj_x, adj_y, adj_z);
-    uint8_t blockl = world_get_blocklight(world, adj_x, adj_y, adj_z);
-
-    if (face == 2 || face == 3) {
-        uint8_t combined = skyl > blockl ? skyl : blockl;
-        if (skyl > 0 && blockl > 0) {
-            combined = (uint8_t)((skyl + blockl) / 2u);
-        }
-        return combined;
-    }
-
-    if (skyl > 0) {
-        uint8_t side_lighting = (skyl > 2) ? (uint8_t)(skyl - 2) : 1;
-        return (side_lighting > blockl) ? side_lighting : blockl;
-    }
-    return blockl;
-}
-
 // draw only the visible faces of a cube (faces pointing toward camera and not occluded by neighbors)
-void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World *world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces, uint8_t face_light[6], bool show_wireframe) {
+void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Color wire_color, World *world, int block_x, int block_y, int block_z, BlockType block_type, uint8_t exposed_faces, bool show_wireframe) {
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
 
@@ -239,24 +145,15 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
         0.8f   // -Z (back) - slightly darker
     };
 
-    // Use the baked per-face light values directly. This avoids the expensive per-frame
-    // lookups that were recomputing light from the chunk buffers on every draw call.
     Color face_colors[6];
 
     for (int i = 0; i < 6; i++) {
-        uint8_t current_light = 0;
-        if (exposed_faces & (1 << i)) {
-            current_light = get_render_face_light(world, block_x, block_y, block_z, i);
-        }
-
-        float face_brightness = face_shading[i] * (0.15f + (current_light / 15.0f) * 0.85f);
+        float face_brightness = face_shading[i];
         face_colors[i].r = (unsigned char)(color.r * face_brightness);
         face_colors[i].g = (unsigned char)(color.g * face_brightness);
         face_colors[i].b = (unsigned char)(color.b * face_brightness);
         face_colors[i].a = color.a;
     }
-
-    (void)face_light; // face_light is retained for compatibility with the mesh cache path
 
     if (has_texture) {
         rlSetTexture(texture.id);

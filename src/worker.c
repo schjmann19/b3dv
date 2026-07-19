@@ -10,7 +10,7 @@
 #endif
 #include "world.h"
 
-// Worker thread main function - processes chunks for lighting and meshing
+// Worker thread main function - processes chunks for meshing
 static void *worker_thread_main(void *arg) {
     World *world = (World *)arg;
     WorkerQueue *queue = &world->worker_queue;
@@ -116,7 +116,7 @@ static void *worker_thread_main(void *arg) {
         }
 
         // Skip if already processed and no updates required
-        if (!chunk->needs_relighting && chunk->meshed) {
+        if (chunk->meshed) {
             pthread_mutex_unlock(&chunk->mutex);
             pthread_mutex_lock(&queue->mutex);
             queue->jobs_in_progress--;
@@ -129,55 +129,9 @@ static void *worker_thread_main(void *arg) {
         // Instead, we render the old mesh while building the new one in chunk_cache_visible_blocks.
         // The atomic swap at the end of chunk_cache_visible_blocks ensures thread safety.
 
-        // Save relighting requirement and release mutex BEFORE expensive calculations
-        bool lighting_dirty = chunk->lighting_dirty;
-        int dirty_min_x = chunk->dirty_min_x;
-        int dirty_max_x = chunk->dirty_max_x;
-        int dirty_min_y = chunk->dirty_min_y;
-        int dirty_max_y = chunk->dirty_max_y;
-        int dirty_min_z = chunk->dirty_min_z;
-        int dirty_max_z = chunk->dirty_max_z;
-
-        bool needs_relighting = (chunk->needs_relighting || lighting_dirty) && chunk->generated && chunk->loaded;
         bool needs_meshing = !chunk->meshed && chunk->generated && chunk->loaded;
 
-        if (needs_relighting) {
-            chunk->needs_relighting = false; // Mark as being processed
-        }
-        if (lighting_dirty) {
-            chunk->lighting_dirty = false; // Will be handled by this job
-            chunk->dirty_min_x = CHUNK_WIDTH;
-            chunk->dirty_max_x = -1;
-            chunk->dirty_min_y = CHUNK_HEIGHT;
-            chunk->dirty_max_y = -1;
-            chunk->dirty_min_z = CHUNK_DEPTH;
-            chunk->dirty_max_z = -1;
-        }
-
         pthread_mutex_unlock(&chunk->mutex);
-
-        // Calculate lighting WITHOUT holding chunk->mutex to avoid deadlock
-        // chunk_cache_visible_blocks and lighting functions call world_get_block which needs cache_mutex
-        if (needs_relighting) {
-            fprintf(stderr, "[worker] Computing lighting for chunk (%d,%d,%d)\n", chunk->chunk_x, chunk->chunk_y, chunk->chunk_z);
-            fflush(stderr);
-
-            // Compute lighting into inactive buffer (so render can read the previous buffer safely)
-            int active = __atomic_load_n(&chunk->active_light_buffer, __ATOMIC_ACQUIRE);
-            int inactive = 1 - active;
-
-            calculate_chunk_skylight(chunk, world, inactive, lighting_dirty,
-                                     lighting_dirty ? dirty_min_x : 0,
-                                     lighting_dirty ? dirty_max_x : CHUNK_WIDTH - 1,
-                                     lighting_dirty ? dirty_min_z : 0,
-                                     lighting_dirty ? dirty_max_z : CHUNK_DEPTH - 1);
-            calculate_chunk_blocklight(chunk, world, inactive);
-
-            // Swap the active buffer once (both skylight+blocklight now updated)
-            pthread_mutex_lock(&chunk->light_swap_mutex);
-            __atomic_store_n(&chunk->active_light_buffer, inactive, __ATOMIC_RELEASE);
-            pthread_mutex_unlock(&chunk->light_swap_mutex);
-        }
 
         // Cache visible blocks (mesh) - NO locks held here, safer for neighbor lookups
         if (needs_meshing) {
@@ -278,7 +232,7 @@ static void worker_queue_job(World *world, WorkerJob job) {
     }
 
     queue->queue[queue->count++] = job;
-    const char *type_name = (job.type == WORKER_JOB_SAVE_CHUNK) ? "save" : "light/mesh";
+    const char *type_name = (job.type == WORKER_JOB_SAVE_CHUNK) ? "save" : "mesh";
     printf("[worker] Queued %s job for chunk (%d,%d,%d)\n", type_name, job.chunk_x, job.chunk_y, job.chunk_z);
     pthread_cond_signal(&queue->cond); // Wake up worker thread
 
@@ -294,7 +248,7 @@ void worker_queue_chunk(World *world, Chunk *chunk) {
     WorkerJob job = {.chunk_x = chunk->chunk_x,
                      .chunk_y = chunk->chunk_y,
                      .chunk_z = chunk->chunk_z,
-                     .type = WORKER_JOB_LIGHTING_AND_MESH};
+                     .type = WORKER_JOB_MESH};
     worker_queue_job(world, job);
 }
 

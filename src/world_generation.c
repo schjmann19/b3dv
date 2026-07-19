@@ -481,15 +481,11 @@ Chunk *world_load_or_create_chunk(World *world, int32_t chunk_x, int32_t chunk_y
     new_chunk->chunk_z = chunk_z;
     new_chunk->loaded = false;
     new_chunk->generated = false;
-    new_chunk->modified = false;        // Not modified when first created
-    new_chunk->needs_relighting = true; // New chunks need lighting calculation
+    new_chunk->modified = false; // Not modified when first created
     new_chunk->meshed = false;
     new_chunk->pending_save = false;
     new_chunk->pending_unload = false;
     new_chunk->in_use_count = 0;
-    // Initialize double-buffered lighting (avoid tearing during worker updates)
-    new_chunk->active_light_buffer = 0;
-    pthread_mutex_init(&new_chunk->light_swap_mutex, NULL);
 
     // Initialize double-buffered visible blocks cache
     new_chunk->visible_blocks[0] = NULL;
@@ -505,27 +501,14 @@ Chunk *world_load_or_create_chunk(World *world, int32_t chunk_x, int32_t chunk_y
     new_chunk->merged_mesh[1] = NULL;
     new_chunk->active_merged_mesh = 0;
 
-    new_chunk->lighting_dirty = false;
-    new_chunk->dirty_min_x = CHUNK_WIDTH;
-    new_chunk->dirty_max_x = -1;
-    new_chunk->dirty_min_y = CHUNK_HEIGHT;
-    new_chunk->dirty_max_y = -1;
-    new_chunk->dirty_min_z = CHUNK_DEPTH;
-    new_chunk->dirty_max_z = -1;
-
     pthread_mutex_init(&new_chunk->mesh_swap_mutex, NULL); // Mutex for atomic mesh swaps
     pthread_mutex_init(&new_chunk->mutex, NULL);           // Initialize chunk mutex
 
-    // Initialize blocks to air and lighting to 0
+    // Initialize blocks to air.
     for (int y = 0; y < CHUNK_HEIGHT; y++) {
         for (int z = 0; z < CHUNK_DEPTH; z++) {
             for (int x = 0; x < CHUNK_WIDTH; x++) {
                 new_chunk->blocks[y][z][x].type = BLOCK_AIR;
-                // Initialize both lighting buffers to prevent garbage data
-                new_chunk->skylight[0][y][z][x] = 0;
-                new_chunk->skylight[1][y][z][x] = 0;
-                new_chunk->blocklight[0][y][z][x] = 0;
-                new_chunk->blocklight[1][y][z][x] = 0;
             }
         }
     }
@@ -579,11 +562,10 @@ Chunk *world_load_or_create_chunk(World *world, int32_t chunk_x, int32_t chunk_y
         fclose(file);
         if (load_success) {
             new_chunk->loaded = true;
-            new_chunk->generated = true;        // Loaded chunks are already complete
-            new_chunk->modified = false;        // Not modified when loaded from disk
-            new_chunk->needs_relighting = true; // Recalculate lighting - arrays were not saved to disk
+            new_chunk->generated = true; // Loaded chunks are already complete
+            new_chunk->modified = false; // Not modified when loaded from disk
             printf("[chunk_load] Loaded chunk from %s\n", filepath);
-            // Queue for lighting and meshing
+            // Queue for meshing
             worker_queue_chunk(world, new_chunk);
         } else {
             printf("[chunk_load] Failed to parse chunk file: %s\n", filepath);
@@ -734,9 +716,6 @@ void world_generate_chunk(Chunk *chunk, uint64_t seed) {
     chunk->generated = true;
 }
 
-// Forward declaration for member helper used by world_set_block
-static void chunk_mark_lighting_dirty(Chunk *chunk, int local_x, int local_y, int local_z, int radius);
-
 // Set block at world position
 void world_set_block(World *world, int x, int y, int z, BlockType type) {
     // Calculate chunk coordinates
@@ -758,24 +737,9 @@ void world_set_block(World *world, int x, int y, int z, BlockType type) {
         // Lock chunk while modifying blocks and invalidating cache
         pthread_mutex_lock(&chunk->mutex);
 
-        // Get old block to check if lighting is affected
-        BlockType old_block = world_chunk_get_block(chunk, local_x, local_y, local_z);
-        BlockProperties old_props = get_block_properties(old_block);
-        BlockProperties new_props = get_block_properties(type);
-
-        // Check if this block change affects light propagation
-        // Light is affected if: emission changed, opacity changed, or air<->solid transition
-        bool affects_light = (old_props.emission != new_props.emission) ||
-                             (old_props.opacity != new_props.opacity) ||
-                             (old_block == BLOCK_AIR) != (type == BLOCK_AIR);
-
         world_chunk_set_block(chunk, local_x, local_y, local_z, type);
 
-        // Mark chunk as needing relighting if block change affects light
-        if (affects_light) {
-            chunk_mark_lighting_dirty(chunk, local_x, local_y, local_z, 1);
-        }
-        // Always mark meshed=false so worker knows to skip the expensive mesh rebuild
+        // Always mark meshed=false so worker will rebuild the mesh.
         // (we're doing it immediately below)
         chunk->meshed = false;
 
@@ -850,16 +814,10 @@ void world_set_block(World *world, int x, int y, int z, BlockType type) {
             // Issue #2: Use dirty-region remeshing for neighbor too
             chunk_update_visible_blocks_region(neighbor, world, neighbor_local_x, neighbor_local_y, neighbor_local_z, 1);
 
-            // Mark neighbor lighting dirty if this border change could affect light
-            pthread_mutex_lock(&neighbor->mutex);
-            chunk_mark_lighting_dirty(neighbor, neighbor_local_x, neighbor_local_y, neighbor_local_z, 1);
-            pthread_mutex_unlock(&neighbor->mutex);
-
-            pthread_mutex_lock(&neighbor->mutex);
+                pthread_mutex_lock(&neighbor->mutex);
             neighbor->meshed = true;
             pthread_mutex_unlock(&neighbor->mutex);
 
-            // Recalculate lighting for the neighbor chunk as well
             worker_queue_chunk(world, neighbor);
         }
     } else {
@@ -892,9 +850,7 @@ BlockType world_get_block(World *world, int x, int y, int z) {
     return result;
 }
 
-// Get block, treating unloaded chunks as air for skylight calculations.
-// This preserves daylight for the generated world instead of accidentally shadowing
-// everything when chunks above the player are not loaded yet.
+// Get block, treating unloaded chunks as air.
 BlockType world_get_block_or_solid(World *world, int x, int y, int z) {
     // Calculate chunk coordinates
     int32_t chunk_x = x < 0 ? (x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : x / CHUNK_WIDTH;
@@ -917,68 +873,6 @@ BlockType world_get_block_or_solid(World *world, int x, int y, int z) {
     BlockType result = world_chunk_get_block(chunk, local_x, local_y, local_z);
     pthread_mutex_unlock(&world->cache_mutex);
     return result;
-}
-
-static void chunk_mark_lighting_dirty(Chunk *chunk, int local_x, int local_y, int local_z, int radius) {
-    if (!chunk) {
-        return;
-    }
-
-    int min_x = local_x - radius;
-    int max_x = local_x + radius;
-    int min_y = local_y - radius;
-    int max_y = local_y + radius;
-    int min_z = local_z - radius;
-    int max_z = local_z + radius;
-
-    if (min_x < 0) {
-        min_x = 0;
-    }
-    if (max_x >= CHUNK_WIDTH) {
-        max_x = CHUNK_WIDTH - 1;
-    }
-    if (min_y < 0) {
-        min_y = 0;
-    }
-    if (max_y >= CHUNK_HEIGHT) {
-        max_y = CHUNK_HEIGHT - 1;
-    }
-    if (min_z < 0) {
-        min_z = 0;
-    }
-    if (max_z >= CHUNK_DEPTH) {
-        max_z = CHUNK_DEPTH - 1;
-    }
-
-    if (!chunk->lighting_dirty) {
-        chunk->dirty_min_x = min_x;
-        chunk->dirty_max_x = max_x;
-        chunk->dirty_min_y = min_y;
-        chunk->dirty_max_y = max_y;
-        chunk->dirty_min_z = min_z;
-        chunk->dirty_max_z = max_z;
-        chunk->lighting_dirty = true;
-    } else {
-        if (min_x < chunk->dirty_min_x) {
-            chunk->dirty_min_x = min_x;
-        }
-        if (max_x > chunk->dirty_max_x) {
-            chunk->dirty_max_x = max_x;
-        }
-        if (min_y < chunk->dirty_min_y) {
-            chunk->dirty_min_y = min_y;
-        }
-        if (max_y > chunk->dirty_max_y) {
-            chunk->dirty_max_y = max_y;
-        }
-        if (min_z < chunk->dirty_min_z) {
-            chunk->dirty_min_z = min_z;
-        }
-        if (max_z > chunk->dirty_max_z) {
-            chunk->dirty_max_z = max_z;
-        }
-    }
-    chunk->needs_relighting = true;
 }
 
 // Set block within a chunk
@@ -1032,7 +926,7 @@ void world_generate_prism(World *world) {
         world_generate_chunk(chunk, world->seed);
         chunk->loaded = true;
         chunk->generated = true;
-        worker_queue_chunk(world, chunk); // Queue for worker to calculate lighting and mesh
+        worker_queue_chunk(world, chunk); // Queue for worker to mesh this chunk
         chunk->modified = false;          // Freshly generated chunk is not modified
     }
 }
@@ -1128,8 +1022,7 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
                     // Mark as loaded again (this chunk was previously unloaded)
                     chunk->loaded = true;
                     chunk->pending_unload = false;
-                    // Mark lighting/mesh dirty so the worker will rebuild.
-                    chunk->needs_relighting = true;
+                    // Mark mesh dirty so the worker will rebuild.
                     chunk->meshed = false;
                     // NOTE: Don't queue yet - we'll do it after releasing the lock to avoid holding lock too long
                 }
@@ -1145,8 +1038,8 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
         for (int cy = player_chunk_y - load_dist; cy <= player_chunk_y + load_dist; cy++) {
             for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
                 Chunk *chunk = world_get_chunk(world, cx, cy, cz);
-                if (chunk && chunk->generated && chunk->loaded && chunk->needs_relighting) {
-                    // Queue for worker to calculate lighting and mesh
+                if (chunk && chunk->generated && chunk->loaded && !chunk->meshed) {
+                    // Queue for worker to mesh this chunk
                     worker_queue_chunk(world, chunk);
                 }
             }
@@ -2206,8 +2099,8 @@ bool world_load(World *world, const char *world_name) {
             for (int cz = -spawn_dist; cz <= spawn_dist; cz++) {
                 Chunk *chunk = world_load_or_create_chunk(world, cx, cy, cz);
                 if (chunk && chunk->loaded) {
-                    // Loaded chunks still need lighting and meshing
-                    if (chunk->needs_relighting || !chunk->meshed) {
+                    // Loaded chunks still need meshing
+                    if (!chunk->meshed) {
                         worker_queue_chunk(world, chunk);
                     }
                 } else if (chunk && !chunk->generated) {
@@ -2215,7 +2108,7 @@ bool world_load(World *world, const char *world_name) {
                     world_generate_chunk(chunk, world->seed);
                     chunk->loaded = true;
                     chunk->generated = true;
-                    worker_queue_chunk(world, chunk); // Queue for worker to calculate lighting and mesh
+                    worker_queue_chunk(world, chunk); // Queue for worker to mesh this chunk
                     chunk->modified = false;
                 }
             }
@@ -2225,265 +2118,6 @@ bool world_load(World *world, const char *world_name) {
     return true;
 }
 
-// Get skylight level at a specific world position
-// Returns 0 if in a solid block or unloaded area
-// OPTIMIZED: Fast path for unloaded chunks (returns 0 immediately)
-uint8_t world_get_skylight(World *world, int x, int y, int z) {
-    // Out of bounds?
-    if (y < WORLD_Y_MIN || y > WORLD_Y_MAX) {
-        return 0;
-    }
-
-    // Calculate chunk coordinates
-    int32_t chunk_x = x < 0 ? (x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : x / CHUNK_WIDTH;
-    int32_t chunk_y = y < 0 ? (y - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : y / CHUNK_HEIGHT;
-    int32_t chunk_z = z < 0 ? (z - CHUNK_DEPTH + 1) / CHUNK_DEPTH : z / CHUNK_DEPTH;
-
-    // Calculate position within chunk
-    int local_x = x - (chunk_x * CHUNK_WIDTH);
-    int local_y = y - (chunk_y * CHUNK_HEIGHT);
-    int local_z = z - (chunk_z * CHUNK_DEPTH);
-
-    // Bounds check first (fast)
-    if (local_x < 0 || local_x >= CHUNK_WIDTH || local_y < 0 || local_y >= CHUNK_HEIGHT || local_z < 0 || local_z >= CHUNK_DEPTH) {
-        return 0; // Out of chunk bounds
-    }
-
-    // Get chunk (linear search - but we return early for out-of-bounds)
-    Chunk *chunk = world_get_chunk(world, chunk_x, chunk_y, chunk_z);
-    if (!chunk) {
-        return 0; // Unloaded chunks have no skylight
-    }
-
-    int active = __atomic_load_n(&chunk->active_light_buffer, __ATOMIC_ACQUIRE);
-    return chunk->skylight[active][local_y][local_z][local_x];
-}
-
-// Get blocklight level at a specific world position
-// Returns 0 if in solid block or unloaded area
-uint8_t world_get_blocklight(World *world, int x, int y, int z) {
-    // Out of bounds?
-    if (y < WORLD_Y_MIN || y > WORLD_Y_MAX) {
-        return 0;
-    }
-
-    // Calculate chunk coordinates
-    int32_t chunk_x = x < 0 ? (x - CHUNK_WIDTH + 1) / CHUNK_WIDTH : x / CHUNK_WIDTH;
-    int32_t chunk_y = y < 0 ? (y - CHUNK_HEIGHT + 1) / CHUNK_HEIGHT : y / CHUNK_HEIGHT;
-    int32_t chunk_z = z < 0 ? (z - CHUNK_DEPTH + 1) / CHUNK_DEPTH : z / CHUNK_DEPTH;
-
-    // Calculate position within chunk
-    int local_x = x - (chunk_x * CHUNK_WIDTH);
-    int local_y = y - (chunk_y * CHUNK_HEIGHT);
-    int local_z = z - (chunk_z * CHUNK_DEPTH);
-
-    // Bounds check first (fast)
-    if (local_x < 0 || local_x >= CHUNK_WIDTH || local_y < 0 || local_y >= CHUNK_HEIGHT || local_z < 0 || local_z >= CHUNK_DEPTH) {
-        return 0; // Out of chunk bounds
-    }
-
-    // Get chunk
-    Chunk *chunk = world_get_chunk(world, chunk_x, chunk_y, chunk_z);
-    if (!chunk) {
-        return 0; // Unloaded chunks have no blocklight
-    }
-
-    int active = __atomic_load_n(&chunk->active_light_buffer, __ATOMIC_ACQUIRE);
-    return chunk->blocklight[active][local_y][local_z][local_x];
-}
-
-// Simple queue for BFS light propagation (static to avoid allocation per chunk)
-#define LIGHT_QUEUE_SIZE 4096
-typedef struct {
-    int x, y, z;
-    uint8_t light;
-} LightQueueEntry;
-
-static bool light_can_pass(BlockType type, bool skylight) {
-    (void)skylight;
-    BlockProperties props = get_block_properties(type);
-    if (type == BLOCK_AIR) {
-        return true;
-    }
-    return props.opacity < 15;
-}
-
-static void enqueue_light_entry(LightQueueEntry queue[LIGHT_QUEUE_SIZE], int *queue_tail, int x, int y, int z, uint8_t light) {
-    if (*queue_tail < LIGHT_QUEUE_SIZE) {
-        queue[*queue_tail].x = x;
-        queue[*queue_tail].y = y;
-        queue[*queue_tail].z = z;
-        queue[*queue_tail].light = light;
-        (*queue_tail)++;
-    }
-}
-
-static void propagate_light_from_sources(Chunk *chunk, World *world, uint8_t (*light_buf)[CHUNK_DEPTH][CHUNK_WIDTH], bool skylight) {
-    static LightQueueEntry queue[LIGHT_QUEUE_SIZE];
-    int queue_head = 0;
-    int queue_tail = 0;
-
-    if (!skylight) {
-        for (int y = 0; y < CHUNK_HEIGHT; y++) {
-            for (int z = 0; z < CHUNK_DEPTH; z++) {
-                for (int x = 0; x < CHUNK_WIDTH; x++) {
-                    BlockType block = chunk->blocks[y][z][x].type;
-                    if (block == BLOCK_AIR) {
-                        continue;
-                    }
-
-                    BlockProperties props = get_block_properties(block);
-                    if (props.emission > 0) {
-                        light_buf[y][z][x] = props.emission;
-                        enqueue_light_entry(queue, &queue_tail, x, y, z, props.emission);
-                    }
-                }
-            }
-        }
-    } else {
-        for (int z = 0; z < CHUNK_DEPTH; z++) {
-            for (int x = 0; x < CHUNK_WIDTH; x++) {
-                int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
-                int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
-                uint8_t current_light = 15;
-
-                for (int world_y = WORLD_Y_MAX; world_y >= WORLD_Y_MIN; world_y--) {
-                    int local_y = world_y - (chunk->chunk_y * CHUNK_HEIGHT);
-                    if (local_y < 0 || local_y >= CHUNK_HEIGHT) {
-                        continue;
-                    }
-
-                    BlockType block = world_get_block_or_solid(world, world_x, world_y, world_z);
-                    if (block == BLOCK_AIR) {
-                        if (current_light > light_buf[local_y][z][x]) {
-                            light_buf[local_y][z][x] = current_light;
-                        }
-                        if (current_light > 1) {
-                            current_light--;
-                        }
-                    } else {
-                        current_light = 0;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    while (queue_head < queue_tail) {
-        LightQueueEntry entry = queue[queue_head++];
-        int x = entry.x;
-        int y = entry.y;
-        int z = entry.z;
-        uint8_t current_light = entry.light;
-
-        if (current_light <= 1) {
-            continue;
-        }
-
-        uint8_t new_light = current_light - 1;
-
-        int neighbors[6][3] = {{x + 1, y, z}, {x - 1, y, z}, {x, y + 1, z}, {x, y - 1, z}, {x, y, z + 1}, {x, y, z - 1}};
-
-        for (int i = 0; i < 6; i++) {
-            int nx = neighbors[i][0];
-            int ny = neighbors[i][1];
-            int nz = neighbors[i][2];
-            if (nx < 0 || nx >= CHUNK_WIDTH || ny < 0 || ny >= CHUNK_HEIGHT || nz < 0 || nz >= CHUNK_DEPTH) {
-                continue;
-            }
-
-            BlockType neighbor_block = chunk->blocks[ny][nz][nx].type;
-            if (!light_can_pass(neighbor_block, skylight)) {
-                continue;
-            }
-
-            if (skylight) {
-                if (ny == y + 1 || ny == y - 1) {
-                    if (new_light > light_buf[ny][nz][nx]) {
-                        light_buf[ny][nz][nx] = new_light;
-                        if (new_light > 1) {
-                            enqueue_light_entry(queue, &queue_tail, nx, ny, nz, new_light);
-                        }
-                    }
-                }
-            } else {
-                if (new_light > light_buf[ny][nz][nx]) {
-                    light_buf[ny][nz][nx] = new_light;
-                    if (new_light > 1) {
-                        enqueue_light_entry(queue, &queue_tail, nx, ny, nz, new_light);
-                    }
-                }
-            }
-        }
-    }
-}
-
-// Calculate blocklight levels for a chunk using flood-fill from light-emitting blocks
-// Uses BFS propagation like Minecraft: light spreads from emitters (glowstone)
-// Note: uses double-buffering so render thread never reads partially-updated lighting data.
-void calculate_chunk_blocklight(Chunk *chunk, World *world, int target_buffer) {
-    (void)world;
-    if (!chunk) {
-        return;
-    }
-
-    uint8_t (*blocklight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->blocklight[target_buffer];
-
-    for (int y = 0; y < CHUNK_HEIGHT; y++) {
-        for (int z = 0; z < CHUNK_DEPTH; z++) {
-            for (int x = 0; x < CHUNK_WIDTH; x++) {
-                blocklight_buf[y][z][x] = 0;
-            }
-        }
-    }
-
-    propagate_light_from_sources(chunk, world, blocklight_buf, false);
-}
-
-// Calculate skylight levels for a chunk using BFS from the sky downward.
-// This follows the same core idea as Minecraft: sunlight starts at the top of the world,
-// passes through air, and is blocked by opaque blocks.
-void calculate_chunk_skylight(Chunk *chunk, World *world, int target_buffer, bool dirty_region, int min_x, int max_x, int min_z, int max_z) {
-    if (!chunk) {
-        return;
-    }
-
-    uint8_t (*skylight_buf)[CHUNK_DEPTH][CHUNK_WIDTH] = chunk->skylight[target_buffer];
-
-    if (!dirty_region) {
-        for (int y = 0; y < CHUNK_HEIGHT; y++) {
-            for (int z = 0; z < CHUNK_DEPTH; z++) {
-                for (int x = 0; x < CHUNK_WIDTH; x++) {
-                    skylight_buf[y][z][x] = 0;
-                }
-            }
-        }
-    } else {
-        if (min_x < 0) {
-            min_x = 0;
-        }
-        if (max_x >= CHUNK_WIDTH) {
-            max_x = CHUNK_WIDTH - 1;
-        }
-        if (min_z < 0) {
-            min_z = 0;
-        }
-        if (max_z >= CHUNK_DEPTH) {
-            max_z = CHUNK_DEPTH - 1;
-        }
-
-        for (int y = 0; y < CHUNK_HEIGHT; y++) {
-            for (int z = min_z; z <= max_z; z++) {
-                for (int x = min_x; x <= max_x; x++) {
-                    skylight_buf[y][z][x] = 0;
-                }
-            }
-        }
-    }
-
-    propagate_light_from_sources(chunk, world, skylight_buf, true);
-}
 
 // GREEDY MESHING: Merge adjacent coplanar exposed faces into larger rectangles
 // This dramatically reduces geometry - typically 60-80% reduction in face count
@@ -2582,7 +2216,6 @@ MergedMesh *chunk_greedy_mesh(Chunk *chunk, World *world) {
                     quad->h = h;
                     quad->face = 2; // +Y
                     quad->type = block;
-                    quad->light = world_get_skylight(world, world_x, world_y + 1, world_z);
 
                     // Mark as used
                     for (int dz = 0; dz < h; dz++) {
@@ -2671,7 +2304,6 @@ MergedMesh *chunk_greedy_mesh(Chunk *chunk, World *world) {
                     quad->h = h;
                     quad->face = 3; // -Y
                     quad->type = block;
-                    quad->light = world_get_skylight(world, world_x, world_y - 1, world_z);
 
                     for (int dz = 0; dz < h; dz++) {
                         for (int dx = 0; dx < w; dx++) {
@@ -2684,25 +2316,6 @@ MergedMesh *chunk_greedy_mesh(Chunk *chunk, World *world) {
     }
 
     return mesh;
-}
-
-static uint8_t get_face_light_value(World *world, int world_x, int world_y, int world_z, int face) {
-    uint8_t skyl = world_get_skylight(world, world_x, world_y, world_z);
-    uint8_t blockl = world_get_blocklight(world, world_x, world_y, world_z);
-
-    switch (face) {
-    case 2: // +Y (top) -> skylight from above
-        return skyl;
-    case 3: // -Y (bottom) -> blocklight only
-        return blockl;
-    default: {
-        if (skyl > 0) {
-            uint8_t side_lighting = (skyl > 2) ? (uint8_t)(skyl - 2) : 1;
-            return (side_lighting > blockl) ? side_lighting : blockl;
-        }
-        return blockl;
-    }
-    }
 }
 
 // OPTIMIZED MESHING FOR VOXEL RENDERING
@@ -2794,57 +2407,6 @@ void chunk_cache_visible_blocks(Chunk *chunk, World *world) {
                     temp_blocks[temp_count].y = y;
                     temp_blocks[temp_count].z = z;
                     temp_blocks[temp_count].exposed_faces = exposed_faces;
-                    temp_blocks[temp_count].light_level = 0; // preserved for compatibility
-
-                    // Compute per-face baked lighting (use max of skylight and blocklight at adjacent air block)
-                    for (int face = 0; face < 6; face++) {
-                        // default to zero light
-                        temp_blocks[temp_count].face_light[face] = 0;
-                    }
-
-                    // +X
-                    if (exposed_faces & (1 << 0)) {
-                        int nx = world_x + 1;
-                        int ny = world_y;
-                        int nz = world_z;
-                        temp_blocks[temp_count].face_light[0] = get_face_light_value(world, nx, ny, nz, 0);
-                    }
-                    // -X
-                    if (exposed_faces & (1 << 1)) {
-                        int nx = world_x - 1;
-                        int ny = world_y;
-                        int nz = world_z;
-                        temp_blocks[temp_count].face_light[1] = get_face_light_value(world, nx, ny, nz, 1);
-                    }
-                    // +Y
-                    if (exposed_faces & (1 << 2)) {
-                        int nx = world_x;
-                        int ny = world_y + 1;
-                        int nz = world_z;
-                        temp_blocks[temp_count].face_light[2] = get_face_light_value(world, nx, ny, nz, 2);
-                    }
-                    // -Y
-                    if (exposed_faces & (1 << 3)) {
-                        int nx = world_x;
-                        int ny = world_y - 1;
-                        int nz = world_z;
-                        temp_blocks[temp_count].face_light[3] = get_face_light_value(world, nx, ny, nz, 3);
-                    }
-                    // +Z
-                    if (exposed_faces & (1 << 4)) {
-                        int nx = world_x;
-                        int ny = world_y;
-                        int nz = world_z + 1;
-                        temp_blocks[temp_count].face_light[4] = get_face_light_value(world, nx, ny, nz, 4);
-                    }
-                    // -Z
-                    if (exposed_faces & (1 << 5)) {
-                        int nx = world_x;
-                        int ny = world_y;
-                        int nz = world_z - 1;
-                        temp_blocks[temp_count].face_light[5] = get_face_light_value(world, nx, ny, nz, 5);
-                    }
-
                     temp_count++;
                 }
             }
@@ -3027,32 +2589,6 @@ void chunk_update_visible_blocks_region(Chunk *chunk, World *world, int local_x,
                     temp_blocks[temp_count].y = y;
                     temp_blocks[temp_count].z = z;
                     temp_blocks[temp_count].exposed_faces = exposed_faces;
-                    temp_blocks[temp_count].light_level = 0;
-
-                    // Compute per-face baked lighting
-                    for (int face = 0; face < 6; face++) {
-                        temp_blocks[temp_count].face_light[face] = 0;
-                    }
-
-                    if (exposed_faces & (1 << 0)) {
-                        temp_blocks[temp_count].face_light[0] = get_face_light_value(world, world_x + 1, world_y, world_z, 0);
-                    }
-                    if (exposed_faces & (1 << 1)) {
-                        temp_blocks[temp_count].face_light[1] = get_face_light_value(world, world_x - 1, world_y, world_z, 1);
-                    }
-                    if (exposed_faces & (1 << 2)) {
-                        temp_blocks[temp_count].face_light[2] = get_face_light_value(world, world_x, world_y + 1, world_z, 2);
-                    }
-                    if (exposed_faces & (1 << 3)) {
-                        temp_blocks[temp_count].face_light[3] = get_face_light_value(world, world_x, world_y - 1, world_z, 3);
-                    }
-                    if (exposed_faces & (1 << 4)) {
-                        temp_blocks[temp_count].face_light[4] = get_face_light_value(world, world_x, world_y, world_z + 1, 4);
-                    }
-                    if (exposed_faces & (1 << 5)) {
-                        temp_blocks[temp_count].face_light[5] = get_face_light_value(world, world_x, world_y, world_z - 1, 5);
-                    }
-
                     temp_count++;
                 }
             }

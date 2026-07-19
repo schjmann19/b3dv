@@ -960,7 +960,7 @@ int b3dv_main(int argc, char **argv) {
                     wire_color.a = (unsigned char)(255 * (1.0f - fog_factor)); // Fade out alpha too
                 }
                 // draw only visible faces
-                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, visible_blocks_copy[i].face_light, show_wireframe);
+                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, show_wireframe);
 
                 blocks_rendered++;
             }
@@ -1860,6 +1860,7 @@ int b3dv_main(int argc, char **argv) {
 
         EndDrawing();
     }
+    B3DV_MAIN_LOOP
 
     // Save world before closing (if one was loaded)
     if (world && player) {
