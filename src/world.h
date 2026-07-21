@@ -100,10 +100,10 @@ typedef struct {
     int32_t chunk_x; // Chunk coordinates
     int32_t chunk_y;
     int32_t chunk_z;
-    bool loaded;           // Whether this chunk is currently in memory
-    bool generated;        // Whether terrain has been generated
-    bool modified;         // Whether this chunk has unsaved changes
-    bool meshed;           // Whether visible blocks have been cached
+    bool loaded;               // Whether this chunk is currently in memory
+    bool generated;            // Whether terrain has been generated
+    bool modified;             // Whether this chunk has unsaved changes
+    bool meshed;               // Whether visible blocks have been cached
     bool pending_save;         // Whether this chunk is queued to be saved asynchronously
     bool pending_unload;       // Whether this chunk is scheduled for unload after save completes
     volatile int in_use_count; // Worker jobs currently processing this chunk
@@ -139,7 +139,7 @@ typedef struct {
 
 // Worker job types.
 typedef enum {
-    WORKER_JOB_MESH,    // Rebuild mesh for a chunk
+    WORKER_JOB_MESH,      // Rebuild mesh for a chunk
     WORKER_JOB_SAVE_CHUNK // Save chunk to disk (async)
 } WorkerJobType;
 
@@ -214,14 +214,14 @@ void world_chunk_set_block(Chunk *chunk, int x, int y, int z, BlockType type);
 BlockType world_chunk_get_block(Chunk *chunk, int x, int y, int z);
 void world_generate_chunk(Chunk *chunk, uint64_t seed);
 Chunk *world_load_or_create_chunk(World *world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z);
-void chunk_cache_visible_blocks(Chunk *chunk, World *world);                                                                                 // Pre-compute list of visible blocks
-void chunk_update_visible_blocks_region(Chunk *chunk, World *world, int local_x, int local_y, int local_z, int radius);                      // (Issue #2) Update only affected region
-void chunk_free_visible_blocks(Chunk *chunk);                                                                                                // Clean up visible blocks cache
-void worker_queue_chunk(World *world, Chunk *chunk);                                                                                         // Add chunk to worker queue for lighting/meshing
-void worker_queue_chunk_save(World *world, Chunk *chunk);                                                                                    // Add chunk to worker queue for saving
-void worker_flush_queue(World *world);                                                                                                       // Wait for all worker queue jobs to complete
-void worker_shutdown(World *world);                                                                                                          // Cleanly shut down worker thread
-void worker_init(World *world);                                                                                                              // Initialize worker thread system
+void chunk_cache_visible_blocks(Chunk *chunk, World *world);                                                            // Pre-compute list of visible blocks
+void chunk_update_visible_blocks_region(Chunk *chunk, World *world, int local_x, int local_y, int local_z, int radius); // (Issue #2) Update only affected region
+void chunk_free_visible_blocks(Chunk *chunk);                                                                           // Clean up visible blocks cache
+void worker_queue_chunk(World *world, Chunk *chunk);                                                                    // Add chunk to worker queue for lighting/meshing
+void worker_queue_chunk_save(World *world, Chunk *chunk);                                                               // Add chunk to worker queue for saving
+void worker_flush_queue(World *world);                                                                                  // Wait for all worker queue jobs to complete
+void worker_shutdown(World *world);                                                                                     // Cleanly shut down worker thread
+void worker_init(World *world);                                                                                         // Initialize worker thread system
 // Apply saved player data from world players file into a runtime Player instance
 bool world_apply_players_to(World *world, void *player);
 

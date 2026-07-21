@@ -814,7 +814,7 @@ void world_set_block(World *world, int x, int y, int z, BlockType type) {
             // Issue #2: Use dirty-region remeshing for neighbor too
             chunk_update_visible_blocks_region(neighbor, world, neighbor_local_x, neighbor_local_y, neighbor_local_z, 1);
 
-                pthread_mutex_lock(&neighbor->mutex);
+            pthread_mutex_lock(&neighbor->mutex);
             neighbor->meshed = true;
             pthread_mutex_unlock(&neighbor->mutex);
 
@@ -2117,7 +2117,6 @@ bool world_load(World *world, const char *world_name) {
 
     return true;
 }
-
 
 // GREEDY MESHING: Merge adjacent coplanar exposed faces into larger rectangles
 // This dramatically reduces geometry - typically 60-80% reduction in face count

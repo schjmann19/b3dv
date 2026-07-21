@@ -780,3 +780,5 @@ asd
 /help
 /give player glowstone 30
 /give player glowstone 30
+/fly enable
+/flight enable
