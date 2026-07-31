@@ -16,3 +16,4 @@ zig-out/
 lua/
 .hidden/
 .lines
+untracked/

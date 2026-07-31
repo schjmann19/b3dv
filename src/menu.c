@@ -1,4 +1,4 @@
-#include "menu.h"
+#include "../include/menu.h"
 #include <ctype.h>
 #include <dirent.h>
 #include <stdio.h>

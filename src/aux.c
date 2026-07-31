@@ -7,9 +7,9 @@
 
 #include "../common_utils/args.h"
 
-#include "aux.h"
+#include "../include/aux.h"
 
-#include "neutrino_detect.h"
+#include "../include/neutrino_detect.h"
 
 bool neutrino_detection = false;
 

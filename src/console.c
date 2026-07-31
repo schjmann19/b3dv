@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 #include "../common_utils/simple_strings.h"
-#include "console.h"
+#include "../include/console.h"
 
 // Command queue
 #define CONSOLE_QUEUE_SIZE 32

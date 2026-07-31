@@ -3,8 +3,8 @@
 #include <string.h>
 
 #include "../common_utils/simple_strings.h"
-#include "world.h"
-#include "game_server.h"
+#include "../include/world.h"
+#include "../include/game_server.h"
 static void game_server_apply_command(GameServer *srv,
                                       Player *player,
                                       const ConsoleCommand *cmd,

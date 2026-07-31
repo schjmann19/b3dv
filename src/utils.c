@@ -1,6 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +17,7 @@
 #define PATH_SEPARATOR "/"
 #endif
 
-#include "utils.h"
+#include "../include/utils.h"
 
 // Get current process memory usage in MB
 int get_process_memory_mb(void) {

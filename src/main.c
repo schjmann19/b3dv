@@ -6,17 +6,17 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "menu.h"
-#include "player.h"
+#include "../include/menu.h"
+#include "../include/player.h"
 #include "raylib.h"
-#include "rendering.h"
-#include "utils.h"
-#include "vec_math.h"
-#include "world.h"
-// #include "clouds.h"
-#include "aux.h"
-#include "console.h"
-#include "game_server.h"
+#include "../include/rendering.h"
+#include "../include/utils.h"
+#include "../include/vec_math.h"
+#include "../include/world.h"
+// #include "../include/clouds.h"
+#include "../include/aux.h"
+#include "../include/console.h"
+#include "../include/game_server.h"
 
 #if defined(PLATFORM_DESKTOP)
 #define SDF_GLSL_VER 330

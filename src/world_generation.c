@@ -6,9 +6,9 @@
 #include <time.h>
 #include <zlib.h>
 
-#include "player.h"
+#include "../include/player.h"
 #include "raylib.h"
-#include "world.h"
+#include "../include/world.h"
 
 // Chunk loader helper declaration needed before use in world_load_or_create_chunk.
 static bool load_chunk_from_file(FILE *file, Chunk *chunk);

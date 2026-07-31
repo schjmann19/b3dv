@@ -2,9 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "player.h"
-#include "vec_math.h"
-#include "world.h"
+#include "../include/player.h"
+#include "../include/world.h"
 
 // Create a player
 Player *player_create(float x, float y, float z) {

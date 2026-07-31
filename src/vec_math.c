@@ -1,6 +1,6 @@
 #include <math.h>
 
-#include "vec_math.h"
+#include "../include/vec_math.h"
 
 Vector3 vec3_normalize(Vector3 v) {
     float len = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
