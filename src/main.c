@@ -952,7 +952,7 @@ int b3dv_main(int argc, char **argv) {
                 }
 
                 // apply fog to wireframe too
-                Color wire_color = DARKGRAY;
+                Color wire_color = MAGENTA;
                 if (fog_factor > 0.0f) {
                     wire_color.r = (unsigned char)(wire_color.r * (1.0f - fog_factor) + SKYBLUE.r * fog_factor);
                     wire_color.g = (unsigned char)(wire_color.g * (1.0f - fog_factor) + SKYBLUE.g * fog_factor);

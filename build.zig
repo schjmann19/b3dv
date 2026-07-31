@@ -73,9 +73,12 @@ fn getCFlags(optimize: std.builtin.OptimizeMode) []const []const u8 {
         },
         .ReleaseFast, .ReleaseSmall => &.{
             "-std=c11",
+            //"-O1",
+            //"-g",
             "-O3",
             "-ffast-math",
             "-flto=full",
+            //"-fsanitize=address",
         },
     };
 }

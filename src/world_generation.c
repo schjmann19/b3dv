@@ -920,6 +920,8 @@ Color world_get_block_color(BlockType type) {
         return (Color){64, 64, 64, 255}; // Dark Grey (Bedrock)
     case BLOCK_GLOWSTONE:
         return (Color){255, 255, 200, 255}; // Bright warm white
+    case BLOCK_COBBLESTONE:
+        return (Color){128, 128, 128, 255}; // Grey
     case BLOCK_AIR:
     default:
         return (Color){0, 0, 0, 0}; // Transparent
@@ -1147,7 +1149,18 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
                 i++;
                 continue;
             }
-
+//also make sure the chunk we're about to swap INTO this slot
+    // isn't being concurrently processed by the worker thread. Copying
+    // its struct (pointers + mutexes) while it's mid-update is what
+    // causes the aliased-pointer double-free.
+    if (i < world->chunk_cache.chunk_count - 1) {
+        Chunk *last_chunk = &world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
+        if (__atomic_load_n(&last_chunk->in_use_count, __ATOMIC_ACQUIRE) > 0) {
+            // Can't safely swap right now — try this slot again on a later update
+            i++;
+            continue;
+        }
+    }
             // Invalidate neighbor meshes before unloading this chunk.
             // Neighbors may now need to update faces that were previously against this chunk.
             {
