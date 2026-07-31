@@ -3,7 +3,7 @@
 Copyright (c) 2026 Jimena Neumann,
 SPDX-License-Identifier: BSD-3-Clause
 
-Simple 3D visualizer of a basic world featuring:
+Simple 3D world made of voxels featuring:
 simple terrain, multiple blocks, a worlds (with chunks) system, optimized rendering.
 Heavily inspired in early iterations of Minecraft by Markus Persson.
 Uses Raylib and Zig build system.
@@ -11,14 +11,23 @@ Uses Raylib and Zig build system.
 ## directory structure
 
 ```txt
-./external/         - raylib (submodule)
-./Screenshots/      - Screenshots
+./zig-out/          - zig build output
+./versions.txt      - changelog
+./tools/            - convenient tools to update the version string and create a release archive
 ./src/              - source code
-./tools/            - convenient tools
+./Screenshots/      - Screenshots
+./run.bash          - I'm lazy
+./options.conf      - game settings
+./LICENSE           - license text
+./include/          - header files
+./external/         - raylib (submodule)
+./chathistory       - self explanatory
+./build.zig         - build definition
 ./build.sh          - build script (zig build + copy)
 ./b3dv              - executable (Linux)
-./LICENSE           - license text
-./zig-out/          - zig build output
+./assets            - textures, localized text, and wallpapers / menu backgrounds
+./.old              - stuff that isn't used anymore
+
 ```
 
 ## Building and Running
@@ -26,8 +35,7 @@ Uses Raylib and Zig build system.
 ### Linux
 
 ```bash
-./build.sh
-./run
+./run.bash
 ```
 
 Or manually:
