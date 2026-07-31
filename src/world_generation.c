@@ -323,6 +323,7 @@ World *world_create(void) {
     world->textures.grass_texture = (Texture2D){0};
     world->textures.dirt_texture = (Texture2D){0};
     world->textures.stone_texture = (Texture2D){0};
+    world->textures.cobblestone_texture = (Texture2D){0};
 
     strncpy(world->world_name, "default", sizeof(world->world_name) - 1);
     world->world_name[sizeof(world->world_name) - 1] = '\0';
@@ -380,27 +381,31 @@ void world_load_textures(World *world) {
     }
 
     // Try to load grass texture
-    world->textures.grass_texture = LoadTexture("./assets/textures/blocks/grass.png");
+    world->textures.grass_texture = LoadTexture("./assets/textures/blocks/grass_block_top.png");
     printf("[textures] grass texture id: %d\n", world->textures.grass_texture.id);
 
     // Try to load dirt texture
-    world->textures.dirt_texture = LoadTexture("./assets/textures/blocks/dirt.png");
+    world->textures.dirt_texture = LoadTexture("./assets/textures/blocks/dirt_block.png");
     printf("[textures] dirt texture id: %d\n", world->textures.dirt_texture.id);
 
     // Try to load stone texture
     world->textures.stone_texture = LoadTexture("./assets/textures/blocks/stone.png");
     printf("[textures] stone texture id: %d\n", world->textures.stone_texture.id);
 
+    // Try to load cobblestone texture
+    world->textures.cobblestone_texture = LoadTexture("./assets/textures/blocks/cobblestone.png");
+    printf("[textures] stone texture id: %d\n", world->textures.cobblestone_texture.id);
+
     // Try to load sand texture
     world->textures.sand_texture = LoadTexture("./assets/textures/blocks/sand.png");
     printf("[textures] sand texture id: %d\n", world->textures.sand_texture.id);
 
     // Try to load wood texture
-    world->textures.wood_texture = LoadTexture("./assets/textures/blocks/wood.png");
+    world->textures.wood_texture = LoadTexture("./assets/textures/blocks/oak_plank.png");
     printf("[textures] wood texture id: %d\n", world->textures.wood_texture.id);
 
     // Try to load bedrock texture
-    world->textures.bedrock_texture = LoadTexture("./assets/textures/blocks/stone.png"); // Using stone texture as fallback
+    world->textures.bedrock_texture = LoadTexture("./assets/textures/blocks/bedrock.png");
     printf("[textures] bedrock texture id: %d\n", world->textures.bedrock_texture.id);
 
     world->textures.textures_loaded = true;
@@ -419,6 +424,7 @@ void world_unload_textures(World *world) {
     UnloadTexture(world->textures.sand_texture);
     UnloadTexture(world->textures.wood_texture);
     UnloadTexture(world->textures.bedrock_texture);
+    UnloadTexture(world->textures.cobblestone_texture);
 
     world->textures.textures_loaded = false;
 }
@@ -443,6 +449,8 @@ Texture2D world_get_block_texture(World *world, BlockType type) {
         return world->textures.wood_texture;
     case BLOCK_BEDROCK:
         return world->textures.bedrock_texture;
+    case BLOCK_COBBLESTONE:
+        return world->textures.cobblestone_texture;
     case BLOCK_AIR:
     default:
         return (Texture2D){0};
@@ -1710,6 +1718,8 @@ static const char *block_type_to_id(BlockType t) {
         return "block_bedrock";
     case BLOCK_GLOWSTONE:
         return "block_glowstone";
+    case BLOCK_COBBLESTONE:
+        return "block_cobblestone";
     case BLOCK_AIR:
     default:
         return "block_air";
@@ -1741,6 +1751,9 @@ static BlockType block_id_to_type(const char *id) {
     }
     if (strcmp(id, "block_glowstone") == 0) {
         return BLOCK_GLOWSTONE;
+    }
+    if (strcmp(id, "block_cobblestone") == 0) {
+        return BLOCK_COBBLESTONE;
     }
     return BLOCK_AIR;
 }

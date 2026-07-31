@@ -44,7 +44,7 @@ int b3dv_main(int argc, char **argv) {
     // Disable HIGHDPI to avoid fractional scaling issues with Hyprland's 1.2x compositor scaling
     // Render at 1200x800 logical pixels; let window manager handle physical scaling
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.22-beta");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.23-beta");
 
     // Load SDF shader from project assets (avoid external/ references)
     sdf_shader = (Shader){0};
@@ -1099,6 +1099,9 @@ int b3dv_main(int argc, char **argv) {
                     case BLOCK_GLOWSTONE:
                         block_color = (Color){255, 255, 0, 255};
                         break;
+                    case BLOCK_COBBLESTONE:
+                        block_color = (Color){128, 128, 128, 255};
+                        break;
                     default:
                         block_color = (Color){200, 200, 200, 255};
                         break;
@@ -1175,6 +1178,9 @@ int b3dv_main(int argc, char **argv) {
                             break;
                         case BLOCK_GLOWSTONE:
                             block_color = (Color){255, 255, 0, 255};
+                            break;
+                        case BLOCK_COBBLESTONE:
+                            block_color = (Color){128, 128, 128, 255};
                             break;
                         default:
                             block_color = (Color){200, 200, 200, 255};
@@ -1277,6 +1283,9 @@ int b3dv_main(int argc, char **argv) {
                         break;
                     case BLOCK_GLOWSTONE:
                         block_color = (Color){255, 255, 0, 255};
+                        break;
+                    case BLOCK_COBBLESTONE:
+                        block_color = (Color){128, 128, 128, 255};
                         break;
                     default:
                         block_color = (Color){200, 200, 200, 255};
@@ -1391,7 +1400,7 @@ int b3dv_main(int argc, char **argv) {
                      player->position.x, player->position.y, player->position.z);
             DrawTextExCustom(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.22-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.23-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 2) {
             // player stats HUD
             DrawTextExCustom(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1421,14 +1430,14 @@ int b3dv_main(int argc, char **argv) {
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextExCustom(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.22-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.23-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextExCustom(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextExCustom(custom_font, "b3dv 0.0.22-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.23-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         if (hud_visible && menu->compass_enabled) {

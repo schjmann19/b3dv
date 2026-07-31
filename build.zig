@@ -75,6 +75,7 @@ fn getCFlags(optimize: std.builtin.OptimizeMode) []const []const u8 {
             "-std=c11",
             "-O3",
             "-ffast-math",
+            "-flto=full",
         },
     };
 }

@@ -782,3 +782,12 @@ asd
 /give player glowstone 30
 /fly enable
 /flight enable
+/tp 200 200 200
+/give player wood 1
+/give player wood 50
+/give player cobblestone 4
+/give player cobblestone 4
+/give player cobblestone 4
+/give player cobblestone 65
+/give player cobblestone 65
+/give player cobblestone 65

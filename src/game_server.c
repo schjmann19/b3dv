@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "../common_utils/simple_strings.h"
+#include "world.h"
 #include "game_server.h"
 static void game_server_apply_command(GameServer *srv,
                                       Player *player,
@@ -76,6 +77,9 @@ static void game_server_apply_command(GameServer *srv,
         } else if (strcmp(item_buf, "glowstone") == 0) {
             block_type = BLOCK_GLOWSTONE;
             type_str = "glowstone";
+        } else if (strcmp(item_buf, "cobblestone") == 0) {
+            block_type = BLOCK_COBBLESTONE;
+            type_str = "cobblestone";
         }
 
         if (type_str && inventory_give(player, block_type, count)) {

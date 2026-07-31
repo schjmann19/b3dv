@@ -19,7 +19,8 @@ typedef enum {
     BLOCK_SAND = 4,
     BLOCK_WOOD = 5,
     BLOCK_BEDROCK = 6,
-    BLOCK_GLOWSTONE = 7
+    BLOCK_GLOWSTONE = 7,
+    BLOCK_COBBLESTONE = 8
 } BlockType;
 
 // Block properties used for gameplay metadata only.
@@ -40,6 +41,7 @@ static inline BlockProperties get_block_properties(BlockType type) {
     case BLOCK_SAND:
     case BLOCK_WOOD:
     case BLOCK_BEDROCK:
+    case BLOCK_COBBLESTONE:
         return (BlockProperties){0, 0};
     case BLOCK_AIR:
     default:
@@ -90,6 +92,7 @@ typedef struct {
     Texture2D sand_texture;
     Texture2D wood_texture;
     Texture2D bedrock_texture;
+    Texture2D cobblestone_texture;
     bool textures_loaded;
 } TextureCache;
 

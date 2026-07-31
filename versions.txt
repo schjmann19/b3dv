@@ -1,3 +1,7 @@
+0.0.23-beta:
+    + added cobblestone
+    * new textures
+
 0.0.22-beta:
     * splitting client / server
     * heavily WIP
