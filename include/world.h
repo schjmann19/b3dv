@@ -20,7 +20,8 @@ typedef enum {
     BLOCK_WOOD = 5,
     BLOCK_BEDROCK = 6,
     BLOCK_GLOWSTONE = 7,
-    BLOCK_COBBLESTONE = 8
+    BLOCK_COBBLESTONE = 8,
+    BLOCK_GLASS = 9
 } BlockType;
 
 // Block properties used for gameplay metadata only.
@@ -42,11 +43,29 @@ static inline BlockProperties get_block_properties(BlockType type) {
     case BLOCK_WOOD:
     case BLOCK_BEDROCK:
     case BLOCK_COBBLESTONE:
+    case BLOCK_GLASS:
         return (BlockProperties){0, 0};
     case BLOCK_AIR:
     default:
         return (BlockProperties){0, 0};
     }
+}
+
+static inline bool block_is_transparent(BlockType type) {
+    return type == BLOCK_AIR || type == BLOCK_GLASS;
+}
+
+static inline bool block_face_is_exposed(BlockType current, BlockType neighbor) {
+    if (neighbor == BLOCK_AIR) {
+        return true;
+    }
+    if (neighbor == BLOCK_GLASS) {
+        return current != BLOCK_GLASS; // opaque blocks expose faces against glass, glass blocks do not expose internal glass-glass faces
+    }
+    if (current == BLOCK_GLASS) {
+        return true; // glass is visible against any non-glass, non-air block
+    }
+    return false;
 }
 
 // Cached visible block entry for mesh caching
@@ -84,15 +103,23 @@ typedef struct {
     BlockType type;
 } Block;
 
-// Texture cache for block types
+// Which face group a texture applies to
+typedef enum {
+    BLOCK_FACE_TOP,
+    BLOCK_FACE_SIDE,
+    BLOCK_FACE_BOTTOM
+} BlockFace;
+
+// A block's three textures: top, side, and bottom faces
 typedef struct {
-    Texture2D grass_texture;
-    Texture2D dirt_texture;
-    Texture2D stone_texture;
-    Texture2D sand_texture;
-    Texture2D wood_texture;
-    Texture2D bedrock_texture;
-    Texture2D cobblestone_texture;
+    Texture2D top;
+    Texture2D side;
+    Texture2D bottom;
+} BlockTextureSet;
+
+// Texture cache for block types - one BlockTextureSet per BlockType
+typedef struct {
+    BlockTextureSet sets[BLOCK_GLASS + 1];
     bool textures_loaded;
 } TextureCache;
 
@@ -199,8 +226,8 @@ void world_free(World *world);
 // Get color for a block type (obsolete/fallback)
 Color world_get_block_color(BlockType type);
 
-// Get texture for a block type (use this one instead of world_get_block_color)
-Texture2D world_get_block_texture(World *world, BlockType type);
+// Get texture for a specific face of a block type.
+Texture2D world_get_block_face_texture(World *world, BlockType type, BlockFace face);
 
 void world_load_textures(World *world);
 void world_unload_textures(World *world);

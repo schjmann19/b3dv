@@ -13,31 +13,39 @@
 
 // check if a block has any face visible (exposed to air)
 bool has_visible_face(World *world, int x, int y, int z, Vector3 block_pos, Vector3 cam_pos) {
-    // Check all 6 neighbors - if any is air, this block has an exposed face
-    if (world_get_block(world, x + 1, y, z) == BLOCK_AIR ||
-        world_get_block(world, x - 1, y, z) == BLOCK_AIR ||
-        world_get_block(world, x, y + 1, z) == BLOCK_AIR ||
-        world_get_block(world, x, y - 1, z) == BLOCK_AIR ||
-        world_get_block(world, x, y, z + 1) == BLOCK_AIR ||
-        world_get_block(world, x, y, z - 1) == BLOCK_AIR) {
+    BlockType current = world_get_block(world, x, y, z);
+    if (current == BLOCK_AIR) {
+        return false;
+    }
+    // Check all 6 neighbors - if any face is exposed, this block has a visible face
+    if (block_face_is_exposed(current, world_get_block(world, x + 1, y, z)) ||
+        block_face_is_exposed(current, world_get_block(world, x - 1, y, z)) ||
+        block_face_is_exposed(current, world_get_block(world, x, y + 1, z)) ||
+        block_face_is_exposed(current, world_get_block(world, x, y - 1, z)) ||
+        block_face_is_exposed(current, world_get_block(world, x, y, z + 1)) ||
+        block_face_is_exposed(current, world_get_block(world, x, y, z - 1))) {
         return true; // has at least one exposed face
     }
 
-    return false; // completely surrounded by solid blocks
+    return false; // completely surrounded by non-exposed neighbors
 }
 
 // check if a block is occluded (completely surrounded by other blocks)
 bool is_block_occluded(World *world, int x, int y, int z) {
-    // check all 6 neighbors - if all are stone, this block is completely hidden
-    if (world_get_block(world, x + 1, y, z) != BLOCK_AIR &&
-        world_get_block(world, x - 1, y, z) != BLOCK_AIR &&
-        world_get_block(world, x, y + 1, z) != BLOCK_AIR &&
-        world_get_block(world, x, y - 1, z) != BLOCK_AIR &&
-        world_get_block(world, x, y, z + 1) != BLOCK_AIR &&
-        world_get_block(world, x, y, z - 1) != BLOCK_AIR) {
-        return true; // block is completely surrounded, don't render
+    BlockType current = world_get_block(world, x, y, z);
+    if (current == BLOCK_AIR) {
+        return true;
     }
-    return false;
+    // check all 6 neighbors - if any face is exposed, the block is not occluded
+    if (block_face_is_exposed(current, world_get_block(world, x + 1, y, z)) ||
+        block_face_is_exposed(current, world_get_block(world, x - 1, y, z)) ||
+        block_face_is_exposed(current, world_get_block(world, x, y + 1, z)) ||
+        block_face_is_exposed(current, world_get_block(world, x, y - 1, z)) ||
+        block_face_is_exposed(current, world_get_block(world, x, y, z + 1)) ||
+        block_face_is_exposed(current, world_get_block(world, x, y, z - 1))) {
+        return false;
+    }
+    return true;
 }
 
 // Check if a block is visible in the camera frustum
@@ -98,10 +106,6 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
     Vector3 to_cam = vec3_sub(cam_pos, pos);
     float h = size / 2.0f;
 
-    // Get texture for this block type
-    Texture2D texture = world_get_block_texture(world, block_type);
-    bool has_texture = texture.id > 0;
-
     // Face normals for backface culling (pointing outward)
     Vector3 face_normals[6] = {
         {1, 0, 0},  // +X (right)
@@ -145,51 +149,125 @@ void draw_cube_faces(Vector3 pos, float size, Color color, Vector3 cam_pos, Colo
         0.8f   // -Z (back) - slightly darker
     };
 
+    bool is_transparent = (block_type == BLOCK_GLASS);
     Color face_colors[6];
+    Color face_texture_tints[6];
+    unsigned char texture_alpha = 255;
 
     for (int i = 0; i < 6; i++) {
         float face_brightness = face_shading[i];
         face_colors[i].r = (unsigned char)(color.r * face_brightness);
         face_colors[i].g = (unsigned char)(color.g * face_brightness);
         face_colors[i].b = (unsigned char)(color.b * face_brightness);
-        face_colors[i].a = color.a;
+        face_colors[i].a = is_transparent ? 0 : color.a;
+
+        unsigned char brightness = (unsigned char)(255.0f * face_brightness);
+        face_texture_tints[i].r = brightness;
+        face_texture_tints[i].g = brightness;
+        face_texture_tints[i].b = brightness;
+        face_texture_tints[i].a = texture_alpha;
     }
 
-    if (has_texture) {
-        rlSetTexture(texture.id);
+    int face_order[6];
+    int face_count = 0;
+
+    if (is_transparent) {
+        // Sort transparent faces back-to-front based on face center distance to camera.
+        typedef struct {
+            int face;
+            float dist_sq;
+        } FaceSortEntry;
+
+        FaceSortEntry face_sort[6];
+
+        for (int face = 0; face < 6; face++) {
+            if (!(exposed_faces & (1 << face))) {
+                continue;
+            }
+            Vector3 center = {
+                (face_positions[face][0].x + face_positions[face][1].x + face_positions[face][2].x + face_positions[face][3].x) * 0.25f,
+                (face_positions[face][0].y + face_positions[face][1].y + face_positions[face][2].y + face_positions[face][3].y) * 0.25f,
+                (face_positions[face][0].z + face_positions[face][1].z + face_positions[face][2].z + face_positions[face][3].z) * 0.25f
+            };
+            Vector3 diff = vec3_sub(center, cam_pos);
+            face_sort[face_count].face = face;
+            face_sort[face_count].dist_sq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+            face_count++;
+        }
+
+        for (int i = 0; i < face_count; i++) {
+            for (int j = i + 1; j < face_count; j++) {
+                if (face_sort[j].dist_sq > face_sort[i].dist_sq) {
+                    FaceSortEntry temp = face_sort[i];
+                    face_sort[i] = face_sort[j];
+                    face_sort[j] = temp;
+                }
+            }
+        }
+
+        for (int i = 0; i < face_count; i++) {
+            face_order[i] = face_sort[i].face;
+        }
+    } else {
+        for (int face = 0; face < 6; face++) {
+            if (!(exposed_faces & (1 << face))) {
+                continue;
+            }
+            face_order[face_count++] = face;
+        }
+    }
+
+    if (is_transparent) {
+        BeginBlendMode(BLEND_ALPHA);
+        rlDisableDepthMask();
     }
 
     rlDisableBackfaceCulling();
 
-    for (int face = 0; face < 6; face++) {
-        // Skip faces that are not exposed to air
-        if (!(exposed_faces & (1 << face))) {
-            continue; // Face is occluded by neighbor
-        }
+    for (int face_index = 0; face_index < face_count; face_index++) {
+        int face = face_order[face_index];
 
         // Backface culling is disabled for block faces here to avoid transient terrain holes
         // when the camera passes near a block plane edge during jumps.
+        BlockFace face_type;
+        switch (face) {
+        case 2: // +Y top
+            face_type = BLOCK_FACE_TOP;
+            break;
+        case 3: // -Y bottom
+            face_type = BLOCK_FACE_BOTTOM;
+            break;
+        default:
+            face_type = BLOCK_FACE_SIDE;
+            break;
+        }
 
-        if (has_texture) {
+        Texture2D face_texture = world_get_block_face_texture(world, block_type, face_type);
+        bool face_has_texture = face_texture.id > 0;
+
+        if (face_has_texture) {
+            rlSetTexture(face_texture.id);
             rlBegin(RL_QUADS);
-            rlColor4ub(face_colors[face].r, face_colors[face].g, face_colors[face].b, face_colors[face].a);
+            rlColor4ub(face_texture_tints[face].r, face_texture_tints[face].g, face_texture_tints[face].b, face_texture_tints[face].a);
 
             for (int v = 0; v < 4; v++) {
                 rlTexCoord2f(face_uv[face][v].x, face_uv[face][v].y);
                 rlVertex3f(face_positions[face][v].x, face_positions[face][v].y, face_positions[face][v].z);
             }
             rlEnd();
+            rlSetTexture(0);
         } else {
             DrawTriangle3D(face_positions[face][0], face_positions[face][1], face_positions[face][2], face_colors[face]);
             DrawTriangle3D(face_positions[face][0], face_positions[face][2], face_positions[face][3], face_colors[face]);
         }
     }
 
-    if (has_texture) {
-        rlSetTexture(0);
-    }
-
     rlEnableBackfaceCulling();
+
+    if (is_transparent) {
+        rlEnableDepthMask();
+        EndBlendMode();
+    }
 
     // Draw wireframe if enabled
     if (show_wireframe) {

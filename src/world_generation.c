@@ -319,11 +319,8 @@ World *world_create(void) {
     world->last_chunk_update_forward = (Vector3){1000000000.0f, 1000000000.0f, 1000000000.0f};
 
     // Initialize texture cache
+    memset(&world->textures, 0, sizeof(world->textures));
     world->textures.textures_loaded = false;
-    world->textures.grass_texture = (Texture2D){0};
-    world->textures.dirt_texture = (Texture2D){0};
-    world->textures.stone_texture = (Texture2D){0};
-    world->textures.cobblestone_texture = (Texture2D){0};
 
     strncpy(world->world_name, "default", sizeof(world->world_name) - 1);
     world->world_name[sizeof(world->world_name) - 1] = '\0';
@@ -374,86 +371,144 @@ void world_free(World *world) {
     }
 }
 
-// Load textures for blocks from ./assets/textures/blocks/
+// Maps each block type to up to three texture files, relative to
+// ./assets/textures/blocks/. NULL means no texture and falls back to flat color.
+typedef struct {
+    BlockType type;
+    const char *top;
+    const char *side;
+    const char *bottom;
+} BlockTexturePaths;
+
+static const BlockTexturePaths BLOCK_TEXTURE_PATHS[] = {
+    {BLOCK_STONE,       "stone.png",       "stone.png",             "stone.png"},
+    {BLOCK_DIRT,        "dirt_block.png",  "dirt_block.png",        "dirt_block.png"},
+    {BLOCK_GRASS,       "grass_block_top.png", "grass_block_side.png",  "dirt_block.png"},
+    {BLOCK_SAND,        "sand.png",        "sand.png",              "sand.png"},
+    {BLOCK_WOOD,        "oak_plank.png",   "oak_plank.png",         "oak_plank.png"},
+    {BLOCK_BEDROCK,     "bedrock.png",     "bedrock.png",           "bedrock.png"},
+    {BLOCK_COBBLESTONE, "cobblestone.png", "cobblestone.png",       "cobblestone.png"},
+    {BLOCK_GLASS,       "glass_full.png",  "glass_full.png",        "glass_full.png"},
+    {BLOCK_GLOWSTONE,   NULL,               NULL,                     NULL},
+};
+#define BLOCK_TEXTURE_PATHS_COUNT (sizeof(BLOCK_TEXTURE_PATHS) / sizeof(BLOCK_TEXTURE_PATHS[0]))
+
+// Small path -> Texture2D cache, so a file requested by multiple faces/blocks
+// only gets loaded and uploaded once.
+#define MAX_CACHED_BLOCK_TEXTURES 64
+typedef struct {
+    char path[256];
+    Texture2D texture;
+} CachedBlockTexture;
+
+static CachedBlockTexture g_block_texture_cache[MAX_CACHED_BLOCK_TEXTURES];
+static int g_block_texture_cache_count = 0;
+
+static Texture2D load_block_face_texture(const char *filename) {
+    if (!filename) {
+        return (Texture2D){0};
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "./assets/textures/blocks/%s", filename);
+
+    for (int i = 0; i < g_block_texture_cache_count; i++) {
+        if (strcmp(g_block_texture_cache[i].path, path) == 0) {
+            return g_block_texture_cache[i].texture;
+        }
+    }
+
+    if (strcmp(filename, "glass_full.png") == 0) {
+        Image image = LoadImage(path);
+        ImageFormat(&image, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        Color *pixels = (Color *)image.data;
+        int pixel_count = image.width * image.height;
+        for (int i = 0; i < pixel_count; i++) {
+            if (pixels[i].r == 255 && pixels[i].g == 255 && pixels[i].b == 255) {
+                pixels[i].a = 0;
+            } else {
+                pixels[i].a = 255;
+            }
+        }
+        Texture2D texture = LoadTextureFromImage(image);
+        UnloadImage(image);
+        printf("[textures] loaded %s (id=%d)\n", path, texture.id);
+        if (g_block_texture_cache_count < MAX_CACHED_BLOCK_TEXTURES) {
+            strncpy(g_block_texture_cache[g_block_texture_cache_count].path, path,
+                    sizeof(g_block_texture_cache[0].path) - 1);
+            g_block_texture_cache[g_block_texture_cache_count].path[sizeof(g_block_texture_cache[0].path) - 1] = '\0';
+            g_block_texture_cache[g_block_texture_cache_count].texture = texture;
+            g_block_texture_cache_count++;
+        }
+        return texture;
+    }
+
+    Texture2D texture = LoadTexture(path);
+    printf("[textures] loaded %s (id=%d)\n", path, texture.id);
+
+    if (g_block_texture_cache_count < MAX_CACHED_BLOCK_TEXTURES) {
+        strncpy(g_block_texture_cache[g_block_texture_cache_count].path, path,
+                sizeof(g_block_texture_cache[0].path) - 1);
+        g_block_texture_cache[g_block_texture_cache_count].path[sizeof(g_block_texture_cache[0].path) - 1] = '\0';
+        g_block_texture_cache[g_block_texture_cache_count].texture = texture;
+        g_block_texture_cache_count++;
+    }
+
+    return texture;
+}
+
 void world_load_textures(World *world) {
     if (!world || world->textures.textures_loaded) {
         return;
     }
 
-    // Try to load grass texture
-    world->textures.grass_texture = LoadTexture("./assets/textures/blocks/grass_block_top.png");
-    printf("[textures] grass texture id: %d\n", world->textures.grass_texture.id);
+    g_block_texture_cache_count = 0;
 
-    // Try to load dirt texture
-    world->textures.dirt_texture = LoadTexture("./assets/textures/blocks/dirt_block.png");
-    printf("[textures] dirt texture id: %d\n", world->textures.dirt_texture.id);
-
-    // Try to load stone texture
-    world->textures.stone_texture = LoadTexture("./assets/textures/blocks/stone.png");
-    printf("[textures] stone texture id: %d\n", world->textures.stone_texture.id);
-
-    // Try to load cobblestone texture
-    world->textures.cobblestone_texture = LoadTexture("./assets/textures/blocks/cobblestone.png");
-    printf("[textures] stone texture id: %d\n", world->textures.cobblestone_texture.id);
-
-    // Try to load sand texture
-    world->textures.sand_texture = LoadTexture("./assets/textures/blocks/sand.png");
-    printf("[textures] sand texture id: %d\n", world->textures.sand_texture.id);
-
-    // Try to load wood texture
-    world->textures.wood_texture = LoadTexture("./assets/textures/blocks/oak_plank.png");
-    printf("[textures] wood texture id: %d\n", world->textures.wood_texture.id);
-
-    // Try to load bedrock texture
-    world->textures.bedrock_texture = LoadTexture("./assets/textures/blocks/bedrock.png");
-    printf("[textures] bedrock texture id: %d\n", world->textures.bedrock_texture.id);
+    for (size_t i = 0; i < BLOCK_TEXTURE_PATHS_COUNT; i++) {
+        const BlockTexturePaths *paths = &BLOCK_TEXTURE_PATHS[i];
+        BlockTextureSet *set = &world->textures.sets[paths->type];
+        set->top    = load_block_face_texture(paths->top);
+        set->side   = load_block_face_texture(paths->side);
+        set->bottom = load_block_face_texture(paths->bottom);
+    }
 
     world->textures.textures_loaded = true;
     printf("[textures] Block textures loaded\n");
 }
 
-// Unload block textures
 void world_unload_textures(World *world) {
     if (!world || !world->textures.textures_loaded) {
         return;
     }
 
-    UnloadTexture(world->textures.grass_texture);
-    UnloadTexture(world->textures.dirt_texture);
-    UnloadTexture(world->textures.stone_texture);
-    UnloadTexture(world->textures.sand_texture);
-    UnloadTexture(world->textures.wood_texture);
-    UnloadTexture(world->textures.bedrock_texture);
-    UnloadTexture(world->textures.cobblestone_texture);
+    for (int i = 0; i < g_block_texture_cache_count; i++) {
+        if (g_block_texture_cache[i].texture.id > 0) {
+            UnloadTexture(g_block_texture_cache[i].texture);
+        }
+    }
+    g_block_texture_cache_count = 0;
 
+    memset(world->textures.sets, 0, sizeof(world->textures.sets));
     world->textures.textures_loaded = false;
 }
 
-// Get texture for a block type
-Texture2D world_get_block_texture(World *world, BlockType type) {
+Texture2D world_get_block_face_texture(World *world, BlockType type, BlockFace face) {
     if (!world || !world->textures.textures_loaded) {
-        // Return invalid texture if not loaded
+        return (Texture2D){0};
+    }
+    if (type < 0 || type > BLOCK_GLASS) {
         return (Texture2D){0};
     }
 
-    switch (type) {
-    case BLOCK_GRASS:
-        return world->textures.grass_texture;
-    case BLOCK_DIRT:
-        return world->textures.dirt_texture;
-    case BLOCK_STONE:
-        return world->textures.stone_texture;
-    case BLOCK_SAND:
-        return world->textures.sand_texture;
-    case BLOCK_WOOD:
-        return world->textures.wood_texture;
-    case BLOCK_BEDROCK:
-        return world->textures.bedrock_texture;
-    case BLOCK_COBBLESTONE:
-        return world->textures.cobblestone_texture;
-    case BLOCK_AIR:
+    const BlockTextureSet *set = &world->textures.sets[type];
+    switch (face) {
+    case BLOCK_FACE_TOP:
+        return set->top;
+    case BLOCK_FACE_BOTTOM:
+        return set->bottom;
+    case BLOCK_FACE_SIDE:
     default:
-        return (Texture2D){0};
+        return set->side;
     }
 }
 
@@ -911,17 +966,19 @@ Color world_get_block_color(BlockType type) {
     case BLOCK_DIRT:
         return (Color){139, 69, 19, 255}; // Saddle Brown
     case BLOCK_STONE:
-        return (Color){128, 128, 128, 255}; // Grey
+        return LIGHTGRAY;
     case BLOCK_SAND:
         return (Color){238, 214, 175, 255}; // Sandy Brown
     case BLOCK_WOOD:
         return (Color){101, 67, 33, 255}; // Dark Brown
     case BLOCK_BEDROCK:
-        return (Color){64, 64, 64, 255}; // Dark Grey (Bedrock)
+        return GRAY; // Dark Grey (Bedrock)
     case BLOCK_GLOWSTONE:
         return (Color){255, 255, 200, 255}; // Bright warm white
     case BLOCK_COBBLESTONE:
-        return (Color){128, 128, 128, 255}; // Grey
+        return LIGHTGRAY;
+    case BLOCK_GLASS:
+        return (Color){200, 230, 255, 0}; // Fully transparent glass
     case BLOCK_AIR:
     default:
         return (Color){0, 0, 0, 0}; // Transparent
@@ -1733,6 +1790,8 @@ static const char *block_type_to_id(BlockType t) {
         return "block_glowstone";
     case BLOCK_COBBLESTONE:
         return "block_cobblestone";
+    case BLOCK_GLASS:
+        return "block_glass";
     case BLOCK_AIR:
     default:
         return "block_air";
@@ -1767,6 +1826,9 @@ static BlockType block_id_to_type(const char *id) {
     }
     if (strcmp(id, "block_cobblestone") == 0) {
         return BLOCK_COBBLESTONE;
+    }
+    if (strcmp(id, "block_glass") == 0) {
+        return BLOCK_GLASS;
     }
     return BLOCK_AIR;
 }
@@ -2394,28 +2456,35 @@ void chunk_cache_visible_blocks(Chunk *chunk, World *world) {
                 // If neighbor chunk isn't loaded, don't mark face as exposed
                 uint8_t exposed_faces = 0;
 
-                // Check +X direction (unloaded or missing neighbor chunks are treated as air here)
-                if (world_get_block(world, world_x + 1, world_y, world_z) == BLOCK_AIR) {
+                BlockType neighbor;
+                // Check +X direction
+                neighbor = world_get_block(world, world_x + 1, world_y, world_z);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 0);
                 }
                 // Check -X direction
-                if (world_get_block(world, world_x - 1, world_y, world_z) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x - 1, world_y, world_z);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 1);
                 }
                 // Check +Y direction
-                if (world_get_block(world, world_x, world_y + 1, world_z) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x, world_y + 1, world_z);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 2);
                 }
                 // Check -Y direction
-                if (world_get_block(world, world_x, world_y - 1, world_z) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x, world_y - 1, world_z);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 3);
                 }
                 // Check +Z direction
-                if (world_get_block(world, world_x, world_y, world_z + 1) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x, world_y, world_z + 1);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 4);
                 }
                 // Check -Z direction
-                if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x, world_y, world_z - 1);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 5);
                 }
 
@@ -2579,25 +2648,32 @@ void chunk_update_visible_blocks_region(Chunk *chunk, World *world, int local_x,
                 int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
                 int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
 
-                // Check which faces are exposed (neighbor is air)
+                // Check which faces are exposed
                 uint8_t exposed_faces = 0;
+                BlockType neighbor;
 
-                if (world_get_block(world, world_x + 1, world_y, world_z) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x + 1, world_y, world_z);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 0);
                 }
-                if (world_get_block(world, world_x - 1, world_y, world_z) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x - 1, world_y, world_z);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 1);
                 }
-                if (world_get_block(world, world_x, world_y + 1, world_z) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x, world_y + 1, world_z);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 2);
                 }
-                if (world_get_block(world, world_x, world_y - 1, world_z) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x, world_y - 1, world_z);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 3);
                 }
-                if (world_get_block(world, world_x, world_y, world_z + 1) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x, world_y, world_z + 1);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 4);
                 }
-                if (world_get_block(world, world_x, world_y, world_z - 1) == BLOCK_AIR) {
+                neighbor = world_get_block(world, world_x, world_y, world_z - 1);
+                if (block_face_is_exposed(block, neighbor)) {
                     exposed_faces |= (1 << 5);
                 }
 

@@ -85,6 +85,10 @@ ConsoleCommand console_parse_command(const char *input) {
         cmd.type = CMD_CREATEWORLD;
     } else if (strcmp(command, "loadworld") == 0) {
         cmd.type = CMD_LOADWORLD;
+    } else if (strcmp(command, "fly") == 0) {
+        cmd.type = CMD_FLY;
+    } else if (strcmp(command, "noclip") == 0) {
+        cmd.type = CMD_NOCLIP;
     } else if (strcmp(command, "quit") == 0) {
         cmd.type = CMD_QUIT;
     } else if (strcmp(command, "help") == 0) {

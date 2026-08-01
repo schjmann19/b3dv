@@ -18,6 +18,27 @@
 #include "../include/console.h"
 #include "../include/game_server.h"
 
+typedef struct {
+    float dist_sq;
+    Vector3 world_pos;
+    int world_x;
+    int world_y;
+    int world_z;
+    uint8_t exposed_faces;
+} GlassRenderEntry;
+
+static int compare_glass_entries(const void *a, const void *b) {
+    const GlassRenderEntry *ea = (const GlassRenderEntry *)a;
+    const GlassRenderEntry *eb = (const GlassRenderEntry *)b;
+    if (ea->dist_sq < eb->dist_sq) {
+        return 1;
+    }
+    if (ea->dist_sq > eb->dist_sq) {
+        return -1;
+    }
+    return 0;
+}
+
 #if defined(PLATFORM_DESKTOP)
 #define SDF_GLSL_VER 330
 #else
@@ -44,7 +65,7 @@ int b3dv_main(int argc, char **argv) {
     // Disable HIGHDPI to avoid fractional scaling issues with Hyprland's 1.2x compositor scaling
     // Render at 1200x800 logical pixels; let window manager handle physical scaling
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.23-beta");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.24-beta");
 
     // Load SDF shader from project assets (avoid external/ references)
     sdf_shader = (Shader){0};
@@ -849,6 +870,10 @@ int b3dv_main(int argc, char **argv) {
         pthread_mutex_unlock(&world->cache_mutex);
 
         // draw all chunks and their blocks with frustum culling and face culling
+        GlassRenderEntry *glass_entries = NULL;
+        int glass_count = 0;
+        int glass_capacity = 0;
+
         for (int c = 0; c < chunk_count_snapshot; c++) {
             Chunk *chunk = chunks_snapshot[c];
 
@@ -959,14 +984,73 @@ int b3dv_main(int argc, char **argv) {
                     wire_color.b = (unsigned char)(wire_color.b * (1.0f - fog_factor) + SKYBLUE.b * fog_factor);
                     wire_color.a = (unsigned char)(255 * (1.0f - fog_factor)); // Fade out alpha too
                 }
-                // draw only visible faces
-                draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, show_wireframe);
+                if (block != BLOCK_GLASS) {
+                    // draw opaque blocks first
+                    draw_cube_faces(world_pos, 1.0f, color, camera.position, wire_color, world, world_x, world_y, world_z, block, visible_blocks_copy[i].exposed_faces, show_wireframe);
+                    blocks_rendered++;
+                }
+            }
 
-                blocks_rendered++;
+            for (int i = 0; i < visible_count; i++) {
+                int x = visible_blocks_copy[i].x;
+                int y = visible_blocks_copy[i].y;
+                int z = visible_blocks_copy[i].z;
+                BlockType block = world_chunk_get_block(chunk, x, y, z);
+                if (block != BLOCK_GLASS) {
+                    continue;
+                }
+
+                int world_x = chunk->chunk_x * CHUNK_WIDTH + x;
+                int world_y = chunk->chunk_y * CHUNK_HEIGHT + y;
+                int world_z = chunk->chunk_z * CHUNK_DEPTH + z;
+
+                Vector3 world_pos = (Vector3){
+                    world_x + 0.5f - camera_offset.x,
+                    world_y + 0.5f - camera_offset.y,
+                    world_z + 0.5f - camera_offset.z};
+
+                Vector3 to_block = vec3_sub(world_pos, shifted_cam_pos);
+                float dist_sq = to_block.x * to_block.x + to_block.y * to_block.y + to_block.z * to_block.z;
+
+                if (glass_count >= glass_capacity) {
+                    glass_capacity = glass_capacity > 0 ? glass_capacity * 2 : 64;
+                    GlassRenderEntry *new_entries = (GlassRenderEntry *)realloc(glass_entries, sizeof(GlassRenderEntry) * glass_capacity);
+                    if (new_entries == NULL) {
+                        // OOM: keep existing entries and skip adding this glass block
+                        break;
+                    }
+                    glass_entries = new_entries;
+                }
+
+                glass_entries[glass_count].dist_sq = dist_sq;
+                glass_entries[glass_count].world_pos = world_pos;
+                glass_entries[glass_count].world_x = world_x;
+                glass_entries[glass_count].world_y = world_y;
+                glass_entries[glass_count].world_z = world_z;
+                glass_entries[glass_count].exposed_faces = visible_blocks_copy[i].exposed_faces;
+                glass_count++;
             }
 
             // Free the temporary copy
             free(visible_blocks_copy);
+        }
+
+        // Draw transparent glass blocks after opaque blocks so blending is correct
+        if (glass_count > 0) {
+            qsort(glass_entries, glass_count, sizeof(GlassRenderEntry), compare_glass_entries);
+            for (int i = 0; i < glass_count; i++) {
+                GlassRenderEntry *entry = &glass_entries[i];
+                Color color = world_get_block_color(BLOCK_GLASS);
+                Color wire_color = MAGENTA;
+                draw_cube_faces(entry->world_pos, 1.0f, color, camera.position, wire_color,
+                                world, entry->world_x, entry->world_y, entry->world_z,
+                                BLOCK_GLASS, entry->exposed_faces, show_wireframe);
+                blocks_rendered++;
+            }
+            free(glass_entries);
+            glass_entries = NULL;
+            glass_count = 0;
+            glass_capacity = 0;
         }
 
         // Draw highlighting box around the block being looked at
@@ -1099,6 +1183,9 @@ int b3dv_main(int argc, char **argv) {
                     case BLOCK_GLOWSTONE:
                         block_color = (Color){255, 255, 0, 255};
                         break;
+                    case BLOCK_GLASS:
+                        block_color = (Color){200, 230, 255, 255};
+                        break;
                     case BLOCK_COBBLESTONE:
                         block_color = (Color){128, 128, 128, 255};
                         break;
@@ -1178,6 +1265,9 @@ int b3dv_main(int argc, char **argv) {
                             break;
                         case BLOCK_GLOWSTONE:
                             block_color = (Color){255, 255, 0, 255};
+                            break;
+                        case BLOCK_GLASS:
+                            block_color = (Color){200, 230, 255, 255};
                             break;
                         case BLOCK_COBBLESTONE:
                             block_color = (Color){128, 128, 128, 255};
@@ -1400,7 +1490,7 @@ int b3dv_main(int argc, char **argv) {
                      player->position.x, player->position.y, player->position.z);
             DrawTextExCustom(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.23-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.24-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 2) {
             // player stats HUD
             DrawTextExCustom(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1430,14 +1520,14 @@ int b3dv_main(int argc, char **argv) {
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextExCustom(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.23-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.24-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextExCustom(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextExCustom(custom_font, "b3dv 0.0.23-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.24-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         if (hud_visible && menu->compass_enabled) {

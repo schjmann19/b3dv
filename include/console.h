@@ -14,6 +14,8 @@ typedef enum {
     CMD_LOAD,
     CMD_CREATEWORLD,
     CMD_LOADWORLD,
+    CMD_FLY,
+    CMD_NOCLIP,
     CMD_QUIT,
     CMD_HELP,
     CMD_UNKNOWN,

@@ -796,3 +796,11 @@ asd
 assd
 asd
 /tp 200 200 200
+/give player wood 64
+/give player cobblestone 100
+/tp 120 120 120
+/give player cobblestone 300
+/tp 120 120 120
+/give player glass 40
+/fly enable
+/noclip enable

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "../common_utils/simple_strings.h"
 #include "../include/world.h"
@@ -52,6 +53,56 @@ static void game_server_apply_command(GameServer *srv,
         break;
     }
 
+    case CMD_FLY: {
+        char action[32] = {0};
+        if (sscanf(cmd->args, "%31s", action) == 1) {
+            if (strcasecmp(action, "enable") == 0 || strcasecmp(action, "on") == 0) {
+                if (flight_enabled) {
+                    *flight_enabled = true;
+                    player->is_flying = true;
+                    if (out_msg && out_size > 0) {
+                        snprintf(out_msg, out_size, "Flight enabled");
+                    }
+                }
+            } else if (strcasecmp(action, "disable") == 0 || strcasecmp(action, "off") == 0) {
+                if (flight_enabled) {
+                    *flight_enabled = false;
+                    player->is_flying = false;
+                    if (out_msg && out_size > 0) {
+                        snprintf(out_msg, out_size, "Flight disabled");
+                    }
+                }
+            } else if (out_msg && out_size > 0) {
+                snprintf(out_msg, out_size, "Usage: /fly <enable|disable>");
+            }
+        } else if (out_msg && out_size > 0) {
+            snprintf(out_msg, out_size, "Usage: /fly <enable|disable>");
+        }
+        break;
+    }
+
+    case CMD_NOCLIP: {
+        char action[32] = {0};
+        if (sscanf(cmd->args, "%31s", action) == 1) {
+            if (strcasecmp(action, "enable") == 0 || strcasecmp(action, "on") == 0) {
+                player->no_clip = true;
+                if (out_msg && out_size > 0) {
+                    snprintf(out_msg, out_size, "No-clip enabled");
+                }
+            } else if (strcasecmp(action, "disable") == 0 || strcasecmp(action, "off") == 0) {
+                player->no_clip = false;
+                if (out_msg && out_size > 0) {
+                    snprintf(out_msg, out_size, "No-clip disabled");
+                }
+            } else if (out_msg && out_size > 0) {
+                snprintf(out_msg, out_size, "Usage: /noclip <enable|disable>");
+            }
+        } else if (out_msg && out_size > 0) {
+            snprintf(out_msg, out_size, "Usage: /noclip <enable|disable>");
+        }
+        break;
+    }
+
     case CMD_GIVE: {
         char item_buf[64] = {0};
         int count = 1;
@@ -77,6 +128,9 @@ static void game_server_apply_command(GameServer *srv,
         } else if (strcmp(item_buf, "glowstone") == 0) {
             block_type = BLOCK_GLOWSTONE;
             type_str = "glowstone";
+        } else if (strcmp(item_buf, "glass") == 0) {
+            block_type = BLOCK_GLASS;
+            type_str = "glass";
         } else if (strcmp(item_buf, "cobblestone") == 0) {
             block_type = BLOCK_COBBLESTONE;
             type_str = "cobblestone";
@@ -123,6 +177,11 @@ static void game_server_apply_command(GameServer *srv,
             player->selected_block = BLOCK_GLOWSTONE;
             if (out_msg && out_size > 0) {
                 snprintf(out_msg, out_size, "Selected glowstone");
+            }
+        } else if (strcmp(block_name, "glass") == 0) {
+            player->selected_block = BLOCK_GLASS;
+            if (out_msg && out_size > 0) {
+                snprintf(out_msg, out_size, "Selected glass");
             }
         } else if (out_msg && out_size > 0) {
             snprintf(out_msg, out_size, "Unknown block: %s", block_name);
