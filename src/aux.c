@@ -16,7 +16,7 @@ bool neutrino_detection = false;
 void do_args(int argc, char **argv) {
     // if no args, print version and help
     if (argc == 1) {
-        // puts("b3dv version 0.0.24-beta");
+        // puts("b3dv version 0.0.25-beta");
         puts("Usage:");
         puts("       b3dv [--version, -v] - version info");
         puts("       b3dv run             - launch game");
@@ -25,7 +25,7 @@ void do_args(int argc, char **argv) {
 
     // version argument
     if (arg_is_present("version", argc, &*argv) || arg_is_present("v", argc, &*argv)) {
-        puts("b3dv version 0.0.24-beta");
+        puts("b3dv version 0.0.25-beta");
         puts("By Jimena Neumann; BSD-3-Clause License");
 #ifdef DEBUG
         puts("compiled on " __DATE__ " at " __TIME__);

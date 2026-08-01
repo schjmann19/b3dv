@@ -1,24 +1,26 @@
-Cerrando...
-Teletransportado a (%.1f, %.1f, %.1f)
-Uso: /tp x y z
-El mundo '%s' se guardó correctamente.
-Error al guardar el mundo '%s'.
-El mundo '%s' se cargó correctamente.
-Error al cargar el mundo '%s'.
-Nombre de mundo inválido. Use solo caracteres alfanuméricos y guion bajo.
-Bloque seleccionado: %s
-Tipo de bloque desconocido: %s. Disponibles: stone, dirt, grass, sand, wood
-Vuelo habilitado. Doble clic en Espacio para alternar.
-Vuelo deshabilitado.
-Uso: /fly enable o /fly disable
-Sin colisión activado. Puedes pasar a través de bloques.
-Sin colisión desactivado. La colisión está activa de nuevo.
-Uso: /noclip enable o /noclip disable
-Bloque colocado en (%.1f, %.1f, %.1f) como %s
-Fuera de límites: y en [0, 255]
-Uso: /setblock x y z [block_type]
-Comando desconocido: %s
-
-Fronteras de chunk activadas.
-Fronteras de chunk desactivadas.
-Uso: /show_chunk_borders [on|off]
+msg.quitting=Cerrando...
+msg.teleported=Teletransportado a (%.1f, %.1f, %.1f)
+msg.teleport_usage=Uso: /tp x y z
+msg.world_saved=El mundo '%s' se guardó correctamente.
+msg.world_save_failed=Error al guardar el mundo '%s'.
+msg.world_loaded=El mundo '%s' se cargó correctamente.
+msg.world_load_failed=Error al cargar el mundo '%s'.
+msg.invalid_world_name=Nombre de mundo inválido. Use solo caracteres alfanuméricos y guion bajo.
+msg.block_selected=Bloque seleccionado: %s
+msg.unknown_block=Tipo de bloque desconocido: %s. Disponibles: stone, dirt, grass, sand, wood
+msg.flight_enabled=Vuelo habilitado. Doble clic en Espacio para alternar.
+msg.flight_disabled=Vuelo deshabilitado.
+msg.fly_usage=Uso: /fly enable o /fly disable
+msg.noclip_enabled=Sin colisión activado. Puedes pasar a través de bloques.
+msg.noclip_disabled=Sin colisión desactivado. La colisión está activa de nuevo.
+msg.noclip_usage=Uso: /noclip enable o /noclip disable
+msg.console_command_failed=[consola] Error al procesar el comando
+msg.third_person_camera=Cámara en tercera persona
+msg.first_person_camera=Cámara en primera persona
+msg.block_set=Bloque colocado en (%.1f, %.1f, %.1f) como %s
+msg.out_of_bounds=Fuera de límites: y en [0, 255]
+msg.setblock_usage=Uso: /setblock x y z [block_type]
+msg.unknown_command=Comando desconocido: %s
+msg.chunk_borders_enabled=Fronteras de chunk activadas.
+msg.chunk_borders_disabled=Fronteras de chunk desactivadas.
+msg.chunk_borders_usage=Uso: /show_chunk_borders [on|off]

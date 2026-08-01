@@ -68,6 +68,9 @@ typedef struct {
     char msg_noclip_enabled[256];
     char msg_noclip_disabled[128];
     char msg_noclip_usage[256];
+    char msg_console_command_failed[256];
+    char msg_third_person_camera[256];
+    char msg_first_person_camera[256];
     char msg_block_set[256];
     char msg_out_of_bounds[256];
     char msg_setblock_usage[256];
@@ -162,6 +165,7 @@ void DrawTextExCustom(Font font, const char *text, Vector2 position, float fontS
 void menu_update_input(MenuSystem *menu);
 void menu_load_language(MenuSystem *menu, const char *language);
 bool menu_load_text_file(const char *language, const char *filename, char *out_buffer, int buffer_size);
+const char *lang_get(MenuSystem *menu, const char *key);
 void menu_load_settings(MenuSystem *menu);
 void menu_save_settings(MenuSystem *menu);
 

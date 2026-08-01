@@ -1,11 +1,12 @@
 B3DV – Podstawowy wizualizator 3D – https://github.com/schjmann19/b3dv/
-Wersja 0.0.24-beta
+Wersja 0.0.25-beta
 
 Eksplorator świata 3D oparty na wokselach
 zbudowany w bibliotece raylib
 
 Autorzy:
 - Pomysł: Leandro Testa
+- Recenzje kodu i porady: Alina Kravetska
 - Absolutnie wszystko inne: ja
 
 Raylib autorstwa Ramona Santamarii: https://www.raylib.com/

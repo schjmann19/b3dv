@@ -1,41 +1,41 @@
-Jogar
-Criar Mundo
-Créditos e Informações
-Sair
-Voltar
-Nome do Mundo (alfanumérico + sublinhado):
-Comprimir arquivos do mundo
-Criar
-Cancelar
-O nome do mundo não pode estar vazio
-O mundo já existe
-Nenhum mundo encontrado
-Criar Novo Mundo
-Selecionar Mundo
-Último: %s | Chunks: %d
-WASD para mover, Espaço para pular
-F3 para métricas de desempenho, F2 para esta tela, F4 para estatísticas do jogador
-F5 para informações do sistema, F7 para ativar/desativar a captura do mouse
-Inventário
-Pressione ESC para fechar
-Mouse para olhar ao redor
-ESC ou P para pausar
-PAUSADO
-Retomar
-Salvar e sair
-Métricas de Desempenho
-Informações do Sistema
-Informações do Jogador
-FPS:
-Coordenadas:
-b3dv
-Configurações
-Distância de renderização:
-FPS máximo:
-Família de fontes:
-Variante:
-Ilimitado
-Apelido:
-HUD da bússola
-Pressione ESC para voltar ao menu principal
-Ver informações completas
+menu.select_world=Jogar
+menu.create_world=Criar Mundo
+menu.credits_info=Créditos e Informações
+menu.quit=Sair
+menu.back=Voltar
+menu.world_name_label=Nome do Mundo (alfanumérico + sublinhado):
+menu.compress_world_files=Comprimir arquivos do mundo
+menu.create_btn=Criar
+menu.cancel_btn=Cancelar
+menu.error_empty_name=O nome do mundo não pode estar vazio
+menu.error_exists=O mundo já existe
+menu.no_worlds=Nenhum mundo encontrado
+menu.title_create_world=Criar Novo Mundo
+menu.title_select_world=Selecionar Mundo
+menu.last=Último: %s | Chunks: %d
+hud.move_controls=WASD para mover, Espaço para pular
+hud.metrics_help=F3 para métricas de desempenho, F2 para esta tela, F4 para estatísticas do jogador
+hud.mouse_help=F5 para informações do sistema, F7 para ativar/desativar a captura do mouse
+hud.look_help=Mouse para olhar ao redor
+hud.pause_help=Pressione ESC ou P para pausar
+hud.paused=PAUSADO
+hud.resume=Retomar
+hud.back_to_menu=Salvar e sair
+hud.perf_metrics=Métricas de desempenho
+hud.system_info=Informações do sistema
+hud.player_info=Informações do jogador
+hud.fps_label=FPS:
+hud.coord_label=Coordenadas:
+hud.version=b3dv 0.0.25-beta
+settings.title=Configurações
+settings.render_dist_label=Distância de renderização:
+settings.max_fps_label=FPS máximo:
+settings.font_family_label=Família de fontes:
+settings.font_variant_label=Variante:
+settings.uncapped=Ilimitado
+settings.nickname_label=Apelido:
+settings.compass_hud_label=HUD da bússola
+settings.press_esc_to_return=Pressione ESC para voltar ao menu principal
+settings.see_full_info=Ver informações completas
+inventory.title=Inventário
+inventory.close=Pressione ESC para fechar

@@ -39,20 +39,43 @@ static int compare_glass_entries(const void *a, const void *b) {
     return 0;
 }
 
+// Returns how far the third-person camera can be pulled back from `from`
+// along `dir` (normalized) before it would end up inside a solid block,
+// clamped to max_distance. This is what keeps the camera from clipping
+// through walls when the player backs up against something.
+static float third_person_camera_clearance(World *world, Vector3 from, Vector3 dir, float max_distance) {
+    const float step = 0.05f;
+    const float margin = 0.15f; // keep the camera slightly off the wall surface
+
+    float traveled = 0.0f;
+    while (traveled < max_distance) {
+        float next = traveled + step;
+        Vector3 sample = vec3_add(from, vec3_scale(dir, next));
+
+        int block_x = (int)floorf(sample.x);
+        int block_y = (int)floorf(sample.y);
+        int block_z = (int)floorf(sample.z);
+
+        if (world_get_block(world, block_x, block_y, block_z) != BLOCK_AIR) {
+            float safe = traveled - margin;
+            return safe > 0.0f ? safe : 0.0f;
+        }
+
+        traveled = next;
+    }
+
+    return max_distance;
+}
 static void draw_player_model(Vector3 position) {
+    // `position` is the vertical center of the model.
     const Color model_color = (Color){180, 180, 180, 255};
     const float model_radius = 0.30f;
-    const float cylinder_height = PLAYER_HEIGHT - 2.0f * model_radius;
-    Vector3 model_center = {
-        position.x,
-        position.y,
-        position.z};
+    const float half_height = PLAYER_HEIGHT * 0.5f - model_radius; // center -> each hemisphere center
 
-    DrawCylinder(model_center, model_radius, model_radius, cylinder_height, 16, model_color);
-    Vector3 top_sphere = {model_center.x, model_center.y + cylinder_height * 0.5f, model_center.z};
-    Vector3 bottom_sphere = {model_center.x, model_center.y - cylinder_height * 0.5f, model_center.z};
-    DrawSphere(top_sphere, model_radius, model_color);
-    DrawSphere(bottom_sphere, model_radius, model_color);
+    Vector3 start = {position.x, position.y - half_height, position.z};
+    Vector3 end   = {position.x, position.y + half_height, position.z};
+
+    DrawCapsule(start, end, model_radius, 16, 8, model_color);
 }
 
 #if defined(PLATFORM_DESKTOP)
@@ -81,7 +104,7 @@ int b3dv_main(int argc, char **argv) {
     // Disable HIGHDPI to avoid fractional scaling issues with Hyprland's 1.2x compositor scaling
     // Render at 1200x800 logical pixels; let window manager handle physical scaling
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.24-beta");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "b3dv 0.0.25-beta");
 
     // Load SDF shader from project assets (avoid external/ references)
     sdf_shader = (Shader){0};
@@ -485,9 +508,9 @@ int b3dv_main(int argc, char **argv) {
             if (IsKeyPressed(KEY_F5)) {
                 third_person_camera = !third_person_camera;
                 if (third_person_camera) {
-                    add_chat_message("Third-person camera enabled");
+                    add_chat_message(menu->game_text.msg_third_person_camera);
                 } else {
-                    add_chat_message("First-person camera enabled");
+                    add_chat_message(menu->game_text.msg_first_person_camera);
                 }
             }
             if (IsKeyPressed(KEY_F7)) {
@@ -582,7 +605,7 @@ int b3dv_main(int argc, char **argv) {
                 flight_enabled = flight_enabled_cmd;
                 show_chunk_borders = show_chunk_borders_cmd;
             } else {
-                add_chat_message("[console] Failed to process command");
+                add_chat_message(menu->game_text.msg_console_command_failed);
             }
         }
 
@@ -839,17 +862,16 @@ int b3dv_main(int argc, char **argv) {
             player->position.z};
 
         if (third_person_camera) {
-            const float tp_distance = 4.0f;
-            const float tp_height = 1.20f;
-            Vector3 backward = (Vector3){
-                -sinf(camera_yaw),
-                0.0f,
-                -cosf(camera_yaw)};
-            camera.position = (Vector3){
-                player_eye.x + backward.x * tp_distance,
-                player_eye.y + tp_height,
-                player_eye.z + backward.z * tp_distance};
-            camera.target = vec3_add(player_eye, vec3_scale(camera_forward, 2.0f));
+            const float tp_distance = 4.0f; // desired distance behind the head
+
+            // Anchor to the player's head and translate backward along the SAME
+            // direction the camera is actually looking (yaw + pitch), then pull
+            // it forward if a block would be in the way.
+            Vector3 back_dir = vec3_scale(camera_forward, -1.0f);
+            float clearance = third_person_camera_clearance(world, player_eye, back_dir, tp_distance);
+
+            camera.position = vec3_add(player_eye, vec3_scale(back_dir, clearance));
+            camera.target = vec3_add(player_eye, camera_forward);
         } else {
             camera.position = player_eye;
             // Use the actual look direction for camera target (includes pitch)
@@ -1530,7 +1552,7 @@ int b3dv_main(int argc, char **argv) {
                      player->position.x, player->position.y, player->position.z);
             DrawTextExCustom(custom_font, pos_text, (Vector2){10, 210}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.24-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.25-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 2) {
             // player stats HUD
             DrawTextExCustom(custom_font, "=== PLAYER STATS ===", (Vector2){10, 10}, 32, 1, BLACK);
@@ -1560,14 +1582,14 @@ int b3dv_main(int argc, char **argv) {
                      player->velocity.x, player->velocity.y, player->velocity.z);
             DrawTextExCustom(custom_font, momentum_text, (Vector2){10, 170}, 32, 1, BLACK);
 
-            DrawTextExCustom(custom_font, "b3dv 0.0.24-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.25-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         } else if (hud_visible && hud_mode == 3) {
             // system info HUD (using cached values)
             DrawTextExCustom(custom_font, "=== SYSTEM INFO ===", (Vector2){10, 10}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_cpu, (Vector2){10, 50}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_gpu, (Vector2){10, 90}, 32, 1, BLACK);
             DrawTextExCustom(custom_font, cached_kernel, (Vector2){10, 130}, 32, 1, BLACK);
-            DrawTextExCustom(custom_font, "b3dv 0.0.24-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
+            DrawTextExCustom(custom_font, "b3dv 0.0.25-beta", (Vector2){10, 250}, 32, 1, DARKGRAY);
         }
 
         if (hud_visible && menu->compass_enabled) {

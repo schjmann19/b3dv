@@ -1,24 +1,26 @@
-Zamykanie...
-Przeteleportowano do (%.1f, %.1f, %.1f)
-Użycie: /tp x y z
-Świat '%s' zapisany pomyślnie.
-Nie udało się zapisać świata '%s'.
-Świat '%s' załadowany pomyślnie.
-Nie udało się załadować świata '%s'.
-Nieprawidłowa nazwa świata. Używaj tylko znaków alfanumerycznych i podkreśleń.
-Wybrany blok: %s
-Nieznany typ bloku: %s. Dostępne: stone, dirt, grass, sand, wood
-Latanie włączone. Kliknij dwukrotnie Spację, aby przełączyć.
-Latanie wyłączone.
-Użycie: /fly enable lub /fly disable
-Przechodzenie przez obiekty włączone. Możesz przechodzić przez bloki.
-Przechodzenie przez obiekty wyłączone. Kolizje są ponownie aktywne.
-Użycie: /noclip enable lub /noclip disable
-Blok umieszczony w (%.1f, %.1f, %.1f) jako %s
-Poza granicami: y in [0, 255]
-Użycie: /setblock x y z [block_type]
-Nieznana komenda: %s
-
-Obramowania chunków włączone.
-Obramowania chunków wyłączone.
-Użycie: /show_chunk_borders [on|off]
+msg.quitting=Zamykanie...
+msg.teleported=Przeteleportowano do (%.1f, %.1f, %.1f)
+msg.teleport_usage=Użycie: /tp x y z
+msg.world_saved=Świat '%s' zapisany pomyślnie.
+msg.world_save_failed=Nie udało się zapisać świata '%s'.
+msg.world_loaded=Świat '%s' załadowany pomyślnie.
+msg.world_load_failed=Nie udało się załadować świata '%s'.
+msg.invalid_world_name=Nieprawidłowa nazwa świata. Używaj tylko znaków alfanumerycznych i podkreśleń.
+msg.block_selected=Wybrany blok: %s
+msg.unknown_block=Nieznany typ bloku: %s. Dostępne: stone, dirt, grass, sand, wood
+msg.flight_enabled=Latanie włączone. Kliknij dwukrotnie Spację, aby przełączyć.
+msg.flight_disabled=Latanie wyłączone.
+msg.fly_usage=Użycie: /fly enable lub /fly disable
+msg.noclip_enabled=Przechodzenie przez obiekty włączone. Możesz przechodzić przez bloki.
+msg.noclip_disabled=Przechodzenie przez obiekty wyłączone. Kolizje są ponownie aktywne.
+msg.noclip_usage=Użycie: /noclip enable lub /noclip disable
+msg.console_command_failed=[console] Nie udało się przetworzyć polecenia
+msg.third_person_camera=Kamera trzecioosobowa
+msg.first_person_camera=Kamera z perspektywy pierwszej osoby
+msg.block_set=Blok umieszczony w (%.1f, %.1f, %.1f) jako %s
+msg.out_of_bounds=Poza granicami: y in [0, 255]
+msg.setblock_usage=Użycie: /setblock x y z [block_type]
+msg.unknown_command=Nieznana komenda: %s
+msg.chunk_borders_enabled=Obramowania chunków włączone.
+msg.chunk_borders_disabled=Obramowania chunków wyłączone.
+msg.chunk_borders_usage=Użycie: /show_chunk_borders [on|off]

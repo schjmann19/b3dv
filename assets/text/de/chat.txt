@@ -1,24 +1,26 @@
-Beenden...
-Teleportiert zu (%.1f, %.1f, %.1f)
-Verwendung: /tp x y z
-Welt '%s' erfolgreich gespeichert.
-Fehler beim Speichern der Welt '%s'.
-Welt '%s' erfolgreich geladen.
-Fehler beim Laden der Welt '%s'.
-Ungültiger Weltname. Verwenden Sie nur alphanumerische Zeichen und Unterstriche.
-Block ausgewählt: %s
-Unbekannter Blocktyp: %s. Verfügbar: stone, dirt, grass, sand, wood
-Flug aktiviert. Doppelklick auf Leertaste zum Umschalten.
-Flug deaktiviert.
-Verwendung: /fly enable oder /fly disable
-Kollisionserkennung deaktiviert. Du kannst durch Blöcke gehen.
-Kollisionserkennung aktiviert. Kollisionserkennung ist wieder aktiv.
-Verwendung: /noclip enable oder /noclip disable
-Block platziert bei (%.1f, %.1f, %.1f) als %s
-Außerhalb der Grenzen: y in [0, 255]
-Verwendung: /setblock x y z [block_type]
-Unbekannter Befehl: %s
-
-Chunk-Grenzen aktiviert.
-Chunk-Grenzen deaktiviert.
-Verwendung: /show_chunk_borders [on|off]
+msg.quitting=Beenden...
+msg.teleported=Teleportiert zu (%.1f, %.1f, %.1f)
+msg.teleport_usage=Verwendung: /tp x y z
+msg.world_saved=Welt '%s' erfolgreich gespeichert.
+msg.world_save_failed=Fehler beim Speichern der Welt '%s'.
+msg.world_loaded=Welt '%s' erfolgreich geladen.
+msg.world_load_failed=Fehler beim Laden der Welt '%s'.
+msg.invalid_world_name=Ungültiger Weltname. Verwenden Sie nur alphanumerische Zeichen und Unterstriche.
+msg.block_selected=Block ausgewählt: %s
+msg.unknown_block=Unbekannter Blocktyp: %s. Verfügbar: stone, dirt, grass, sand, wood
+msg.flight_enabled=Flug aktiviert. Doppelklick auf Leertaste zum Umschalten.
+msg.flight_disabled=Flug deaktiviert.
+msg.fly_usage=Verwendung: /fly enable oder /fly disable
+msg.noclip_enabled=Kollisionserkennung deaktiviert. Du kannst durch Blöcke gehen.
+msg.noclip_disabled=Kollisionserkennung aktiviert. Kollisionserkennung ist wieder aktiv.
+msg.noclip_usage=Verwendung: /noclip enable oder /noclip disable
+msg.console_command_failed=[console] Befehl konnte nicht verarbeitet werden.
+msg.third_person_camera=Dritte-Person-Kamera
+msg.first_person_camera=Erste-Person-Kamera
+msg.block_set=Block platziert bei (%.1f, %.1f, %.1f) als %s
+msg.out_of_bounds=Außerhalb der Grenzen: y in [0, 255]
+msg.setblock_usage=Verwendung: /setblock x y z [block_type]
+msg.unknown_command=Unbekannter Befehl: %s
+msg.chunk_borders_enabled=Chunk-Grenzen aktiviert.
+msg.chunk_borders_disabled=Chunk-Grenzen deaktiviert.
+msg.chunk_borders_usage=Verwendung: /show_chunk_borders [on|off]

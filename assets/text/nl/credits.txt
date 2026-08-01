@@ -1,11 +1,12 @@
 B3DV - Basis 3D-visualisatie - https://github.com/schjmann19/b3dv/
-Versie 0.0.24-beta
+Versie 0.0.25-beta
 
 Een op voxels gebaseerde 3D-wereldverkenner
 gebouwd met raylib
 
 Credits:
 - Idee: Leandro Testa
+- Codebeoordelingen en advies: Alina Kravetska
 - Al het overige: ik
 
 Raylib van Ramon Santamaria: https://www.raylib.com/

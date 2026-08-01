@@ -1,41 +1,41 @@
-Jugar
-Crear Mundo
-Créditos e Info
-Salir
-Atrás
-Nombre del Mundo (alfanumérico + guion bajo):
-Comprimir archivos del mundo
-Crear
-Cancelar
-El nombre del mundo no puede estar vacío
-El mundo ya existe
-No hay mundos disponibles
-Crear Nuevo Mundo
-Seleccionar Mundo
-Última vez: %s | Chunks: %d
-WASD para moverte, Espacio para saltar
-F3 para métricas de rendimiento, F2 para esto
-F7 para alternar captura del ratón
-Inventario
-Pulsa ESC para cerrar
-Ratón para mirar alrededor
-ESC o P para pausar
-EN PAUSA
-Reanudar
-Guardar y Salir
-Métricas de Rendimiento
-Información del Sistema
-Información del Jugador
-FPS:
-Coordenadas:
-b3dv
-Ajustes
-Distancia de renderizado:
-FPS máx.:
-Familia tipográfica:
-Variante:
-Sin límite
-Apodo:
-HUD de brújula
-Presiona ESC para volver al menú principal
-Ver información completa
+menu.select_world=Jugar
+menu.create_world=Crear Mundo
+menu.credits_info=Créditos e Info
+menu.quit=Salir
+menu.back=Atrás
+menu.world_name_label=Nombre del Mundo (alfanumérico + guion bajo):
+menu.compress_world_files=Comprimir archivos del mundo
+menu.create_btn=Crear
+menu.cancel_btn=Cancelar
+menu.error_empty_name=El nombre del mundo no puede estar vacío
+menu.error_exists=El mundo ya existe
+menu.no_worlds=No hay mundos disponibles
+menu.title_create_world=Crear Nuevo Mundo
+menu.title_select_world=Seleccionar Mundo
+menu.last=Última vez: %s | Chunks: %d
+hud.move_controls=WASD para moverte, Espacio para saltar
+hud.metrics_help=F3 para métricas de rendimiento, F2 para esto
+hud.mouse_help=F5 para información del sistema, F7 para alternar captura del ratón
+hud.look_help=Ratón para mirar alrededor
+hud.pause_help=ESC o P para pausar
+hud.paused=PAUSADO
+hud.resume=Reanudar
+hud.back_to_menu=Guardar y salir
+hud.perf_metrics=Métricas de rendimiento
+hud.system_info=Información del sistema
+hud.player_info=Información del jugador
+hud.fps_label=FPS:
+hud.coord_label=Coordenadas:
+hud.version=B3DV 0.0.25-beta
+settings.title=Configuración
+settings.render_dist_label=Distancia de renderizado:
+settings.max_fps_label=FPS máximos:
+settings.font_family_label=Familia tipográfica:
+settings.font_variant_label=Variante:
+settings.uncapped=Sin límite
+settings.nickname_label=Apodo:
+settings.compass_hud_label=HUD de brújula
+settings.press_esc_to_return=Pulsa ESC para volver al menú principal
+settings.see_full_info=Ver información completa
+inventory.title=Inventario
+inventory.close=Pulsa ESC para cerrar

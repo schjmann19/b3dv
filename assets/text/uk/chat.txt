@@ -1,24 +1,26 @@
-Вихід...
-Телепортовано до (%.1f, %.1f, %.1f)
-Використання: /tp x y z
-Світ '%s' успішно збережено.
-Помилка при збереженні світу '%s'.
-Світ '%s' успішно завантажено.
-Помилка при завантаженні світу '%s'.
-Невірна назва світу. Використовуйте лише букви, цифри та підкреслення.
-Блок вибрано: %s
-Невідомий тип блоку: %s. Доступні: stone, dirt, grass, sand, wood
-Політ активовано. Натисніть Space двічі для перемикання.
-Політ вимкнено.
-Використання: /fly enable або /fly disable
-Похіднання костів включена. Можеш проходити вкрізь кости.
-Похіднання костів вимкнена. Колізія ново активна.
-Використання: /noclip enable або /noclip disable
-Блок встановлено в (%.1f, %.1f, %.1f) як %s
-Поза межами світу: y в межах [0, 255]
-Використання: /setblock x y z [block_type]
-Невідома команда: %s
-
-Межі чанків увімкнені.
-Межі чанків вимкнені.
-Використання: /show_chunk_borders [on|off]
+msg.quitting=Вихід...
+msg.teleported=Телепортовано до (%.1f, %.1f, %.1f)
+msg.teleport_usage=Використання: /tp x y z
+msg.world_saved=Світ '%s' успішно збережено.
+msg.world_save_failed=Помилка при збереженні світу '%s'.
+msg.world_loaded=Світ '%s' успішно завантажено.
+msg.world_load_failed=Помилка при завантаженні світу '%s'.
+msg.invalid_world_name=Невірна назва світу. Використовуйте лише букви, цифри та підкреслення.
+msg.block_selected=Блок вибрано: %s
+msg.unknown_block=Невідомий тип блоку: %s. Доступні: stone, dirt, grass, sand, wood
+msg.flight_enabled=Політ активовано. Натисніть Space двічі для перемикання.
+msg.flight_disabled=Політ вимкнено.
+msg.fly_usage=Використання: /fly enable або /fly disable
+msg.noclip_enabled=Похіднання костів включена. Можеш проходити вкрізь кости.
+msg.noclip_disabled=Похіднання костів вимкнена. Колізія ново активна.
+msg.noclip_usage=Використання: /noclip enable або /noclip disable
+msg.console_command_failed=[консоль] Не вдалося обробити команду
+msg.third_person_camera=Камера від третьої особи
+msg.first_person_camera=Камера від першої особи
+msg.block_set=Блок встановлено в (%.1f, %.1f, %.1f) як %s
+msg.out_of_bounds=Поза межами світу: y в межах [0, 255]
+msg.setblock_usage=Використання: /setblock x y z [block_type]
+msg.unknown_command=Невідома команда: %s
+msg.chunk_borders_enabled=Межі чанків увімкнені.
+msg.chunk_borders_disabled=Межі чанків вимкнені.
+msg.chunk_borders_usage=Використання: /show_chunk_borders [on|off]

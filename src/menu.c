@@ -1,6 +1,8 @@
 #include "../include/menu.h"
 #include <ctype.h>
 #include <dirent.h>
+#include <stddef.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,6 +94,199 @@ static void menu_load_splash_text(MenuSystem *menu) {
     }
 }
 
+static char *trim_whitespace(char *str) {
+    char *end;
+
+    while (*str && isspace((unsigned char)*str)) {
+        str++;
+    }
+
+    if (*str == '\0') {
+        return str;
+    }
+
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) {
+        end--;
+    }
+    end[1] = '\0';
+    return str;
+}
+
+static bool is_comment_or_empty(const char *line) {
+    while (*line && isspace((unsigned char)*line)) {
+        line++;
+    }
+    if (*line == '\0' || *line == '#') {
+        return true;
+    }
+    if (line[0] == '/' && line[1] == '/') {
+        return true;
+    }
+    return false;
+}
+
+#define OFFSET_IN(type, field) (offsetof(type, field))
+
+typedef struct {
+    const char *key;
+    size_t offset;
+    size_t size;
+} LocalizationField;
+
+static const LocalizationField localization_fields[] = {
+    {"menu.select_world", OFFSET_IN(MenuSystem, text_select_world), sizeof(((MenuSystem *)0)->text_select_world)},
+    {"menu.create_world", OFFSET_IN(MenuSystem, text_create_world), sizeof(((MenuSystem *)0)->text_create_world)},
+    {"menu.credits_info", OFFSET_IN(MenuSystem, text_credits_info), sizeof(((MenuSystem *)0)->text_credits_info)},
+    {"menu.quit", OFFSET_IN(MenuSystem, text_quit), sizeof(((MenuSystem *)0)->text_quit)},
+    {"menu.back", OFFSET_IN(MenuSystem, text_back), sizeof(((MenuSystem *)0)->text_back)},
+    {"menu.world_name_label", OFFSET_IN(MenuSystem, text_world_name_label), sizeof(((MenuSystem *)0)->text_world_name_label)},
+    {"menu.compress_world_files", OFFSET_IN(MenuSystem, text_compress_world_files), sizeof(((MenuSystem *)0)->text_compress_world_files)},
+    {"menu.create_btn", OFFSET_IN(MenuSystem, text_create_btn), sizeof(((MenuSystem *)0)->text_create_btn)},
+    {"menu.cancel_btn", OFFSET_IN(MenuSystem, text_cancel_btn), sizeof(((MenuSystem *)0)->text_cancel_btn)},
+    {"menu.error_empty_name", OFFSET_IN(MenuSystem, text_error_empty_name), sizeof(((MenuSystem *)0)->text_error_empty_name)},
+    {"menu.error_exists", OFFSET_IN(MenuSystem, text_error_exists), sizeof(((MenuSystem *)0)->text_error_exists)},
+    {"menu.no_worlds", OFFSET_IN(MenuSystem, text_no_worlds), sizeof(((MenuSystem *)0)->text_no_worlds)},
+    {"menu.title_create_world", OFFSET_IN(MenuSystem, text_title_create_world), sizeof(((MenuSystem *)0)->text_title_create_world)},
+    {"menu.title_select_world", OFFSET_IN(MenuSystem, text_title_select_world), sizeof(((MenuSystem *)0)->text_title_select_world)},
+    {"menu.last", OFFSET_IN(MenuSystem, text_last), sizeof(((MenuSystem *)0)->text_last)},
+    {"hud.move_controls", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, move_controls), sizeof(((GameText *)0)->move_controls)},
+    {"hud.metrics_help", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, metrics_help), sizeof(((GameText *)0)->metrics_help)},
+    {"hud.mouse_help", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, mouse_help), sizeof(((GameText *)0)->mouse_help)},
+    {"hud.look_help", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, look_help), sizeof(((GameText *)0)->look_help)},
+    {"hud.pause_help", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, pause_help), sizeof(((GameText *)0)->pause_help)},
+    {"hud.paused", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, paused), sizeof(((GameText *)0)->paused)},
+    {"hud.resume", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, resume), sizeof(((GameText *)0)->resume)},
+    {"hud.back_to_menu", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, back_to_menu), sizeof(((GameText *)0)->back_to_menu)},
+    {"hud.perf_metrics", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, perf_metrics), sizeof(((GameText *)0)->perf_metrics)},
+    {"hud.system_info", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, system_info), sizeof(((GameText *)0)->system_info)},
+    {"hud.player_info", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, player_info), sizeof(((GameText *)0)->player_info)},
+    {"hud.fps_label", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, fps_label), sizeof(((GameText *)0)->fps_label)},
+    {"hud.coord_label", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, coord_label), sizeof(((GameText *)0)->coord_label)},
+    {"hud.version", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, version), sizeof(((GameText *)0)->version)},
+    {"settings.title", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, settings), sizeof(((GameText *)0)->settings)},
+    {"settings.render_dist_label", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, render_dist_label), sizeof(((GameText *)0)->render_dist_label)},
+    {"settings.max_fps_label", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, max_fps_label), sizeof(((GameText *)0)->max_fps_label)},
+    {"settings.font_family_label", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, font_family_label), sizeof(((GameText *)0)->font_family_label)},
+    {"settings.font_variant_label", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, font_variant_label), sizeof(((GameText *)0)->font_variant_label)},
+    {"settings.uncapped", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, uncapped), sizeof(((GameText *)0)->uncapped)},
+    {"settings.nickname_label", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, nickname_label), sizeof(((GameText *)0)->nickname_label)},
+    {"settings.compass_hud_label", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, compass_hud_label), sizeof(((GameText *)0)->compass_hud_label)},
+    {"settings.press_esc_to_return", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, press_esc_to_return), sizeof(((GameText *)0)->press_esc_to_return)},
+    {"settings.see_full_info", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, see_full_info), sizeof(((GameText *)0)->see_full_info)},
+    {"inventory.title", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, inventory_title), sizeof(((GameText *)0)->inventory_title)},
+    {"inventory.close", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, inventory_close), sizeof(((GameText *)0)->inventory_close)},
+    {"msg.quitting", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_quitting), sizeof(((GameText *)0)->msg_quitting)},
+    {"msg.teleported", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_teleported), sizeof(((GameText *)0)->msg_teleported)},
+    {"msg.teleport_usage", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_teleport_usage), sizeof(((GameText *)0)->msg_teleport_usage)},
+    {"msg.world_saved", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_world_saved), sizeof(((GameText *)0)->msg_world_saved)},
+    {"msg.world_save_failed", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_world_save_failed), sizeof(((GameText *)0)->msg_world_save_failed)},
+    {"msg.world_loaded", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_world_loaded), sizeof(((GameText *)0)->msg_world_loaded)},
+    {"msg.world_load_failed", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_world_load_failed), sizeof(((GameText *)0)->msg_world_load_failed)},
+    {"msg.invalid_world_name", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_invalid_world_name), sizeof(((GameText *)0)->msg_invalid_world_name)},
+    {"msg.block_selected", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_block_selected), sizeof(((GameText *)0)->msg_block_selected)},
+    {"msg.unknown_block", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_unknown_block), sizeof(((GameText *)0)->msg_unknown_block)},
+    {"msg.flight_enabled", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_flight_enabled), sizeof(((GameText *)0)->msg_flight_enabled)},
+    {"msg.flight_disabled", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_flight_disabled), sizeof(((GameText *)0)->msg_flight_disabled)},
+    {"msg.fly_usage", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_fly_usage), sizeof(((GameText *)0)->msg_fly_usage)},
+    {"msg.noclip_enabled", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_noclip_enabled), sizeof(((GameText *)0)->msg_noclip_enabled)},
+    {"msg.noclip_disabled", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_noclip_disabled), sizeof(((GameText *)0)->msg_noclip_disabled)},
+    {"msg.noclip_usage", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_noclip_usage), sizeof(((GameText *)0)->msg_noclip_usage)},
+    {"msg.console_command_failed", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_console_command_failed), sizeof(((GameText *)0)->msg_console_command_failed)},
+    {"msg.third_person_camera", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_third_person_camera), sizeof(((GameText *)0)->msg_third_person_camera)},
+    {"msg.first_person_camera", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_first_person_camera), sizeof(((GameText *)0)->msg_first_person_camera)},
+    {"msg.block_set", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_block_set), sizeof(((GameText *)0)->msg_block_set)},
+    {"msg.out_of_bounds", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_out_of_bounds), sizeof(((GameText *)0)->msg_out_of_bounds)},
+    {"msg.setblock_usage", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_setblock_usage), sizeof(((GameText *)0)->msg_setblock_usage)},
+    {"msg.unknown_command", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_unknown_command), sizeof(((GameText *)0)->msg_unknown_command)},
+    {"msg.chunk_borders_enabled", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_chunk_borders_enabled), sizeof(((GameText *)0)->msg_chunk_borders_enabled)},
+    {"msg.chunk_borders_disabled", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_chunk_borders_disabled), sizeof(((GameText *)0)->msg_chunk_borders_disabled)},
+    {"msg.chunk_borders_usage", OFFSET_IN(MenuSystem, game_text) + offsetof(GameText, msg_chunk_borders_usage), sizeof(((GameText *)0)->msg_chunk_borders_usage)},
+};
+
+static void clear_localization_strings(MenuSystem *menu) {
+    for (size_t i = 0; i < sizeof(localization_fields) / sizeof(localization_fields[0]); i++) {
+        memset((char *)menu + localization_fields[i].offset, 0, localization_fields[i].size);
+    }
+}
+
+static bool menu_set_localized_text(MenuSystem *menu, const char *key, const char *value) {
+    for (size_t i = 0; i < sizeof(localization_fields) / sizeof(localization_fields[0]); i++) {
+        if (strcmp(localization_fields[i].key, key) == 0) {
+            char *dest = (char *)menu + localization_fields[i].offset;
+            strncpy(dest, value, localization_fields[i].size - 1);
+            dest[localization_fields[i].size - 1] = '\0';
+            return true;
+        }
+    }
+    return false;
+}
+
+const char *lang_get(MenuSystem *menu, const char *key) {
+    for (size_t i = 0; i < sizeof(localization_fields) / sizeof(localization_fields[0]); i++) {
+        if (strcmp(localization_fields[i].key, key) == 0) {
+            return (const char *)menu + localization_fields[i].offset;
+        }
+    }
+    return "";
+}
+
+static void load_localization_file(MenuSystem *menu, const char *path, int positional_count) {
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        fprintf(stderr, "Failed to load localization file: %s\n", path);
+        return;
+    }
+
+    char line[512];
+    bool use_key_value = false;
+
+    while (fgets(line, sizeof(line), file)) {
+        char *trimmed = trim_whitespace(line);
+        if (is_comment_or_empty(trimmed)) {
+            continue;
+        }
+        if (strchr(trimmed, '=') != NULL) {
+            use_key_value = true;
+        }
+        break;
+    }
+
+    rewind(file);
+
+    int positional_index = 0;
+    while (fgets(line, sizeof(line), file)) {
+        char *trimmed = trim_whitespace(line);
+        if (is_comment_or_empty(trimmed)) {
+            continue;
+        }
+
+        if (use_key_value) {
+            char *equals = strchr(trimmed, '=');
+            if (!equals) {
+                continue;
+            }
+            *equals = '\0';
+            char *key = trim_whitespace(trimmed);
+            char *value = trim_whitespace(equals + 1);
+            if (!menu_set_localized_text(menu, key, value)) {
+                fprintf(stderr, "Warning: unknown localization key '%s' in %s\n", key, path);
+            }
+        } else {
+            if (positional_index >= positional_count) {
+                break;
+            }
+            char *dest = (char *)menu + localization_fields[positional_index].offset;
+            size_t size = localization_fields[positional_index].size;
+            strncpy(dest, trimmed, size - 1);
+            dest[size - 1] = '\0';
+            positional_index++;
+        }
+    }
+
+    fclose(file);
+}
+
 // Scan available language directories in assets/text/
 static void menu_scan_languages(MenuSystem *menu) {
     DIR *dir = opendir("./assets/text");
@@ -150,221 +345,15 @@ bool menu_load_text_file(const char *language, const char *filename, char *out_b
 // Load all text for a given language
 void menu_load_language(MenuSystem *menu, const char *language) {
     strcpy(menu->current_language, language);
+    clear_localization_strings(menu);
 
-    // Load menu labels from individual files or single file
     char menu_path[512];
     snprintf(menu_path, sizeof(menu_path), "./assets/text/%s/menu.txt", language);
+    load_localization_file(menu, menu_path, 41);
 
-    FILE *file = fopen(menu_path, "r");
-    if (file) {
-        char line[512];
-        int line_count = 0;
-
-        char *buffers[] = {
-            menu->text_select_world,
-            menu->text_create_world,
-            menu->text_credits_info,
-            menu->text_quit,
-            menu->text_back,
-            menu->text_world_name_label,
-            menu->text_compress_world_files,
-            menu->text_create_btn,
-            menu->text_cancel_btn,
-            menu->text_error_empty_name,
-            menu->text_error_exists,
-            menu->text_no_worlds,
-            menu->text_title_create_world,
-            menu->text_title_select_world,
-            menu->text_last,
-            menu->game_text.move_controls,
-            menu->game_text.metrics_help,
-            menu->game_text.mouse_help,
-            menu->game_text.look_help,
-            menu->game_text.pause_help,
-            menu->game_text.paused,
-            menu->game_text.resume,
-            menu->game_text.back_to_menu,
-            menu->game_text.perf_metrics,
-            menu->game_text.system_info,
-            menu->game_text.player_info,
-            menu->game_text.fps_label,
-            menu->game_text.coord_label,
-            menu->game_text.version,
-            menu->game_text.settings,
-            menu->game_text.render_dist_label,
-            menu->game_text.max_fps_label,
-            menu->game_text.font_family_label,
-            menu->game_text.font_variant_label,
-            menu->game_text.uncapped,
-            menu->game_text.nickname_label,
-            // menu->game_text.cloud_distance_label,
-            // menu->game_text.clouds_enabled_label,
-            menu->game_text.compass_hud_label,
-            menu->game_text.press_esc_to_return,
-            menu->game_text.see_full_info,
-            menu->game_text.inventory_title,
-            menu->game_text.inventory_close,
-            menu->game_text.msg_quitting,
-            menu->game_text.msg_teleported,
-            menu->game_text.msg_teleport_usage,
-            menu->game_text.msg_world_saved,
-            menu->game_text.msg_world_save_failed,
-            menu->game_text.msg_world_loaded,
-            menu->game_text.msg_world_load_failed,
-            menu->game_text.msg_invalid_world_name,
-            menu->game_text.msg_block_selected,
-            menu->game_text.msg_unknown_block,
-            menu->game_text.msg_flight_enabled,
-            menu->game_text.msg_flight_disabled,
-            menu->game_text.msg_fly_usage,
-            menu->game_text.msg_block_set,
-            menu->game_text.msg_out_of_bounds,
-            menu->game_text.msg_setblock_usage,
-            menu->game_text.msg_unknown_command};
-        int sizes[] = {
-            sizeof(menu->text_select_world),
-            sizeof(menu->text_create_world),
-            sizeof(menu->text_credits_info),
-            sizeof(menu->text_quit),
-            sizeof(menu->text_back),
-            sizeof(menu->text_world_name_label),
-            sizeof(menu->text_compress_world_files),
-            sizeof(menu->text_create_btn),
-            sizeof(menu->text_cancel_btn),
-            sizeof(menu->text_error_empty_name),
-            sizeof(menu->text_error_exists),
-            sizeof(menu->text_no_worlds),
-            sizeof(menu->text_title_create_world),
-            sizeof(menu->text_title_select_world),
-            sizeof(menu->text_last),
-            sizeof(menu->game_text.move_controls),
-            sizeof(menu->game_text.metrics_help),
-            sizeof(menu->game_text.mouse_help),
-            sizeof(menu->game_text.look_help),
-            sizeof(menu->game_text.pause_help),
-            sizeof(menu->game_text.paused),
-            sizeof(menu->game_text.resume),
-            sizeof(menu->game_text.back_to_menu),
-            sizeof(menu->game_text.perf_metrics),
-            sizeof(menu->game_text.system_info),
-            sizeof(menu->game_text.player_info),
-            sizeof(menu->game_text.fps_label),
-            sizeof(menu->game_text.coord_label),
-            sizeof(menu->game_text.version),
-            sizeof(menu->game_text.settings),
-            sizeof(menu->game_text.render_dist_label),
-            sizeof(menu->game_text.max_fps_label),
-            sizeof(menu->game_text.font_family_label),
-            sizeof(menu->game_text.font_variant_label),
-            sizeof(menu->game_text.uncapped),
-            sizeof(menu->game_text.nickname_label),
-            // sizeof(menu->game_text.cloud_distance_label),
-            // sizeof(menu->game_text.clouds_enabled_label),
-            sizeof(menu->game_text.compass_hud_label),
-            sizeof(menu->game_text.press_esc_to_return),
-            sizeof(menu->game_text.see_full_info),
-            sizeof(menu->game_text.inventory_title),
-            sizeof(menu->game_text.inventory_close),
-            sizeof(menu->game_text.msg_quitting),
-            sizeof(menu->game_text.msg_teleported),
-            sizeof(menu->game_text.msg_teleport_usage),
-            sizeof(menu->game_text.msg_world_saved),
-            sizeof(menu->game_text.msg_world_save_failed),
-            sizeof(menu->game_text.msg_world_loaded),
-            sizeof(menu->game_text.msg_world_load_failed),
-            sizeof(menu->game_text.msg_invalid_world_name),
-            sizeof(menu->game_text.msg_block_selected),
-            sizeof(menu->game_text.msg_unknown_block),
-            sizeof(menu->game_text.msg_flight_enabled),
-            sizeof(menu->game_text.msg_flight_disabled),
-            sizeof(menu->game_text.msg_fly_usage),
-            sizeof(menu->game_text.msg_block_set),
-            sizeof(menu->game_text.msg_out_of_bounds),
-            sizeof(menu->game_text.msg_setblock_usage),
-            sizeof(menu->game_text.msg_unknown_command)};
-        int menu_line_capacity = sizeof(buffers) / sizeof(buffers[0]);
-        while (fgets(line, sizeof(line), file) && line_count < menu_line_capacity) {
-            // Remove newline
-            line[strcspn(line, "\n")] = '\0';
-            strncpy(buffers[line_count], line, sizes[line_count] - 1);
-            buffers[line_count][sizes[line_count] - 1] = '\0';
-            line_count++;
-        }
-        fclose(file);
-    } else {
-        fprintf(stderr, "Failed to load menu text from: %s\n", menu_path);
-    }
-
-    // Load chat messages from chat.txt
     char chat_path[512];
     snprintf(chat_path, sizeof(chat_path), "./assets/text/%s/chat.txt", language);
-
-    FILE *chat_file = fopen(chat_path, "r");
-    if (chat_file) {
-        char line[512];
-        int chat_line_count = 0;
-
-        char *chat_buffers[] = {
-            menu->game_text.msg_quitting,
-            menu->game_text.msg_teleported,
-            menu->game_text.msg_teleport_usage,
-            menu->game_text.msg_world_saved,
-            menu->game_text.msg_world_save_failed,
-            menu->game_text.msg_world_loaded,
-            menu->game_text.msg_world_load_failed,
-            menu->game_text.msg_invalid_world_name,
-            menu->game_text.msg_block_selected,
-            menu->game_text.msg_unknown_block,
-            menu->game_text.msg_flight_enabled,
-            menu->game_text.msg_flight_disabled,
-            menu->game_text.msg_fly_usage,
-            menu->game_text.msg_noclip_enabled,
-            menu->game_text.msg_noclip_disabled,
-            menu->game_text.msg_noclip_usage,
-            menu->game_text.msg_block_set,
-            menu->game_text.msg_out_of_bounds,
-            menu->game_text.msg_setblock_usage,
-            menu->game_text.msg_unknown_command,
-            menu->game_text.msg_chunk_borders_enabled,
-            menu->game_text.msg_chunk_borders_disabled,
-            menu->game_text.msg_chunk_borders_usage};
-
-        int chat_sizes[] = {
-            sizeof(menu->game_text.msg_quitting),
-            sizeof(menu->game_text.msg_teleported),
-            sizeof(menu->game_text.msg_teleport_usage),
-            sizeof(menu->game_text.msg_world_saved),
-            sizeof(menu->game_text.msg_world_save_failed),
-            sizeof(menu->game_text.msg_world_loaded),
-            sizeof(menu->game_text.msg_world_load_failed),
-            sizeof(menu->game_text.msg_invalid_world_name),
-            sizeof(menu->game_text.msg_block_selected),
-            sizeof(menu->game_text.msg_unknown_block),
-            sizeof(menu->game_text.msg_flight_enabled),
-            sizeof(menu->game_text.msg_flight_disabled),
-            sizeof(menu->game_text.msg_fly_usage),
-            sizeof(menu->game_text.msg_noclip_enabled),
-            sizeof(menu->game_text.msg_noclip_disabled),
-            sizeof(menu->game_text.msg_noclip_usage),
-            sizeof(menu->game_text.msg_block_set),
-            sizeof(menu->game_text.msg_out_of_bounds),
-            sizeof(menu->game_text.msg_setblock_usage),
-            sizeof(menu->game_text.msg_unknown_command),
-            sizeof(menu->game_text.msg_chunk_borders_enabled),
-            sizeof(menu->game_text.msg_chunk_borders_disabled),
-            sizeof(menu->game_text.msg_chunk_borders_usage)};
-
-        while (fgets(line, sizeof(line), chat_file) && chat_line_count < 23) {
-            // Remove newline
-            line[strcspn(line, "\n")] = '\0';
-            strncpy(chat_buffers[chat_line_count], line, chat_sizes[chat_line_count] - 1);
-            chat_buffers[chat_line_count][chat_sizes[chat_line_count] - 1] = '\0';
-            chat_line_count++;
-        }
-        fclose(chat_file);
-    } else {
-        fprintf(stderr, "Failed to load chat text from: %s\n", chat_path);
-    }
+    load_localization_file(menu, chat_path, 27);
 
     // Load credits text from credits.txt
     char credits_path[512];
@@ -809,7 +798,7 @@ void menu_draw_main(MenuSystem *menu, Font font) {
                      80, 2, WHITE);
 
     // Draw version
-    const char *version = "Basic 3D Visualizer - v0.0.24-beta";
+    const char *version = "Basic 3D Visualizer - v0.0.25-beta";
     Vector2 version_size = MeasureTextEx(font, version, 24, 1);
     DrawTextExCustom(font, version,
                      (Vector2){(screen_width - version_size.x) / 2, 150},

@@ -1,6 +1,9 @@
 0.0.25-beta:
     + added player model
     + added third person camera
+    + added some missing translations
+    * fixed translations
+    * added my bestie to the credits
 
 0.0.24-beta:
     + blocks can now have a different top, bottom, side textures

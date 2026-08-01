@@ -1,24 +1,26 @@
-_Quitting...
-_Teleported to (%.1f, %.1f, %.1f)
-_Usage: /tp x y z
-_World '%s' saved successfully.
-_Failed to save world '%s'.
-_World '%s' loaded successfully.
-_Failed to load world '%s'.
-_Invalid world name. Use only alphanumeric characters and underscore.
-_Selected block: %s
-_Unknown block type: %s. Available: stone, dirt, grass, sand, wood
-_Flight enabled. Double-tap Space to toggle flying.
-_Flight disabled.
-_Usage: /fly enable or /fly disable
-_No-clip enabled. You can pass through blocks.
-_No-clip disabled. Collision is active again.
-_Usage: /noclip enable or /noclip disable
-_Set block at (%.1f, %.1f, %.1f) to %s
-_Out of bounds: y in [0, 255]
-_Usage: /setblock x y z [block_type]
-_Unknown command: %s
-
-_Chunk borders enabled.
-_Chunk borders disabled.
-_Usage: /show_chunk_borders [on|off]
+msg.quitting=_Quitting...
+msg.teleported=_Teleported to (%.1f, %.1f, %.1f)
+msg.teleport_usage=_Usage: /tp x y z
+msg.world_saved=_World '%s' saved successfully.
+msg.world_save_failed=_Failed to save world '%s'.
+msg.world_loaded=_World '%s' loaded successfully.
+msg.world_load_failed=_Failed to load world '%s'.
+msg.invalid_world_name=_Invalid world name. Use only alphanumeric characters and underscore.
+msg.block_selected=_Selected block: %s
+msg.unknown_block=_Unknown block type: %s. Available: stone, dirt, grass, sand, wood
+msg.flight_enabled=_Flight enabled. Double-tap Space to toggle flying.
+msg.flight_disabled=_Flight disabled.
+msg.fly_usage=_Usage: /fly enable or /fly disable
+msg.noclip_enabled=_No-clip enabled. You can pass through blocks.
+msg.noclip_disabled=_No-clip disabled. Collision is active again.
+msg.noclip_usage=_Usage: /noclip enable or /noclip disable
+msg.console_command_failed=_[console] Failed to process command
+msg.third_person_camera=_Third-person camera
+msg.first_person_camera=_First-person camera
+msg.block_set=_Set block at (%.1f, %.1f, %.1f) to %s
+msg.out_of_bounds=_Out of bounds: y in [0, 255]
+msg.setblock_usage=_Usage: /setblock x y z [block_type]
+msg.unknown_command=_Unknown command: %s
+msg.chunk_borders_enabled=_Chunk borders enabled.
+msg.chunk_borders_disabled=_Chunk borders disabled.
+msg.chunk_borders_usage=_Usage: /show_chunk_borders [on|off]

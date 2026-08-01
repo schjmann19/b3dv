@@ -1,41 +1,41 @@
-Giocare
-Crea mondo
-Crediti e informazioni
-Esci
-Indietro
-Nome del mondo (alfanumerico + trattino basso):
-Comprimi i file del mondo
-Crea
-Annulla
-Il nome del mondo non può essere vuoto
-Il mondo esiste già
-Nessun mondo trovato
-Crea nuovo mondo
-Seleziona mondo
-Ultimo: %s | Frammenti: %d
-WASD per muoversi, Barra spaziatrice per saltare
-F3 per le metriche delle prestazioni, F2 per questo, f4 per le statistiche del giocatore
-F5 per le informazioni di sistema, F7 per attivare/disattivare l'acquisizione del mouse
-Usa il mouse per guardarti intorno
-ESC o P per mettere in pausa
-IN PAUSA
-Riprendi
-Salva ed esci
-Metriche delle prestazioni
-Informazioni di sistema
-Informazioni sul giocatore
-FPS:
-Coordinate:
-b3dv
-Impostazioni
-Distanza di rendering:
-FPS massimi:
-Famiglia caratteri:
-Variante:
-Illimitato
-Nickname:
-HUD bussola
-Premi ESC per tornare al menu principale
-Vedi info complete
-Inventario
-Premi ESC per chiudere
+menu.select_world=Giocare
+menu.create_world=Crea mondo
+menu.credits_info=Crediti e informazioni
+menu.quit=Esci
+menu.back=Indietro
+menu.world_name_label=Nome del mondo (alfanumerico + trattino basso):
+menu.compress_world_files=Comprimi i file del mondo
+menu.create_btn=Crea
+menu.cancel_btn=Annulla
+menu.error_empty_name=Il nome del mondo non può essere vuoto
+menu.error_exists=Il mondo esiste già
+menu.no_worlds=Nessun mondo trovato
+menu.title_create_world=Crea nuovo mondo
+menu.title_select_world=Seleziona mondo
+menu.last=Ultimo: %s | Frammenti: %d
+hud.move_controls=WASD per muoversi, Barra spaziatrice per saltare
+hud.metrics_help=F3 per le metriche delle prestazioni, F2 per questo, f4 per le statistiche del giocatore
+hud.mouse_help=F5 per le informazioni di sistema, F7 per attivare/disattivare l'acquisizione del mouse
+hud.look_help=Usa il mouse per guardarti intorno
+hud.pause_help=ESC o P per mettere in pausa
+hud.paused=IN PAUSA
+hud.resume=Riprendi
+hud.back_to_menu=Salva ed esci
+hud.perf_metrics=Metriche delle prestazioni
+hud.system_info=Informazioni di sistema
+hud.player_info=Informazioni sul giocatore
+hud.fps_label=FPS:
+hud.coord_label=Coordinate:
+hud.version=b3dv 0.0.25-beta
+settings.title=Impostazioni
+settings.render_dist_label=Distanza di rendering:
+settings.max_fps_label=FPS massimi:
+settings.font_family_label=Famiglia caratteri:
+settings.font_variant_label=Variante:
+settings.uncapped=Illimitato
+settings.nickname_label=Nickname:
+settings.compass_hud_label=HUD bussola
+settings.press_esc_to_return=Premi ESC per tornare al menu principale
+settings.see_full_info=Vedi info complete
+inventory.title=Inventario
+inventory.close=Premi ESC per chiudere

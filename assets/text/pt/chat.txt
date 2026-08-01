@@ -1,24 +1,26 @@
-Encerrando...
-Teleportado para (%.1f, %.1f, %.1f)
-Uso: /tp x y z
-Mundo '%s' salvo com sucesso.
-Falha ao salvar mundo '%s'.
-Mundo '%s' carregado com sucesso.
-Falha ao carregar mundo '%s'.
-Nome de mundo inválido. Use apenas caracteres alfanuméricos e sublinhado.
-Bloco selecionado: %s
-Tipo de bloco desconhecido: %s. Disponíveis: stone, dirt, grass, sand, wood
-Voo ativado. Clique duas vezes em Espaço para alternar.
-Voo desativado.
-Uso: /fly enable ou /fly disable
-Modo fantasma ativado. Você pode passar through blocos.
-Modo fantasma desativado. Colisão está ativa novamente.
-Uso: /noclip enable ou /noclip disable
-Bloco colocado em (%.1f, %.1f, %.1f) como %s
-Fora dos limites: y in [0, 255]
-Uso: /setblock x y z [block_type]
-Comando desconhecido: %s
-
-Bordas de chunk ativadas.
-Bordas de chunk desativadas.
-Uso: /show_chunk_borders [on|off]
+msg.quitting=Encerrando...
+msg.teleported=Teleportado para (%.1f, %.1f, %.1f)
+msg.teleport_usage=Uso: /tp x y z
+msg.world_saved=Mundo '%s' salvo com sucesso.
+msg.world_save_failed=Falha ao salvar mundo '%s'.
+msg.world_loaded=Mundo '%s' carregado com sucesso.
+msg.world_load_failed=Falha ao carregar mundo '%s'.
+msg.invalid_world_name=Nome de mundo inválido. Use apenas caracteres alfanuméricos e sublinhado.
+msg.block_selected=Bloco selecionado: %s
+msg.unknown_block=Tipo de bloco desconhecido: %s. Disponíveis: stone, dirt, grass, sand, wood
+msg.flight_enabled=Voo ativado. Clique duas vezes em Espaço para alternar.
+msg.flight_disabled=Voo desativado.
+msg.fly_usage=Uso: /fly enable ou /fly disable
+msg.noclip_enabled=Modo fantasma ativado. Você pode passar through blocos.
+msg.noclip_disabled=Modo fantasma desativado. Colisão está ativa novamente.
+msg.noclip_usage=Uso: /noclip enable ou /noclip disable
+msg.console_command_failed=[console] Falha ao processar o comando
+msg.third_person_camera=Câmera em terceira pessoa
+msg.first_person_camera=Câmera em primeira pessoa
+msg.block_set=Bloco colocado em (%.1f, %.1f, %.1f) como %s
+msg.out_of_bounds=Fora dos limites: y in [0, 255]
+msg.setblock_usage=Uso: /setblock x y z [block_type]
+msg.unknown_command=Comando desconhecido: %s
+msg.chunk_borders_enabled=Bordas de chunk ativadas.
+msg.chunk_borders_disabled=Bordas de chunk desativadas.
+msg.chunk_borders_usage=Uso: /show_chunk_borders [on|off]

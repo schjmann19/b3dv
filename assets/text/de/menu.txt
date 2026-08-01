@@ -1,41 +1,41 @@
-Spielen
-Welt erstellen
-Credits & Info
-Beenden
-Zurück
-Weltname (alphanumerisch + Unterstrich):
-Weltdateien komprimieren
-Erstellen
-Abbrechen
-Der Weltname darf nicht leer sein
-Welt existiert bereits
-Keine Welten gefunden
-Neue Welt erstellen
-Welt auswählen
-Letzte Position: %s | Chunks: %d
-WASD zum Bewegen, Leertaste zum Springen
-F3 für Leistungsstatistiken, F2 für dieses Spiel, F4 für Spielerstatistiken
-F5 für Systeminformationen, F7 zum Aktivieren/Deaktivieren der Mauszeigeraufnahme
-Maus zum Umschauen
-ESC oder P zum Pausieren
-PAUSIERT
-Fortsetzen
-Speichern & Beenden
-Leistungsstatistiken
-Systeminformationen
-Spielerinformationen
-FPS:
-Koordinaten:
-b3dv
-Einstellungen
-Render-Distanz:
-Max FPS:
-Schriftartenfamilie:
-Variante:
-Unbegrenzt
-Spitzname:
-Kompass-HUD
-Drücke ESC, um zum Hauptmenü zurückzukehren
-Vollständige Info anzeigen
-Inventar
-Drücke ESC zum Schließen
+menu.select_world=Spielen
+menu.create_world=Welt erstellen
+menu.credits_info=Credits & Info
+menu.quit=Beenden
+menu.back=Zurück
+menu.world_name_label=Weltname (alphanumerisch + Unterstrich):
+menu.compress_world_files=Weltdateien komprimieren
+menu.create_btn=Erstellen
+menu.cancel_btn=Abbrechen
+menu.error_empty_name=Der Weltname darf nicht leer sein
+menu.error_exists=Welt existiert bereits
+menu.no_worlds=Keine Welten gefunden
+menu.title_create_world=Neue Welt erstellen
+menu.title_select_world=Welt auswählen
+menu.last=Letzte Position: %s | Chunks: %d
+hud.move_controls=WASD zum Bewegen, Leertaste zum Springen
+hud.metrics_help=F3 für Leistungsstatistiken, F2 für dieses Spiel, F4 für Spielerstatistiken
+hud.mouse_help=F5 für Systeminformationen, F7 zum Aktivieren/Deaktivieren der Mauszeigeraufnahme
+hud.look_help=Maus zum Umschauen
+hud.pause_help=ESC oder P zum Pausieren
+hud.paused=PAUSIERT
+hud.resume=Fortsetzen
+hud.back_to_menu=Speichern & Beenden
+hud.perf_metrics=Leistungsstatistiken
+hud.system_info=Systeminformationen
+hud.player_info=Spielerinformationen
+hud.fps_label=FPS:
+hud.coord_label=Koordinaten:
+hud.version=b3dv 0.0.25-beta
+settings.title=Einstellungen
+settings.render_dist_label=Render-Distanz:
+settings.max_fps_label=Max FPS:
+settings.font_family_label=Schriftartenfamilie:
+settings.font_variant_label=Variante:
+settings.uncapped=Unbegrenzt
+settings.nickname_label=Spitzname:
+settings.compass_hud_label=Kompass-HUD
+settings.press_esc_to_return=Drücke ESC, um zum Hauptmenü zurückzukehren
+settings.see_full_info=Vollständige Info anzeigen
+inventory.title=Inventar
+inventory.close=Drücke ESC zum Schließen

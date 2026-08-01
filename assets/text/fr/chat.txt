@@ -1,24 +1,26 @@
-Fermeture...
-Téléporté vers (%.1f, %.1f, %.1f)
-Utilisation: /tp x y z
-Le monde '%s' a été sauvegardé avec succès.
-Échec de la sauvegarde du monde '%s'.
-Le monde '%s' a été chargé avec succès.
-Échec du chargement du monde '%s'.
-Nom de monde invalide. Utilisez uniquement des caractères alphanumériques et des traits de soulignement.
-Bloc sélectionné: %s
-Type de bloc inconnu: %s. Disponibles: stone, dirt, grass, sand, wood
-Vol activé. Double-cliquez sur Espace pour basculer.
-Vol désactivé.
-Utilisation: /fly enable ou /fly disable
-Mode sans clipping activé. Vous pouvez traverser les blocs.
-Mode sans clipping désactivé. La collision est à nouveau active.
-Utilisation: /noclip enable ou /noclip disable
-Bloc placé à (%.1f, %.1f, %.1f) comme %s
-Hors limites: y in [0, 255]
-Utilisation: /setblock x y z [block_type]
-Commande inconnue: %s
-
-Bords des chunks activés.
-Bords des chunks désactivés.
-Utilisation : /show_chunk_borders [on|off]
+msg.quitting=Fermeture...
+msg.teleported=Téléporté vers (%.1f, %.1f, %.1f)
+msg.teleport_usage=Utilisation: /tp x y z
+msg.world_saved=Le monde '%s' a été sauvegardé avec succès.
+msg.world_save_failed=Échec de la sauvegarde du monde '%s'.
+msg.world_loaded=Le monde '%s' a été chargé avec succès.
+msg.world_load_failed=Échec du chargement du monde '%s'.
+msg.invalid_world_name=Nom de monde invalide. Utilisez uniquement des caractères alphanumériques et des traits de soulignement.
+msg.block_selected=Bloc sélectionné: %s
+msg.unknown_block=Type de bloc inconnu: %s. Disponibles: stone, dirt, grass, sand, wood
+msg.flight_enabled=Vol activé. Double-cliquez sur Espace pour basculer.
+msg.flight_disabled=Vol désactivé.
+msg.fly_usage=Utilisation: /fly enable ou /fly disable
+msg.noclip_enabled=Mode sans clipping activé. Vous pouvez traverser les blocs.
+msg.noclip_disabled=Mode sans clipping désactivé. La collision est à nouveau active.
+msg.noclip_usage=Utilisation: /noclip enable ou /noclip disable
+msg.console_command_failed=[console] Échec du traitement de la commande
+msg.third_person_camera=Caméra à la troisième personne
+msg.first_person_camera=Caméra à la première personne
+msg.block_set=Bloc placé à (%.1f, %.1f, %.1f) comme %s
+msg.out_of_bounds=Hors limites: y in [0, 255]
+msg.setblock_usage=Utilisation: /setblock x y z [block_type]
+msg.unknown_command=Commande inconnue: %s
+msg.chunk_borders_enabled=Bords des chunks activés.
+msg.chunk_borders_disabled=Bords des chunks désactivés.
+msg.chunk_borders_usage=Utilisation : /show_chunk_borders [on|off]

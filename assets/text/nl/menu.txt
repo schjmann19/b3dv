@@ -1,41 +1,41 @@
-Spelen
-Wereld maken
-Credits & Info
-Afsluiten
-Terug
-Wereldnaam (alfanumeriek + underscore):
-Wereldbestanden comprimeren
-Maken
-Annuleren
-Wereldnaam mag niet leeg zijn
-Wereld bestaat al
-Geen werelden gevonden
-Nieuwe wereld maken
-Wereld selecteren
-Laatste: %s | Chunks: %d
-WASD om te bewegen, spatie om te springen
-F3 voor prestatiegegevens, F2 voor dit, F4 voor spelersstatistieken
-F5 voor systeeminfo, F7 om muisopname in/uit te schakelen
-Inventaris
-Druk op ESC om te sluiten
-Muis om rond te kijken
-ESC of P om te pauzeren
-GEPAUZEERD
-Hervatten
-Opslaan & Afsluiten
-Prestatiegegevens
-Systeeminfo
-Spelersinfo
-FPS:
-Coördinaten:
-b3dv
-Instellingen
-Renderafstand:
-Max FPS:
-Lettertypefamilie:
-Variant:
-Onbeperkt
-Nickname:
-Kompas-HUD
-Druk ESC om terug te gaan naar het hoofdmenu
-Zie volledige info
+menu.select_world=Spelen
+menu.create_world=Wereld maken
+menu.credits_info=Credits & Info
+menu.quit=Afsluiten
+menu.back=Terug
+menu.world_name_label=Wereldnaam (alfanumeriek + underscore):
+menu.compress_world_files=Wereldbestanden comprimeren
+menu.create_btn=Maken
+menu.cancel_btn=Annuleren
+menu.error_empty_name=Wereldnaam mag niet leeg zijn
+menu.error_exists=Wereld bestaat al
+menu.no_worlds=Geen werelden gevonden
+menu.title_create_world=Nieuwe wereld maken
+menu.title_select_world=Wereld selecteren
+menu.last=Laatste: %s | Chunks: %d
+hud.move_controls=WASD om te bewegen, spatie om te springen
+hud.metrics_help=F3 voor prestatiegegevens, F2 voor dit, F4 voor spelersstatistieken
+hud.mouse_help=F5 voor systeeminfo, F7 om muisopname in/uit te schakelen
+hud.look_help=Muis om rond te kijken
+hud.pause_help=ESC of P om te pauzeren
+hud.paused=GEPAUZEERD
+hud.resume=Hervatten
+hud.back_to_menu=Opslaan & Afsluiten
+hud.perf_metrics=Prestatiegegevens
+hud.system_info=Systeeminfo
+hud.player_info=Spelerinfo
+hud.fps_label=FPS:
+hud.coord_label=Coördinaten:
+hud.version=b3dv 0.0.25-beta
+settings.title=Instellingen
+settings.render_dist_label=Renderafstand:
+settings.max_fps_label=Max FPS:
+settings.font_family_label=Lettertypefamilie:
+settings.font_variant_label=Variant:
+settings.uncapped=Onbeperkt
+settings.nickname_label=Bijnaam:
+settings.compass_hud_label=Kompas-HUD
+settings.press_esc_to_return=Druk op ESC om terug te gaan naar het hoofdmenu
+settings.see_full_info=Zie volledige info
+inventory.title=Inventaris
+inventory.close=Druk op ESC om te sluiten

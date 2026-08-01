@@ -1,41 +1,41 @@
-Play
-Create World
-Credits & Info
-Quit
-Back
-World Name (alphanumeric + underscore):
-Compress world files
-Create
-Cancel
-World name cannot be empty
-World already exists
-No worlds found
-Create New World
-Select World
-Last: %s | Chunks: %d
-WASD to move, Space to jump
-F3 for performance metrics, F2 for this, f4 for player stats
-F5 for system info, F7 to toggle mouse capture
-Mouse to look around
-ESC or P to pause
-PAUSED
-Resume
-Save & Quit
-Performance Metrics
-System Info
-Player Info
-FPS:
-Coordinates:
-b3dv
-Settings
-Render Distance:
-Max FPS:
-Font Family:
-Variant:
-Uncapped
-Nickname:
-Compass HUD
-Press ESC to return to main menu
-See full info
-Inventory
-Press ESC to close
+menu.select_world=Play
+menu.create_world=Create World
+menu.credits_info=Credits & Info
+menu.quit=Quit
+menu.back=Back
+menu.world_name_label=World Name (alphanumeric + underscore):
+menu.compress_world_files=Compress world files
+menu.create_btn=Create
+menu.cancel_btn=Cancel
+menu.error_empty_name=World name cannot be empty
+menu.error_exists=World already exists
+menu.no_worlds=No worlds found
+menu.title_create_world=Create New World
+menu.title_select_world=Select World
+menu.last=Last: %s | Chunks: %d
+hud.move_controls=WASD to move, Space to jump
+hud.metrics_help=F3 for performance metrics, F2 for this, f4 for player stats
+hud.mouse_help=F5 for system info, F7 to toggle mouse capture
+hud.look_help=Mouse to look around
+hud.pause_help=ESC or P to pause
+hud.paused=PAUSED
+hud.resume=Resume
+hud.back_to_menu=Save & Quit
+hud.perf_metrics=Performance Metrics
+hud.system_info=System Info
+hud.player_info=Player Info
+hud.fps_label=FPS:
+hud.coord_label=Coordinates:
+hud.version=b3dv 0.0.25-beta
+settings.title=Settings
+settings.render_dist_label=Render Distance:
+settings.max_fps_label=Max FPS:
+settings.font_family_label=Font Family:
+settings.font_variant_label=Variant:
+settings.uncapped=Uncapped
+settings.nickname_label=Nickname:
+settings.compass_hud_label=Compass HUD
+settings.press_esc_to_return=Press ESC to return to main menu
+settings.see_full_info=See full info
+inventory.title=Inventory
+inventory.close=Press ESC to close

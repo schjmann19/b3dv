@@ -1,24 +1,26 @@
-Afsluiten...
-Teleporteerd naar (%.1f, %.1f, %.1f)
-Gebruik: /tp x y z
-Wereld '%s' succesvol opgeslagen.
-Fout bij opslaan van wereld '%s'.
-Wereld '%s' succesvol geladen.
-Fout bij laden van wereld '%s'.
-Ongeldige wereldnaam. Gebruik alleen alfanumerieke tekens en onderstrepen.
-Blok geselecteerd: %s
-Onbekend bloktype: %s. Beschikbaar: stone, dirt, grass, sand, wood
-Vliegen ingeschakeld. Dubbelklik op Spatie om in/uit te schakelen.
-Vliegen uitgeschakeld.
-Gebruik: /fly enable of /fly disable
-Ghost-modus ingeschakeld. Je kunt door blokken gaan.
-Ghost-modus uitgeschakeld. Botsingdetectie is weer actief.
-Gebruik: /noclip enable of /noclip disable
-Blok geplaatst op (%.1f, %.1f, %.1f) als %s
-Buiten grenzen: y in [0, 255]
-Gebruik: /setblock x y z [block_type]
-Onbekend commando: %s
-
-Chunk-grenzen ingeschakeld.
-Chunk-grenzen uitgeschakeld.
-Gebruik: /show_chunk_borders [on|off]
+msg.quitting=Afsluiten...
+msg.teleported=Teleporteerd naar (%.1f, %.1f, %.1f)
+msg.teleport_usage=Gebruik: /tp x y z
+msg.world_saved=Wereld '%s' succesvol opgeslagen.
+msg.world_save_failed=Fout bij opslaan van wereld '%s'.
+msg.world_loaded=Wereld '%s' succesvol geladen.
+msg.world_load_failed=Fout bij laden van wereld '%s'.
+msg.invalid_world_name=Ongeldige wereldnaam. Gebruik alleen alfanumerieke tekens en onderstrepen.
+msg.block_selected=Blok geselecteerd: %s
+msg.unknown_block=Onbekend bloktype: %s. Beschikbaar: stone, dirt, grass, sand, wood
+msg.flight_enabled=Vliegen ingeschakeld. Dubbelklik op Spatie om in/uit te schakelen.
+msg.flight_disabled=Vliegen uitgeschakeld.
+msg.fly_usage=Gebruik: /fly enable of /fly disable
+msg.noclip_enabled=Ghost-modus ingeschakeld. Je kunt door blokken gaan.
+msg.noclip_disabled=Ghost-modus uitgeschakeld. Botsingdetectie is weer actief.
+msg.noclip_usage=Gebruik: /noclip enable of /noclip disable
+msg.console_command_failed=[console] Fout bij verwerken van opdracht
+msg.third_person_camera=Derde-persoonscamera
+msg.first_person_camera=Eerste-persoonscamera
+msg.block_set=Blok geplaatst op (%.1f, %.1f, %.1f) als %s
+msg.out_of_bounds=Buiten grenzen: y in [0, 255]
+msg.setblock_usage=Gebruik: /setblock x y z [block_type]
+msg.unknown_command=Onbekend commando: %s
+msg.chunk_borders_enabled=Chunk-grenzen ingeschakeld.
+msg.chunk_borders_disabled=Chunk-grenzen uitgeschakeld.
+msg.chunk_borders_usage=Gebruik: /show_chunk_borders [on|off]

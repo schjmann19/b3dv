@@ -1,41 +1,41 @@
-Jouer
-Créer un monde
-Crédits et infos
-Quitter
-Retour
-Nom du monde (alphanumérique + tiret bas) :
-Compresser les fichiers du monde
-Créer
-Annuler
-Le nom du monde ne peut pas être vide
-Ce monde existe déjà
-Aucun monde trouvé
-Créer un nouveau monde
-Sélectionner un monde
-Dernier : %s | Chunks : %d
-WASD pour se déplacer, Espace pour sauter
-F3 pour les statistiques de performance, F2 pour ceci, F4 pour les statistiques du joueur
-F5 pour les informations système, F7 pour activer/désactiver la capture de la souris
-Souris pour regarder autour
-ÉCHAP ou P pour mettre en pause
-PAUSE
-Reprendre
-Enregistrer et quitter
-Statistiques de performance
-Informations système
-Informations du joueur
-FPS:
-Coordonnées:
-b3dv
-Paramètres
-Distance de rendu :
-FPS max :
-Famille de polices :
-Variante :
-Illimité
-Pseudo :
-HUD de la boussole
-Appuyez sur ESC pour revenir au menu principal
-Voir les infos complètes
-Inventaire
-Appuyez sur ESC pour fermer
+menu.select_world=Jouer
+menu.create_world=Créer un monde
+menu.credits_info=Crédits et infos
+menu.quit=Quitter
+menu.back=Retour
+menu.world_name_label=Nom du monde (alphanumérique + tiret bas) :
+menu.compress_world_files=Compresser les fichiers du monde
+menu.create_btn=Créer
+menu.cancel_btn=Annuler
+menu.error_empty_name=Le nom du monde ne peut pas être vide
+menu.error_exists=Ce monde existe déjà
+menu.no_worlds=Aucun monde trouvé
+menu.title_create_world=Créer un nouveau monde
+menu.title_select_world=Sélectionner un monde
+menu.last=Dernier : %s | Chunks : %d
+hud.move_controls=WASD pour se déplacer, Espace pour sauter
+hud.metrics_help=F3 pour les statistiques de performance, F2 pour ceci, F4 pour les statistiques du joueur
+hud.mouse_help=F5 pour les informations système, F7 pour activer/désactiver la capture de la souris
+hud.look_help=Souris pour regarder autour
+hud.pause_help=ÉCHAP ou P pour mettre en pause
+hud.paused=PAUSE
+hud.resume=Reprendre
+hud.back_to_menu=Enregistrer et quitter
+hud.perf_metrics=Statistiques de performance
+hud.system_info=Informations système
+hud.player_info=Informations du joueur
+hud.fps_label=FPS:
+hud.coord_label=Coordonnées:
+hud.version=b3dv 0.0.25-beta
+settings.title=Paramètres
+settings.render_dist_label=Distance de rendu :
+settings.max_fps_label=FPS max :
+settings.font_family_label=Famille de polices :
+settings.font_variant_label=Variante :
+settings.uncapped=Illimité
+settings.nickname_label=Pseudo :
+settings.compass_hud_label=HUD de la boussole
+settings.press_esc_to_return=Appuyez sur ESC pour revenir au menu principal
+settings.see_full_info=Voir les infos complètes
+inventory.title=Inventaire
+inventory.close=Appuyez sur ESC pour fermer

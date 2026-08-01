@@ -1,41 +1,41 @@
-Ftxey Srakrr
-Tìng Mikyun Srakrr
-Aysäfpìl Sì Hapxì
-Hum
-Nì’aw
-Zin Srakrr (aysäfpìl sì ayskxawng):
-Compress world files
-Tìng Mikyun
-Ke tsun
-Zin srakrr ke tsun livu kehe
-Srakrr lu tsatseng
-Ke tsun tivìng srakrr
-Tìng Mikyun Srakrr Fì’uri
-Ftxey Srakrr
-Nì’aw: %s | Ayhapxì: %d
-WASD fte tsun tsivun, Space fte tsun taron
-F3 fte ayhapxì tìtìng, F2 fte fì’u, F4 fte ayhapxì tìtxur
-F5 fte hapxì a tìkangkem, F7 fte tsun kelku pxìm
-Pxìm fte tsun tse’a nìtxan
-ESC ulte P fte tsun hì’i
-HÌ’Ì
-Tìng Tseng
-Nì’aw Ne Menù
-Ayhapxì Tìtìng
-Hapxì A Tìkangkem
-Hapxì A Tìtxur
-FPS:
-Ayngar:
-b3dv
-_Settings
-_Render Distance:
-_Max FPS:
-_Font Family:
-_Variant:
-_Uncapped
-_Nickname:
-_Compass HUD
-_Press ESC to return to main menu
-_See full info
-Inventory
-Press ESC to close
+menu.select_world=Ftxey Srakrr
+menu.create_world=Tìng Mikyun Srakrr
+menu.credits_info=Aysäfpìl Sì Hapxì
+menu.quit=Hum
+menu.back=Nì’aw
+menu.world_name_label=Zin Srakrr (aysäfpìl sì ayskxawng):
+menu.compress_world_files=Compress world files
+menu.create_btn=Tìng Mikyun
+menu.cancel_btn=Ke tsun
+menu.error_empty_name=Zin srakrr ke tsun livu kehe
+menu.error_exists=Srakrr lu tsatseng
+menu.no_worlds=Ke tsun tivìng srakrr
+menu.title_create_world=Tìng Mikyun Srakrr Fì’uri
+menu.title_select_world=Ftxey Srakrr
+menu.last=Nì’aw: %s | Ayhapxì: %d
+hud.move_controls=WASD fte tsun tsivun, Space fte tsun taron
+hud.metrics_help=F3 fte ayhapxì tìtìng, F2 fte fì’u, F4 fte ayhapxì tìtxur
+hud.mouse_help=F5 fte hapxì a tìkangkem, F7 fte tsun kelku pxìm
+hud.look_help=Pxìm fte tsun tse’a nìtxan
+hud.pause_help=ESC ulte P fte tsun hì’i
+hud.paused=HÌ’Ì
+hud.resume=Tìng Tseng
+hud.back_to_menu=Nì’aw Ne Menù
+hud.perf_metrics=Ayhapxì Tìtìng
+hud.system_info=Hapxì A Tìkangkem
+hud.player_info=Hapxì A Tìtxur
+hud.fps_label=FPS:
+hud.coord_label=Ayngar:
+hud.version=b3dv 0.0.25-beta
+settings.title=_Settings
+settings.render_dist_label=_Render Distance:
+settings.max_fps_label=_Max FPS:
+settings.font_family_label=_Font Family:
+settings.font_variant_label=_Variant:
+settings.uncapped=_Uncapped
+settings.nickname_label=_Nickname:
+settings.compass_hud_label=_Compass HUD
+settings.press_esc_to_return=_Press ESC to return to main menu
+settings.see_full_info=_See full info
+inventory.title=Inventory
+inventory.close=Press ESC to close

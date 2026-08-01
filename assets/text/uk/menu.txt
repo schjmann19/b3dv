@@ -1,41 +1,41 @@
-Грати
-Створити світ
-Титри та інформація
-Вийти
-Назад
-Назва світу (буквено-цифрова + підкреслення):
-Стискати файли світу
-Створити
-Скасувати
-Назва світу не може бути порожньою
-Світ вже існує
-Світів не знайдено
-Створити новий світ
-Вибрати світ
-Останнє: %s | Частини: %d
-WASD для переміщення, Пробіл для стрибка
-F3 для показників продуктивності, F2 для цього, f4 для статистики гравця
-F5 для системної інформації, F7 для перемикання захоплення мишею
-Миша для огляду
-ESC для паузи
-ПАУЗА
-Відновити
-Зберегти та вийти
-Показники продуктивності
-Інформація про систему
-Інформація про гравця
-FPS:
-Координати:
-b3dv
-Параметри
-Дальність рендеринґу:
-Макс. FPS:
-Сімейство шрифтів:
-Варіант:
-Без обмежень
-Нікнейм:
-HUD компаса
-Натисніть ESC, щоб повернутися до головного меню
-Повна інформація
-Інвентар
-Натисніть ESC, щоб закрити
+menu.select_world=Грати
+menu.create_world=Створити світ
+menu.credits_info=Титри та інформація
+menu.quit=Вийти
+menu.back=Назад
+menu.world_name_label=Назва світу (буквено-цифрова + підкреслення):
+menu.compress_world_files=Стискати файли світу
+menu.create_btn=Створити
+menu.cancel_btn=Скасувати
+menu.error_empty_name=Назва світу не може бути порожньою
+menu.error_exists=Світ вже існує
+menu.no_worlds=Світів не знайдено
+menu.title_create_world=Створити новий світ
+menu.title_select_world=Вибрати світ
+menu.last=Останнє: %s | Частини: %d
+hud.move_controls=WASD для переміщення, Пробіл для стрибка
+hud.metrics_help=F3 для показників продуктивності, F2 для цього, f4 для статистики гравця
+hud.mouse_help=F5 для системної інформації, F7 для перемикання захоплення мишею
+hud.look_help=Миша для огляду
+hud.pause_help=ESC для паузи
+hud.paused=ПАУЗА
+hud.resume=Відновити
+hud.back_to_menu=Зберегти та вийти
+hud.perf_metrics=Показники продуктивності
+hud.system_info=Інформація про систему
+hud.player_info=Інформація про гравця
+hud.fps_label=FPS:
+hud.coord_label=Координати:
+hud.version=b3dv 0.0.25-beta
+settings.title=Параметри
+settings.render_dist_label=Дальність рендеринґу:
+settings.max_fps_label=Макс. FPS:
+settings.font_family_label=Сімейство шрифтів:
+settings.font_variant_label=Варіант:
+settings.uncapped=Без обмежень
+settings.nickname_label=Нікнейм:
+settings.compass_hud_label=HUD компаса
+settings.press_esc_to_return=Натисніть ESC, щоб повернутися до головного меню
+settings.see_full_info=Повна інформація
+inventory.title=Інвентар
+inventory.close=Натисніть ESC, щоб закрити
