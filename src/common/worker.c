@@ -8,7 +8,7 @@
 #ifdef __linux__
 #include <sched.h>
 #endif
-#include "../include/world.h"
+#include "../../include/world.h"
 
 // Worker thread main function - processes chunks for meshing
 static void *worker_thread_main(void *arg) {

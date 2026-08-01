@@ -5,11 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../common_utils/args.h"
+#include "../../common_utils/args.h"
 
-#include "../include/aux.h"
+#include "../../include/aux.h"
 
-#include "../include/neutrino_detect.h"
+#include "../../include/neutrino_detect.h"
 
 bool neutrino_detection = false;
 

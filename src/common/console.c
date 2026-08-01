@@ -5,8 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "../common_utils/simple_strings.h"
-#include "../include/console.h"
+#include "../../common_utils/simple_strings.h"
+#include "../../include/console.h"
 
 // Command queue
 #define CONSOLE_QUEUE_SIZE 32
@@ -89,6 +89,12 @@ ConsoleCommand console_parse_command(const char *input) {
         cmd.type = CMD_FLY;
     } else if (strcmp(command, "noclip") == 0) {
         cmd.type = CMD_NOCLIP;
+    } else if (strcmp(command, "addplayer") == 0) {
+        cmd.type = CMD_ADDPLAYER;
+    } else if (strcmp(command, "removeplayer") == 0) {
+        cmd.type = CMD_REMOVEPLAYER;
+    } else if (strcmp(command, "players") == 0) {
+        cmd.type = CMD_LISTPLAYERS;
     } else if (strcmp(command, "quit") == 0) {
         cmd.type = CMD_QUIT;
     } else if (strcmp(command, "help") == 0) {
@@ -116,9 +122,9 @@ ConsoleCommand console_parse_command(const char *input) {
     }
 
     // For some commands, parse player target
-    // Commands with player targets: give, tp, select
+    // Commands with player targets: give, tp, select, removeplayer
     // Others don't have player targets (save, load, etc.)
-    bool has_player_target = (cmd.type == CMD_GIVE || cmd.type == CMD_TP || cmd.type == CMD_SELECT);
+    bool has_player_target = (cmd.type == CMD_GIVE || cmd.type == CMD_TP || cmd.type == CMD_SELECT || cmd.type == CMD_REMOVEPLAYER);
 
     if (has_player_target && input && *input != '\0') {
         // Try to extract player name/target

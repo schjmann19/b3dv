@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../include/player.h"
-#include "../include/world.h"
+#include "../../include/player.h"
+#include "../../include/world.h"
 
 // Create a player
 Player *player_create(float x, float y, float z) {
@@ -13,6 +13,10 @@ Player *player_create(float x, float y, float z) {
 // Create a player with specific UID and nickname
 Player *player_create_with_uid(float x, float y, float z, uint32_t uid, const char *nickname) {
     Player *player = (Player *)malloc(sizeof(Player));
+    if (!player) {
+        return NULL;
+    }
+    memset(player, 0, sizeof(Player));
     player->uid = uid;
     strncpy(player->nickname, nickname, sizeof(player->nickname) - 1);
     player->nickname[sizeof(player->nickname) - 1] = '\0';

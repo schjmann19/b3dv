@@ -3,11 +3,13 @@
 
 #include "raylib.h"
 #include "world.h"
+#include <stdint.h>
 
 // Menu state enumeration
 typedef enum {
     MENU_STATE_MAIN,
     MENU_STATE_WORLD_SELECT,
+    MENU_STATE_MULTIPLAYER,
     MENU_STATE_CREATE_WORLD,
     MENU_STATE_CREDITS,
     MENU_STATE_SETTINGS,
@@ -97,6 +99,20 @@ typedef struct {
     bool create_world_error;
     bool create_world_compress;
     char create_world_error_msg[256];
+    // Multiplayer join dialog
+    char server_address[256];
+    int server_address_len;
+    char server_port[16];
+    int server_port_len;
+    int server_socket;
+    bool multiplayer_client;
+    bool multiplayer_connecting;
+    bool multiplayer_connected;
+    uint32_t multiplayer_player_uid;
+    char server_world_name[256];
+    int multiplayer_active_field; // 0 = address, 1 = port
+    bool multiplayer_error;
+    char multiplayer_error_msg[256];
     // Background image
     Texture2D background_texture;
     bool background_loaded;
@@ -157,6 +173,7 @@ void menu_scan_fonts(MenuSystem *menu);
 void menu_scan_font_variants(MenuSystem *menu, const char *font_family);
 void menu_draw_main(MenuSystem *menu, Font font);
 void menu_draw_world_select(MenuSystem *menu, Font font);
+void menu_draw_multiplayer(MenuSystem *menu, Font font);
 void menu_draw_create_world(MenuSystem *menu, Font font);
 void menu_draw_credits(MenuSystem *menu, Font font);
 void menu_draw_settings(MenuSystem *menu, Font font);

@@ -1,22 +1,26 @@
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
-#include "../include/menu.h"
-#include "../include/player.h"
+#include "../../include/menu.h"
+#include "../../include/player.h"
 #include "raylib.h"
-#include "../include/rendering.h"
-#include "../include/utils.h"
-#include "../include/vec_math.h"
-#include "../include/world.h"
-// #include "../include/clouds.h"
-#include "../include/aux.h"
-#include "../include/console.h"
-#include "../include/game_server.h"
+#include "../../include/rendering.h"
+#include "../../include/utils.h"
+#include "../../include/vec_math.h"
+#include "../../include/world.h"
+// #include "../../include/clouds.h"
+#include "../../include/aux.h"
+#include "../../include/console.h"
+#include "../../include/game_server.h"
 
 typedef struct {
     float dist_sq;
@@ -37,6 +41,68 @@ static int compare_glass_entries(const void *a, const void *b) {
         return -1;
     }
     return 0;
+}
+
+static bool set_socket_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+        return false;
+    }
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0;
+}
+
+static void close_multiplayer_connection(MenuSystem *menu, char *server_recv_buffer, size_t *server_recv_used) {
+    if (menu->server_socket >= 0) {
+        close(menu->server_socket);
+    }
+    menu->server_socket = -1;
+    menu->multiplayer_client = false;
+    menu->multiplayer_connected = false;
+    if (server_recv_used) {
+        *server_recv_used = 0;
+    }
+    if (server_recv_buffer) {
+        server_recv_buffer[0] = '\0';
+    }
+}
+
+static int recv_line_nonblocking(int sock, char *buffer, size_t buffer_size, size_t *buffer_used, char *out_line, size_t out_line_size) {
+    if (*buffer_used >= buffer_size) {
+        return -1;
+    }
+
+    if (*buffer_used < 1 || buffer[*buffer_used - 1] != '\n') {
+        ssize_t bytes = recv(sock, buffer + *buffer_used, buffer_size - *buffer_used, 0);
+        if (bytes > 0) {
+            *buffer_used += (size_t)bytes;
+        } else if (bytes == 0) {
+            return -1;
+        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 0;
+        } else {
+            return -1;
+        }
+    }
+
+    char *newline = memchr(buffer, '\n', *buffer_used);
+    if (!newline) {
+        return 0;
+    }
+
+    size_t line_len = (size_t)(newline - buffer);
+    if (line_len >= out_line_size) {
+        line_len = out_line_size - 1;
+    }
+    memcpy(out_line, buffer, line_len);
+    out_line[line_len] = '\0';
+    if (line_len > 0 && out_line[line_len - 1] == '\r') {
+        out_line[line_len - 1] = '\0';
+    }
+
+    size_t remaining = *buffer_used - (line_len + 1);
+    memmove(buffer, newline + 1, remaining);
+    *buffer_used = remaining;
+    return 1;
 }
 
 // Returns how far the third-person camera can be pulled back from `from`
@@ -173,8 +239,12 @@ int b3dv_main(int argc, char **argv) {
     World *world = NULL;
     Player *player = NULL;
     GameServer game_server = {0};
+    Player *remote_players[GAME_SERVER_MAX_PLAYERS] = {0};
+    int remote_player_count = 0;
     float server_accumulator = 0.0f;
     const float SERVER_FIXED_DT = 1.0f / 60.0f;
+    char server_recv_buffer[4096] = {0};
+    size_t server_recv_used = 0;
     // CloudSystem* clouds = NULL;
 
     // enable mouse capture (will be disabled in menu)
@@ -291,6 +361,12 @@ int b3dv_main(int argc, char **argv) {
             EndDrawing();
             menu_update_input(menu);
             continue;
+        } else if (menu->current_state == MENU_STATE_MULTIPLAYER) {
+            BeginDrawing();
+            menu_draw_multiplayer(menu, custom_font);
+            EndDrawing();
+            menu_update_input(menu);
+            continue;
         } else if (menu->current_state == MENU_STATE_CREDITS) {
             BeginDrawing();
             menu_draw_credits(menu, custom_font);
@@ -308,19 +384,37 @@ int b3dv_main(int argc, char **argv) {
             if (!world) {
                 world = world_create();
                 world->compress_chunk_files = menu->create_world_compress;
-                // Try to load the selected world, or generate new one
-                if (!world_load(world, menu->selected_world_name)) {
+
+                if (menu->multiplayer_client && menu->server_socket >= 0) {
+                    strncpy(world->world_name, menu->selected_world_name, sizeof(world->world_name) - 1);
+                    world->world_name[sizeof(world->world_name) - 1] = '\0';
                     world_generate_prism(world);
-                    world_save(world, menu->selected_world_name);
+                    world->last_player_position = (Vector3){8.0f, 60.0f, 8.0f};
+                } else {
+                    // Local singleplayer: try to load the selected world, or generate new one
+                    if (!world_load(world, menu->selected_world_name)) {
+                        world_generate_prism(world);
+                        world_save(world, menu->selected_world_name);
+                    }
                 }
 
                 // Load block textures
                 world_load_textures(world);
 
-                // Create player at saved position (or default if no save)
-                player = player_create(world->last_player_position.x,
-                                       world->last_player_position.y,
-                                       world->last_player_position.z);
+                // Create the player and initialize the shared game server state.
+                if (menu->multiplayer_client && menu->server_socket >= 0) {
+                    player = player_create(8.0f, 60.0f, 8.0f);
+                    if (player) {
+                        player->uid = menu->multiplayer_player_uid;
+                        strncpy(player->nickname, menu->nickname[0] != '\0' ? menu->nickname : "Player",
+                                sizeof(player->nickname) - 1);
+                        player->nickname[sizeof(player->nickname) - 1] = '\0';
+                    }
+                } else {
+                    player = player_create(world->last_player_position.x,
+                                           world->last_player_position.y,
+                                           world->last_player_position.z);
+                }
                 // Register player with world and apply saved inventory if present
                 world->current_player = player;
                 world_apply_players_to(world, player);
@@ -444,33 +538,62 @@ int b3dv_main(int argc, char **argv) {
 
                 // Process command or chat
                 if (chat_input[0] == '/') {
-                    ConsoleCommand parsed_cmd = console_parse_command(chat_input);
-                    bool should_quit_cmd = false;
-                    bool flight_enabled_cmd = flight_enabled;
-                    bool show_chunk_borders_cmd = show_chunk_borders;
-                    char command_msg[512] = {0};
-                    if (game_server_submit_command(&game_server, player->uid, &parsed_cmd, chat_input,
-                                                   &should_quit_cmd, &flight_enabled_cmd,
-                                                   &show_chunk_borders_cmd, &world, &player,
-                                                   command_msg, sizeof(command_msg))) {
-                        if (command_msg[0] != '\0') {
-                            add_chat_message(command_msg);
+                    if (menu->multiplayer_client && menu->server_socket >= 0) {
+                        char packet[1024];
+                        int packet_len = snprintf(packet, sizeof(packet), "CMD %s\n", chat_input + 1);
+                        if (packet_len > 0 && send(menu->server_socket, packet, packet_len, 0) > 0) {
+                            add_chat_message("Command sent to server");
+                        } else {
+                            add_chat_message("Failed to send command to server");
+                            close(menu->server_socket);
+                            menu->server_socket = -1;
+                            menu->multiplayer_client = false;
+                            menu->multiplayer_connected = false;
                         }
-                        if (should_quit_cmd) {
-                            should_quit = true;
-                        }
-                        flight_enabled = flight_enabled_cmd;
-                        show_chunk_borders = show_chunk_borders_cmd;
                     } else {
-                        char msg[512];
-                        snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_command, chat_input);
-                        add_chat_message(msg);
+                        ConsoleCommand parsed_cmd = console_parse_command(chat_input);
+                        bool should_quit_cmd = false;
+                        bool flight_enabled_cmd = flight_enabled;
+                        bool show_chunk_borders_cmd = show_chunk_borders;
+                        char command_msg[512] = {0};
+                        if (game_server_submit_command(&game_server, player->uid, &parsed_cmd, chat_input,
+                                                       &should_quit_cmd, &flight_enabled_cmd,
+                                                       &show_chunk_borders_cmd, &world, &player,
+                                                       command_msg, sizeof(command_msg))) {
+                            if (command_msg[0] != '\0') {
+                                add_chat_message(command_msg);
+                            }
+                            if (should_quit_cmd) {
+                                should_quit = true;
+                            }
+                            flight_enabled = flight_enabled_cmd;
+                            show_chunk_borders = show_chunk_borders_cmd;
+                        } else {
+                            char msg[512];
+                            snprintf(msg, sizeof(msg), menu->game_text.msg_unknown_command, chat_input);
+                            add_chat_message(msg);
+                        }
                     }
                 } else {
-                    char out_msg[1024];
-                    const char *nick = (world->player_nickname[0] != '\0') ? world->player_nickname : "Player";
-                    snprintf(out_msg, sizeof(out_msg), "<%s> %s", nick, chat_input);
-                    add_chat_message(out_msg);
+                    if (menu->multiplayer_client && menu->server_socket >= 0) {
+                        const char *nick = (world && world->player_nickname[0] != '\0') ? world->player_nickname : "Player";
+                        char packet[1024];
+                        int packet_len = snprintf(packet, sizeof(packet), "CHAT %s: %s\n", nick, chat_input);
+                        if (packet_len > 0 && send(menu->server_socket, packet, packet_len, 0) > 0) {
+                            add_chat_message("Message sent to server");
+                        } else {
+                            add_chat_message("Failed to send message to server");
+                            close(menu->server_socket);
+                            menu->server_socket = -1;
+                            menu->multiplayer_client = false;
+                            menu->multiplayer_connected = false;
+                        }
+                    } else {
+                        char out_msg[1024];
+                        const char *nick = (world->player_nickname[0] != '\0') ? world->player_nickname : "Player";
+                        snprintf(out_msg, sizeof(out_msg), "<%s> %s", nick, chat_input);
+                        add_chat_message(out_msg);
+                    }
                 }
 
                 // finalize chat state
@@ -590,10 +713,22 @@ int b3dv_main(int argc, char **argv) {
             World *world_after = world;
             Player *player_after = player;
 
-            if (game_server_submit_command(&game_server, player->uid, &console_cmd, console_cmd.raw_input,
-                                           &should_quit_cmd, &flight_enabled_cmd,
-                                           &show_chunk_borders_cmd, &world_after, &player_after,
-                                           command_msg, sizeof(command_msg))) {
+            if (menu->multiplayer_client && menu->server_socket >= 0) {
+                char packet[1024];
+                int packet_len = snprintf(packet, sizeof(packet), "CMD %s\n", console_cmd.raw_input);
+                if (packet_len > 0 && send(menu->server_socket, packet, packet_len, 0) > 0) {
+                    add_chat_message("Server command sent");
+                } else {
+                    add_chat_message("Failed to send server command");
+                    close(menu->server_socket);
+                    menu->server_socket = -1;
+                    menu->multiplayer_client = false;
+                    menu->multiplayer_connected = false;
+                }
+            } else if (game_server_submit_command(&game_server, player->uid, &console_cmd, console_cmd.raw_input,
+                                                 &should_quit_cmd, &flight_enabled_cmd,
+                                                 &show_chunk_borders_cmd, &world_after, &player_after,
+                                                 command_msg, sizeof(command_msg))) {
                 if (command_msg[0] != '\0') {
                     add_chat_message(command_msg);
                 }
@@ -606,6 +741,95 @@ int b3dv_main(int argc, char **argv) {
                 show_chunk_borders = show_chunk_borders_cmd;
             } else {
                 add_chat_message(menu->game_text.msg_console_command_failed);
+            }
+        }
+
+        if (menu->multiplayer_client && menu->server_socket >= 0) {
+            char incoming_line[512] = {0};
+            while (true) {
+                int recv_result = recv_line_nonblocking(menu->server_socket, server_recv_buffer, sizeof(server_recv_buffer), &server_recv_used, incoming_line, sizeof(incoming_line));
+                if (recv_result < 0) {
+                    add_chat_message("Server disconnected");
+                    close_multiplayer_connection(menu, server_recv_buffer, &server_recv_used);
+                    break;
+                }
+                if (recv_result == 0) {
+                    break;
+                }
+
+                if (strncmp(incoming_line, "CHAT ", 5) == 0) {
+                    add_chat_message(incoming_line + 5);
+                } else if (strncmp(incoming_line, "SERVERMSG ", 10) == 0) {
+                    add_chat_message(incoming_line + 10);
+                } else if (strncmp(incoming_line, "ERROR ", 6) == 0) {
+                    add_chat_message(incoming_line + 6);
+                } else if (strncmp(incoming_line, "BLOCKSET ", 9) == 0) {
+                    int x = 0;
+                    int y = 0;
+                    int z = 0;
+                    int block_type = 0;
+                    if (sscanf(incoming_line + 9, "%d %d %d %d", &x, &y, &z, &block_type) == 4) {
+                        world_set_block(world, x, y, z, (BlockType)block_type);
+                    }
+                } else if (strncmp(incoming_line, "PLAYERSTATE ", 12) == 0) {
+                    uint32_t uid = 0;
+                    float px = 0.0f, py = 0.0f, pz = 0.0f;
+                    float vx = 0.0f, vy = 0.0f, vz = 0.0f;
+                    int selected_slot = 0;
+                    int flying = 0;
+                    char nick[64] = {0};
+                    if (sscanf(incoming_line + 12, "%u %f %f %f %f %f %f %d %d %63s",
+                               &uid, &px, &py, &pz, &vx, &vy, &vz, &selected_slot, &flying, nick) >= 9) {
+                        if (player && uid == player->uid) {
+                            player->position.x = px;
+                            player->position.y = py;
+                            player->position.z = pz;
+                            player->velocity.x = vx;
+                            player->velocity.y = vy;
+                            player->velocity.z = vz;
+                            if (selected_slot >= 0 && selected_slot < INVENTORY_SIZE) {
+                                player->selected_slot = selected_slot;
+                            }
+                            player->is_flying = flying != 0;
+                            if (nick[0] != '\0') {
+                                strncpy(player->nickname, nick, sizeof(player->nickname) - 1);
+                                player->nickname[sizeof(player->nickname) - 1] = '\0';
+                            }
+                        } else {
+                            Player *remote = NULL;
+                            for (int i = 0; i < remote_player_count; i++) {
+                                if (remote_players[i] && remote_players[i]->uid == uid) {
+                                    remote = remote_players[i];
+                                    break;
+                                }
+                            }
+                            if (!remote && remote_player_count < GAME_SERVER_MAX_PLAYERS) {
+                                remote = player_create_with_uid(px, py, pz, uid, nick[0] != '\0' ? nick : "Remote");
+                                if (remote) {
+                                    remote_players[remote_player_count++] = remote;
+                                }
+                            }
+                            if (remote) {
+                                remote->position.x = px;
+                                remote->position.y = py;
+                                remote->position.z = pz;
+                                remote->velocity.x = vx;
+                                remote->velocity.y = vy;
+                                remote->velocity.z = vz;
+                                if (selected_slot >= 0 && selected_slot < INVENTORY_SIZE) {
+                                    remote->selected_slot = selected_slot;
+                                }
+                                remote->is_flying = flying != 0;
+                                if (nick[0] != '\0') {
+                                    strncpy(remote->nickname, nick, sizeof(remote->nickname) - 1);
+                                    remote->nickname[sizeof(remote->nickname) - 1] = '\0';
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    add_chat_message(incoming_line);
+                }
             }
         }
 
@@ -724,101 +948,107 @@ int b3dv_main(int argc, char **argv) {
 
             input_cmd.move_x = move.x;
             input_cmd.move_z = move.z;
-            game_server_submit_input(&game_server, player->uid, &input_cmd);
 
-            // Handle block breaking (left click)
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                int hit_x, hit_y, hit_z;
-                int adj_x, adj_y, adj_z;
-                if (raycast_block(world, camera, 10.0f, &hit_x, &hit_y, &hit_z, &adj_x, &adj_y, &adj_z)) {
-                    BlockType broken_block = world_get_block(world, hit_x, hit_y, hit_z);
-                    if (broken_block != BLOCK_BEDROCK && broken_block != BLOCK_AIR) {
-                        // Add broken block to inventory
-                        inventory_add_block(player, broken_block);
-                        world_set_block(world, hit_x, hit_y, hit_z, BLOCK_AIR);
+                if (menu->multiplayer_client && menu->server_socket >= 0) {
+                    char packet[256];
+                    int packet_len = snprintf(packet, sizeof(packet), "INPUT %.3f %.3f %d %d %d %d %d\n",
+                                              input_cmd.move_x,
+                                              input_cmd.move_z,
+                                              input_cmd.jump ? 1 : 0,
+                                              input_cmd.shift ? 1 : 0,
+                                              input_cmd.sprint ? 1 : 0,
+                                              input_cmd.fly_toggle ? 1 : 0,
+                                              input_cmd.selected_slot);
+                    if (packet_len > 0 && send(menu->server_socket, packet, packet_len, 0) > 0) {
+                        // input forwarded to server
+                    } else {
+                        add_chat_message("Disconnected from server");
+                        close(menu->server_socket);
+                        menu->server_socket = -1;
+                        menu->multiplayer_client = false;
+                        menu->multiplayer_connected = false;
                     }
+                } else {
+                    game_server_submit_input(&game_server, player->uid, &input_cmd);
                 }
-            }
 
-            // Handle block placing (right click)
-            if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-                int hit_x, hit_y, hit_z;
-                int adj_x, adj_y, adj_z;
-                if (raycast_block(world, camera, 10.0f, &hit_x, &hit_y, &hit_z, &adj_x, &adj_y, &adj_z)) {
-                    // Place block in the adjacent empty space
-                    BlockType adjacent_block = world_get_block(world, adj_x, adj_y, adj_z);
-                    if (adjacent_block == BLOCK_AIR) {
-                        // Check if placing the block would intersect with player hitbox
-                        Vector3 block_center = (Vector3){
-                            adj_x + 0.5f,
-                            adj_y + 0.5f,
-                            adj_z + 0.5f};
-
-                        // Simple AABB collision check: block (1x1x1) vs player (radius 0.35 cylinder with height 1.9)
-                        // Check if block center is within player's horizontal radius
-                        float dx = player->position.x - block_center.x;
-                        float dz = player->position.z - block_center.z;
-                        float horizontal_dist = sqrtf(dx * dx + dz * dz);
-
-                        // Check vertical overlap (player head at position.y, feet at position.y - PLAYER_HEIGHT)
-                        float player_bottom = player->position.y - PLAYER_HEIGHT;
-                        float player_top = player->position.y;
-                        float block_bottom = adj_y;
-                        float block_top = adj_y + 1.0f;
-
-                        bool vertical_overlap = (block_bottom < player_top && block_top > player_bottom);
-                        bool horizontal_overlap = (horizontal_dist < PLAYER_RADIUS + 0.5f); // 0.5 is half block width
-
-                        // Only place if it doesn't intersect with player
-                        if (!(vertical_overlap && horizontal_overlap)) {
-                            // Get block type from selected inventory slot only
-                            BlockType block_to_place = inventory_get_selected_block(player);
-                            // Only place if selected slot has blocks (not BLOCK_AIR)
-                            if (block_to_place != BLOCK_AIR && inventory_remove_block(player, block_to_place)) {
-                                world_set_block(world, adj_x, adj_y, adj_z, block_to_place);
+                // Handle block breaking and placing
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    int hit_x, hit_y, hit_z;
+                    int adj_x, adj_y, adj_z;
+                    if (raycast_block(world, camera, 10.0f, &hit_x, &hit_y, &hit_z, &adj_x, &adj_y, &adj_z)) {
+                        if (menu->multiplayer_client && menu->server_socket >= 0) {
+                            char packet[256];
+                            int packet_len = snprintf(packet, sizeof(packet), "BLOCKBREAK %d %d %d\n", hit_x, hit_y, hit_z);
+                            if (packet_len > 0 && send(menu->server_socket, packet, packet_len, 0) > 0) {
+                                // block break request sent to server
+                            } else {
+                                add_chat_message("Disconnected from server");
+                                close(menu->server_socket);
+                                menu->server_socket = -1;
+                                menu->multiplayer_client = false;
+                                menu->multiplayer_connected = false;
+                            }
+                        } else {
+                            BlockType broken_block = world_get_block(world, hit_x, hit_y, hit_z);
+                            if (broken_block != BLOCK_BEDROCK && broken_block != BLOCK_AIR) {
+                                inventory_add_block(player, broken_block);
+                                world_set_block(world, hit_x, hit_y, hit_z, BLOCK_AIR);
                             }
                         }
                     }
                 }
-            }
 
-            // Update highlighted block (raycast every 3 frames for performance)
-            raycast_frame_counter++;
-            if (raycast_frame_counter >= 3) {
-                raycast_frame_counter = 0;
-                int hit_x, hit_y, hit_z;
-                int adj_x, adj_y, adj_z;
-                if (raycast_block(world, camera, 10.0f, &hit_x, &hit_y, &hit_z, &adj_x, &adj_y, &adj_z)) {
-                    highlighted_block_x = hit_x;
-                    highlighted_block_y = hit_y;
-                    highlighted_block_z = hit_z;
-                    has_highlighted_block = true;
-                } else {
-                    has_highlighted_block = false;
+                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                    int hit_x, hit_y, hit_z;
+                    int adj_x, adj_y, adj_z;
+                    if (raycast_block(world, camera, 10.0f, &hit_x, &hit_y, &hit_z, &adj_x, &adj_y, &adj_z)) {
+                        BlockType adjacent_block = world_get_block(world, adj_x, adj_y, adj_z);
+                        if (adjacent_block == BLOCK_AIR) {
+                            Vector3 block_center = (Vector3){
+                                adj_x + 0.5f,
+                                adj_y + 0.5f,
+                                adj_z + 0.5f};
+
+                            float dx = player->position.x - block_center.x;
+                            float dz = player->position.z - block_center.z;
+                            float horizontal_dist = sqrtf(dx * dx + dz * dz);
+
+                            float player_bottom = player->position.y - PLAYER_HEIGHT;
+                            float player_top = player->position.y;
+                            float block_bottom = adj_y;
+                            float block_top = adj_y + 1.0f;
+
+                            bool vertical_overlap = (block_bottom < player_top && block_top > player_bottom);
+                            bool horizontal_overlap = (horizontal_dist < PLAYER_RADIUS + 0.5f);
+
+                            if (!(vertical_overlap && horizontal_overlap)) {
+                                if (menu->multiplayer_client && menu->server_socket >= 0) {
+                                    BlockType block_to_place = inventory_get_selected_block(player);
+                                    if (block_to_place != BLOCK_AIR) {
+                                        char packet[256];
+                                        int packet_len = snprintf(packet, sizeof(packet), "BLOCKPLACE %d %d %d %d\n",
+                                                                  adj_x, adj_y, adj_z, block_to_place);
+                                        if (packet_len > 0 && send(menu->server_socket, packet, packet_len, 0) > 0) {
+                                            inventory_remove_block(player, block_to_place);
+                                        } else {
+                                            add_chat_message("Disconnected from server");
+                                            close(menu->server_socket);
+                                            menu->server_socket = -1;
+                                            menu->multiplayer_client = false;
+                                            menu->multiplayer_connected = false;
+                                        }
+                                    }
+                                } else {
+                                    BlockType block_to_place = inventory_get_selected_block(player);
+                                    if (block_to_place != BLOCK_AIR && inventory_remove_block(player, block_to_place)) {
+                                        world_set_block(world, adj_x, adj_y, adj_z, block_to_place);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-
-            // Handle inventory slot selection (keys 1-9)
-            if (IsKeyPressed(KEY_ONE)) {
-                player->selected_slot = 0;
-            }
-            if (IsKeyPressed(KEY_TWO)) {
-                player->selected_slot = 1;
-            }
-            if (IsKeyPressed(KEY_THREE)) {
-                player->selected_slot = 2;
-            }
-            if (IsKeyPressed(KEY_FOUR)) {
-                player->selected_slot = 3;
-            }
-            if (IsKeyPressed(KEY_FIVE)) {
-                player->selected_slot = 4;
-            }
-            if (IsKeyPressed(KEY_SIX)) {
-                player->selected_slot = 5;
-            }
-            if (IsKeyPressed(KEY_SEVEN)) {
-                player->selected_slot = 6;
             }
             if (IsKeyPressed(KEY_EIGHT)) {
                 player->selected_slot = 7;
@@ -845,11 +1075,15 @@ int b3dv_main(int argc, char **argv) {
 
         // Update physics and world always (unless game is paused), even if chat is active
         if (!paused) {
-            game_server_set_interest(&game_server, player->position, camera_forward, menu->render_distance);
-            server_accumulator += dt;
-            while (server_accumulator >= SERVER_FIXED_DT) {
-                game_server_tick(&game_server, SERVER_FIXED_DT);
-                server_accumulator -= SERVER_FIXED_DT;
+            if (menu->multiplayer_client && menu->server_socket >= 0) {
+                world_update_chunks(world, player->position, camera_forward, menu->render_distance);
+            } else {
+                game_server_set_interest(&game_server, player->position, camera_forward, menu->render_distance);
+                server_accumulator += SERVER_FIXED_DT;
+                while (server_accumulator >= SERVER_FIXED_DT) {
+                    game_server_tick(&game_server, SERVER_FIXED_DT);
+                    server_accumulator -= SERVER_FIXED_DT;
+                }
             }
             // clouds_update(clouds, player->position);  // Update cloud positions
         }
@@ -909,9 +1143,6 @@ int b3dv_main(int argc, char **argv) {
 
         BeginMode3D(camera);
         // Use the actual camera orientation for rendering/frustum culling
-        Vector3 cam_forward = camera_forward;
-        Vector3 cam_right = camera_right;
-
         // CRITICAL: Take a snapshot of chunk pointers while holding cache_mutex
         // This prevents chunks from being unloaded during rendering
         pthread_mutex_lock(&world->cache_mutex);
@@ -1123,6 +1354,20 @@ int b3dv_main(int argc, char **argv) {
                 player->position.y - camera_offset.y,
                 player->position.z - camera_offset.z};
             draw_player_model(player_model_pos);
+        }
+
+        if (menu->multiplayer_client && menu->server_socket >= 0) {
+            for (int i = 0; i < remote_player_count; i++) {
+                Player *remote = remote_players[i];
+                if (!remote || remote == player) {
+                    continue;
+                }
+                Vector3 remote_model_pos = (Vector3){
+                    remote->position.x - camera_offset.x,
+                    remote->position.y - camera_offset.y,
+                    remote->position.z - camera_offset.z};
+                draw_player_model(remote_model_pos);
+            }
         }
 
         if (show_chunk_borders) {
@@ -1531,7 +1776,7 @@ int b3dv_main(int argc, char **argv) {
             DrawTextExCustom(custom_font, menu->game_text.perf_metrics, (Vector2){10, 10}, 32, 1, BLACK);
 
             char frame_time[64];
-            snprintf(frame_time, sizeof(frame_time), "Frame Time: %.2f ms", dt * 1000.0f);
+            snprintf(frame_time, sizeof(frame_time), "Frame Time: %.2f ms", SERVER_FIXED_DT * 1000.0f);
             DrawTextExCustom(custom_font, frame_time, (Vector2){10, 50}, 32, 1, BLACK);
 
             char fps_text[32];
@@ -1571,7 +1816,7 @@ int b3dv_main(int argc, char **argv) {
             float dx = player->position.x - player->prev_position.x;
             float dy = player->position.y - player->prev_position.y;
             float dz = player->position.z - player->prev_position.z;
-            float actual_speed = sqrtf(dx * dx + dy * dy + dz * dz) / dt;
+            float actual_speed = sqrtf(dx * dx + dy * dy + dz * dz) / SERVER_FIXED_DT;
             char speed_text[64];
             snprintf(speed_text, sizeof(speed_text), "Speed: %.2f m/s", actual_speed);
             DrawTextExCustom(custom_font, speed_text, (Vector2){10, 130}, 32, 1, BLACK);
@@ -2020,7 +2265,7 @@ int b3dv_main(int argc, char **argv) {
         }
 
         EndDrawing();
-    }
+    
     B3DV_MAIN_LOOP
 
     // Save world before closing (if one was loaded)
@@ -2038,6 +2283,11 @@ int b3dv_main(int argc, char **argv) {
     UnloadFont(custom_font);
     if (player) {
         player_free(player);
+    }
+    for (int i = 0; i < remote_player_count; i++) {
+        if (remote_players[i]) {
+            player_free(remote_players[i]);
+        }
     }
     // if (clouds) clouds_free(clouds);
     if (world) {

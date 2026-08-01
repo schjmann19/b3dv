@@ -1,3 +1,6 @@
+0.0.26-beta:
+    + multiplayer wip
+
 0.0.25-beta:
     + added player model
     + added third person camera

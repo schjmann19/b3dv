@@ -19,9 +19,11 @@ typedef struct {
     bool place_block;
 } PlayerInputCommand;
 
+#define GAME_SERVER_MAX_PLAYERS 16
+
 typedef struct {
     World *world;
-    Player *players[1];
+    Player *players[GAME_SERVER_MAX_PLAYERS];
     int player_count;
     bool flight_enabled;
     Vector3 interest_position;
@@ -34,6 +36,9 @@ void game_server_reset(GameServer *srv, World *world, Player *player);
 void game_server_set_interest(GameServer *srv, Vector3 position, Vector3 forward, float render_distance_blocks);
 void game_server_tick(GameServer *srv, float fixed_dt);
 void game_server_submit_input(GameServer *srv, uint32_t player_uid, const PlayerInputCommand *cmd);
+bool game_server_add_player(GameServer *srv, Player *player);
+bool game_server_remove_player(GameServer *srv, uint32_t player_uid);
+Player *game_server_get_player(GameServer *srv, uint32_t player_uid);
 bool game_server_submit_command(GameServer *srv,
                                 uint32_t player_uid,
                                 const ConsoleCommand *cmd,

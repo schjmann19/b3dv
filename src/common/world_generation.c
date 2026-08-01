@@ -6,9 +6,9 @@
 #include <time.h>
 #include <zlib.h>
 
-#include "../include/player.h"
+#include "../../include/player.h"
 #include "raylib.h"
-#include "../include/world.h"
+#include "../../include/world.h"
 
 // Chunk loader helper declaration needed before use in world_load_or_create_chunk.
 static bool load_chunk_from_file(FILE *file, Chunk *chunk);
@@ -317,6 +317,7 @@ World *world_create(void) {
     world->last_loaded_chunk_z = INT32_MAX;
     world->last_chunk_update_position = (Vector3){1000000000.0f, 1000000000.0f, 1000000000.0f};
     world->last_chunk_update_forward = (Vector3){1000000000.0f, 1000000000.0f, 1000000000.0f};
+    world->last_player_position = (Vector3){0.0f, 0.0f, 0.0f};
 
     // Initialize texture cache
     memset(&world->textures, 0, sizeof(world->textures));
@@ -404,6 +405,7 @@ typedef struct {
 static CachedBlockTexture g_block_texture_cache[MAX_CACHED_BLOCK_TEXTURES];
 static int g_block_texture_cache_count = 0;
 
+#ifndef SERVER_BUILD
 static Texture2D load_block_face_texture(const char *filename) {
     if (!filename) {
         return (Texture2D){0};
@@ -456,7 +458,24 @@ static Texture2D load_block_face_texture(const char *filename) {
 
     return texture;
 }
+#endif
 
+#ifdef SERVER_BUILD
+void world_load_textures(World *world) {
+    (void)world;
+}
+
+void world_unload_textures(World *world) {
+    (void)world;
+}
+
+Texture2D world_get_block_face_texture(World *world, BlockType type, BlockFace face) {
+    (void)world;
+    (void)type;
+    (void)face;
+    return (Texture2D){0};
+}
+#else
 void world_load_textures(World *world) {
     if (!world || world->textures.textures_loaded) {
         return;
@@ -511,6 +530,7 @@ Texture2D world_get_block_face_texture(World *world, BlockType type, BlockFace f
         return set->side;
     }
 }
+#endif
 
 // Find or create a chunk in the cache
 Chunk *world_get_chunk(World *world, int32_t chunk_x, int32_t chunk_y, int32_t chunk_z) {

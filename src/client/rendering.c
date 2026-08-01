@@ -1,10 +1,10 @@
 #include <math.h>
 
 #include "raylib.h"
-#include "../include/rendering.h"
+#include "../../include/rendering.h"
 #include "rlgl.h"
-#include "../include/vec_math.h"
-#include "../include/world.h"
+#include "../../include/vec_math.h"
+#include "../../include/world.h"
 
 // Rendering constants
 #define BLOCK_NEAR_EXEMPTION_DIST_SQ 225.0f // 15^2

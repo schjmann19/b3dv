@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 
-#include "../common_utils/simple_strings.h"
-#include "../include/world.h"
-#include "../include/game_server.h"
+#include "../../common_utils/simple_strings.h"
+#include "../../include/console.h"
+#include "../../include/world.h"
+#include "../../include/game_server.h"
 static void game_server_apply_command(GameServer *srv,
                                       Player *player,
                                       const ConsoleCommand *cmd,
@@ -304,7 +306,7 @@ static void game_server_apply_command(GameServer *srv,
 
     case CMD_HELP:
         if (out_msg && out_size > 0) {
-            snprintf(out_msg, out_size, "Commands: /tp, /give, /select, /save, /load, /quit");
+            snprintf(out_msg, out_size, "Commands: /tp, /give, /select, /save, /load, /addplayer, /removeplayer, /players, /quit, /help");
         }
         break;
 
@@ -324,18 +326,74 @@ static void game_server_apply_command(GameServer *srv,
     }
 }
 
+static Player *game_server_get_player_by_uid(GameServer *srv, uint32_t player_uid) {
+    if (!srv || player_uid == 0) {
+        return NULL;
+    }
+    for (int i = 0; i < srv->player_count; i++) {
+        if (srv->players[i] && srv->players[i]->uid == player_uid) {
+            return srv->players[i];
+        }
+    }
+    return NULL;
+}
+
+static Player *game_server_find_player_by_name(GameServer *srv, const char *name) {
+    if (!srv || !name || name[0] == '\0') {
+        return NULL;
+    }
+    for (int i = 0; i < srv->player_count; i++) {
+        if (srv->players[i] && strcmp(srv->players[i]->nickname, name) == 0) {
+            return srv->players[i];
+        }
+    }
+    return NULL;
+}
+
+bool game_server_add_player(GameServer *srv, Player *player) {
+    if (!srv || !player || srv->player_count >= GAME_SERVER_MAX_PLAYERS) {
+        return false;
+    }
+    if (game_server_get_player_by_uid(srv, player->uid)) {
+        return false;
+    }
+    srv->players[srv->player_count++] = player;
+    return true;
+}
+
+bool game_server_remove_player(GameServer *srv, uint32_t player_uid) {
+    if (!srv || player_uid == 0) {
+        return false;
+    }
+    for (int i = 0; i < srv->player_count; i++) {
+        if (srv->players[i] && srv->players[i]->uid == player_uid) {
+            for (int j = i; j + 1 < srv->player_count; j++) {
+                srv->players[j] = srv->players[j + 1];
+            }
+            srv->players[--srv->player_count] = NULL;
+            return true;
+        }
+    }
+    return false;
+}
+
+Player *game_server_get_player(GameServer *srv, uint32_t player_uid) {
+    return game_server_get_player_by_uid(srv, player_uid);
+}
+
 void game_server_init(GameServer *srv, World *world, Player *player) {
     if (!srv) {
         return;
     }
     memset(srv, 0, sizeof(*srv));
     srv->world = world;
-    srv->players[0] = player;
-    srv->player_count = player ? 1 : 0;
     srv->flight_enabled = false;
     srv->interest_position = (Vector3){0.0f, 0.0f, 0.0f};
     srv->interest_forward = (Vector3){0.0f, 0.0f, 1.0f};
     srv->render_distance_blocks = 50.0f;
+    if (player) {
+        game_server_add_player(srv, player);
+    }
 }
 
 void game_server_reset(GameServer *srv, World *world, Player *player) {
@@ -352,22 +410,45 @@ void game_server_set_interest(GameServer *srv, Vector3 position, Vector3 forward
 }
 
 void game_server_tick(GameServer *srv, float fixed_dt) {
-    if (!srv || !srv->world || !srv->players[0]) {
+    if (!srv || !srv->world || srv->player_count == 0) {
         return;
     }
 
-    Player *player = srv->players[0];
-    player_update(player, srv->world, fixed_dt, srv->flight_enabled);
-    world_update_chunks(srv->world, player->position, srv->interest_forward, srv->render_distance_blocks);
+    for (int i = 0; i < srv->player_count; i++) {
+        Player *player = srv->players[i];
+        if (player) {
+            player_update(player, srv->world, fixed_dt, srv->flight_enabled);
+        }
+    }
+
+    Player *focus = srv->players[0];
+    if (!focus) {
+        return;
+    }
+    world_update_chunks(srv->world, focus->position, srv->interest_forward, srv->render_distance_blocks);
+}
+
+static uint32_t game_server_generate_unique_uid(GameServer *srv) {
+    static uint32_t next_uid = 2;
+    if (!srv) {
+        return next_uid++;
+    }
+    while (game_server_get_player_by_uid(srv, next_uid) != NULL || next_uid == 0) {
+        next_uid++;
+    }
+    return next_uid++;
 }
 
 void game_server_submit_input(GameServer *srv, uint32_t player_uid, const PlayerInputCommand *cmd) {
-    (void)player_uid;
-    if (!srv || !srv->players[0] || !cmd) {
+    if (!srv || !cmd) {
         return;
     }
 
-    Player *player = srv->players[0];
+    Player *player = game_server_get_player_by_uid(srv, player_uid);
+    if (!player) {
+        return;
+    }
+
     player->shifting = cmd->shift;
 
     if (cmd->fly_toggle && srv->flight_enabled) {
@@ -405,6 +486,47 @@ void game_server_submit_input(GameServer *srv, uint32_t player_uid, const Player
     }
 }
 
+static Player *game_server_get_command_target(GameServer *srv, const ConsoleCommand *cmd, uint32_t default_uid) {
+    if (!srv || !cmd) {
+        return NULL;
+    }
+
+    if (cmd->player_target[0] != '\0') {
+        uint32_t target_uid = console_parse_uid(cmd->player_target);
+        if (target_uid != 0) {
+            Player *target = game_server_get_player_by_uid(srv, target_uid);
+            if (target) {
+                return target;
+            }
+        }
+        Player *target = game_server_find_player_by_name(srv, cmd->player_target);
+        if (target) {
+            return target;
+        }
+        return NULL;
+    }
+
+    return game_server_get_player_by_uid(srv, default_uid);
+}
+
+static bool game_server_remove_player_by_target(GameServer *srv, const char *target_str) {
+    if (!srv || !target_str || target_str[0] == '\0') {
+        return false;
+    }
+
+    uint32_t target_uid = console_parse_uid(target_str);
+    if (target_uid != 0) {
+        return game_server_remove_player(srv, target_uid);
+    }
+
+    Player *target = game_server_find_player_by_name(srv, target_str);
+    if (!target) {
+        return false;
+    }
+
+    return game_server_remove_player(srv, target->uid);
+}
+
 bool game_server_submit_command(GameServer *srv,
                                 uint32_t player_uid,
                                 const ConsoleCommand *cmd,
@@ -416,18 +538,99 @@ bool game_server_submit_command(GameServer *srv,
                                 Player **player_out,
                                 char *out_msg,
                                 size_t out_size) {
-    (void)player_uid;
-    if (!srv || !srv->players[0] || !cmd) {
+    if (!srv || !cmd) {
         return false;
     }
 
-    Player *player = srv->players[0];
-    game_server_apply_command(srv, player, cmd, raw_input, should_quit, flight_enabled, show_chunk_borders, out_msg, out_size);
+    if (cmd->type == CMD_ADDPLAYER) {
+        const char *nickname = cmd->args[0] != '\0' ? cmd->args : "Player";
+        uint32_t uid = game_server_generate_unique_uid(srv);
+        Vector3 spawn_pos = srv->world ? srv->world->last_player_position : (Vector3){0.0f, 0.0f, 0.0f};
+        Player *new_player = player_create_with_uid(spawn_pos.x, spawn_pos.y + 1.0f, spawn_pos.z, uid, nickname);
+        if (!new_player) {
+            if (out_msg && out_size > 0) {
+                snprintf(out_msg, out_size, "Failed to allocate new player");
+            }
+            return false;
+        }
+
+        if (!game_server_add_player(srv, new_player)) {
+            player_free(new_player);
+            if (out_msg && out_size > 0) {
+                snprintf(out_msg, out_size, "Failed to add player '%s'", nickname);
+            }
+            return false;
+        }
+
+        if (out_msg && out_size > 0) {
+            snprintf(out_msg, out_size, "Added player '%s' (UID %08x)", nickname, uid);
+        }
+        if (player_out) {
+            *player_out = new_player;
+        }
+        if (world_out) {
+            *world_out = srv->world;
+        }
+        return true;
+    }
+
+    if (cmd->type == CMD_REMOVEPLAYER) {
+        const char *target = cmd->player_target[0] != '\0' ? cmd->player_target : cmd->args;
+        if (target[0] == '\0') {
+            if (out_msg && out_size > 0) {
+                snprintf(out_msg, out_size, "Usage: /removeplayer <uid|name>");
+            }
+            return false;
+        }
+
+        if (game_server_remove_player_by_target(srv, target)) {
+            if (out_msg && out_size > 0) {
+                snprintf(out_msg, out_size, "Removed player: %s", target);
+            }
+            return true;
+        }
+
+        if (out_msg && out_size > 0) {
+            snprintf(out_msg, out_size, "Player not found: %s", target);
+        }
+        return false;
+    }
+
+    if (cmd->type == CMD_LISTPLAYERS) {
+        if (out_msg && out_size > 0) {
+            size_t used = 0;
+            used += snprintf(out_msg + used, out_size > used ? out_size - used : 0, "Players (%d):", srv->player_count);
+            for (int i = 0; i < srv->player_count && used < out_size; i++) {
+                Player *player = srv->players[i];
+                if (!player) {
+                    continue;
+                }
+                used += snprintf(out_msg + used, out_size > used ? out_size - used : 0, " %s(%08x)", player->nickname, player->uid);
+            }
+        }
+        if (player_out) {
+            *player_out = NULL;
+        }
+        if (world_out) {
+            *world_out = srv->world;
+        }
+        return true;
+    }
+
+    Player *target = game_server_get_command_target(srv, cmd, player_uid);
+    if (!target) {
+        if (out_msg && out_size > 0) {
+            snprintf(out_msg, out_size, "Player not found: %s", cmd->player_target[0] != '\0' ? cmd->player_target : "<default>");
+        }
+        return false;
+    }
+
+    game_server_apply_command(srv, target, cmd, raw_input, should_quit, flight_enabled, show_chunk_borders, out_msg, out_size);
     if (world_out) {
         *world_out = srv->world;
     }
     if (player_out) {
-        *player_out = player;
+        *player_out = target;
     }
     return true;
 }

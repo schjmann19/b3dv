@@ -1,14 +1,20 @@
-#include "../include/menu.h"
+#include "../../include/menu.h"
+#include <arpa/inet.h>
 #include <ctype.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 // Helper function to check if a path is a directory (cross-platform)
 static int is_directory(const char *path) {
@@ -627,6 +633,19 @@ MenuSystem *menu_system_create(void) {
     menu->create_world_error = false;
     menu->create_world_compress = true;
     strcpy(menu->create_world_error_msg, "");
+    strcpy(menu->server_address, "");
+    menu->server_address_len = 0;
+    strcpy(menu->server_port, "42069");
+    menu->server_port_len = (int)strlen(menu->server_port);
+    menu->server_socket = -1;
+    menu->multiplayer_client = false;
+    menu->multiplayer_connecting = false;
+    menu->multiplayer_connected = false;
+    menu->multiplayer_player_uid = 1;
+    strcpy(menu->server_world_name, "");
+    menu->multiplayer_active_field = 0;
+    menu->multiplayer_error = false;
+    strcpy(menu->multiplayer_error_msg, "");
 
     // Initialize settings with defaults
     menu->render_distance = 50.0f;
@@ -675,6 +694,10 @@ void menu_system_free(MenuSystem *menu) {
     if (!menu) {
         return;
     }
+    if (menu->server_socket >= 0) {
+        close(menu->server_socket);
+        menu->server_socket = -1;
+    }
     if (menu->available_worlds) {
         free(menu->available_worlds);
     }
@@ -686,6 +709,10 @@ void menu_system_free(MenuSystem *menu) {
 
 void menu_scan_worlds(MenuSystem *menu) {
     // Free previous list
+    if (menu->server_socket >= 0) {
+        close(menu->server_socket);
+        menu->server_socket = -1;
+    }
     if (menu->available_worlds) {
         free(menu->available_worlds);
         menu->available_worlds = NULL;
@@ -803,6 +830,14 @@ void menu_draw_main(MenuSystem *menu, Font font) {
     DrawTextExCustom(font, version,
                      (Vector2){(screen_width - version_size.x) / 2, 150},
                      24, 1, GRAY);
+    if (menu->multiplayer_connected) {
+        char status_text[512];
+        snprintf(status_text, sizeof(status_text), "Connected to %s:%s", menu->server_address, menu->server_port);
+        Vector2 status_size = MeasureTextEx(font, status_text, 20, 1);
+        DrawTextExCustom(font, status_text,
+                         (Vector2){(screen_width - status_size.x) / 2, 180},
+                         20, 1, GREEN);
+    }
 
     // Draw splash text (semi-diagonal, like Minecraft)
     if (strlen(menu->current_splash_text) > 0) {
@@ -834,30 +869,38 @@ void menu_draw_main(MenuSystem *menu, Font font) {
         button_width,
         button_height};
 
+    // Multiplayer button
+    Rectangle multiplayer_button = {
+        center_x - button_width / 2,
+        center_y + button_height + button_spacing,
+        button_width,
+        button_height};
+
     // Credits & Info button
     Rectangle credits_button = {
         center_x - button_width / 2,
-        center_y + button_height + button_spacing,
+        center_y + 2 * (button_height + button_spacing),
         button_width,
         button_height};
 
     // Settings button
     Rectangle settings_button = {
         center_x - button_width / 2,
-        center_y + 2 * (button_height + button_spacing),
+        center_y + 3 * (button_height + button_spacing),
         button_width,
         button_height};
 
     // Quit button
     Rectangle quit_button = {
         center_x - button_width / 2,
-        center_y + 3 * (button_height + button_spacing),
+        center_y + 4 * (button_height + button_spacing),
         button_width,
         button_height};
 
     // Get mouse position
     Vector2 mouse_pos = GetMousePosition();
     bool world_hover = CheckCollisionPointRec(mouse_pos, world_button);
+    bool multiplayer_hover = CheckCollisionPointRec(mouse_pos, multiplayer_button);
     bool credits_hover = CheckCollisionPointRec(mouse_pos, credits_button);
     bool settings_hover = CheckCollisionPointRec(mouse_pos, settings_button);
     bool quit_hover = CheckCollisionPointRec(mouse_pos, quit_button);
@@ -868,14 +911,22 @@ void menu_draw_main(MenuSystem *menu, Font font) {
     Vector2 world_text_size = MeasureTextEx(font, menu->text_select_world, 32, 1);
     DrawTextExCustom(font, menu->text_select_world,
                      (Vector2){center_x - world_text_size.x / 2, center_y + 14},
-                     32, 1, BLACK);
+                     32, 1, WHITE);
+
+    // Draw Multiplayer button
+    DrawRectangleRec(multiplayer_button, multiplayer_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(multiplayer_button, 2, WHITE);
+    Vector2 multiplayer_text_size = MeasureTextEx(font, "Multiplayer", 32, 1);
+    DrawTextExCustom(font, "Multiplayer",
+                     (Vector2){center_x - multiplayer_text_size.x / 2, center_y + button_height + button_spacing + 14},
+                     32, 1, WHITE);
 
     // Draw Credits & Info button
     DrawRectangleRec(credits_button, credits_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
     DrawRectangleLinesEx(credits_button, 2, WHITE);
     Vector2 credits_text_size = MeasureTextEx(font, menu->text_credits_info, 32, 1);
     DrawTextExCustom(font, menu->text_credits_info,
-                     (Vector2){center_x - credits_text_size.x / 2, center_y + button_height + button_spacing + 14},
+                     (Vector2){center_x - credits_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 14},
                      32, 1, BLACK);
 
     // Draw Settings button
@@ -883,7 +934,7 @@ void menu_draw_main(MenuSystem *menu, Font font) {
     DrawRectangleLinesEx(settings_button, 2, WHITE);
     Vector2 settings_text_size = MeasureTextEx(font, menu->game_text.settings, 32, 1);
     DrawTextExCustom(font, menu->game_text.settings,
-                     (Vector2){center_x - settings_text_size.x / 2, center_y + 2 * (button_height + button_spacing) + 14},
+                     (Vector2){center_x - settings_text_size.x / 2, center_y + 3 * (button_height + button_spacing) + 14},
                      32, 1, BLACK);
 
     // Draw Quit button
@@ -891,7 +942,7 @@ void menu_draw_main(MenuSystem *menu, Font font) {
     DrawRectangleLinesEx(quit_button, 2, WHITE);
     Vector2 quit_text_size = MeasureTextEx(font, menu->text_quit, 32, 1);
     DrawTextExCustom(font, menu->text_quit,
-                     (Vector2){center_x - quit_text_size.x / 2, center_y + 3 * (button_height + button_spacing) + 14},
+                     (Vector2){center_x - quit_text_size.x / 2, center_y + 4 * (button_height + button_spacing) + 14},
                      32, 1, BLACK);
 
     // Handle button clicks
@@ -899,6 +950,14 @@ void menu_draw_main(MenuSystem *menu, Font font) {
         if (world_hover) {
             menu_scan_worlds(menu); // Refresh world list
             menu->current_state = MENU_STATE_WORLD_SELECT;
+        } else if (multiplayer_hover) {
+            menu->current_state = MENU_STATE_MULTIPLAYER;
+            strcpy(menu->server_address, "localhost");
+            menu->server_address_len = (int)strlen(menu->server_address);
+            strcpy(menu->server_port, "42069");
+            menu->server_port_len = (int)strlen(menu->server_port);
+            menu->multiplayer_active_field = 0;
+            menu->multiplayer_error = false;
         } else if (credits_hover) {
             menu->current_state = MENU_STATE_CREDITS;
         } else if (settings_hover) {
@@ -939,6 +998,325 @@ void menu_draw_main(MenuSystem *menu, Font font) {
         menu->current_language_index = (menu->current_language_index + 1) % menu->available_languages_count;
         menu_load_language(menu, menu->available_languages[menu->current_language_index]);
         menu_save_settings(menu);
+    }
+}
+
+static bool set_socket_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+        return false;
+    }
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        return false;
+    }
+    return true;
+}
+
+static int menu_try_connect_server(const char *host, const char *port, char *error_msg, size_t error_msg_size) {
+    struct addrinfo hints = {0};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    struct addrinfo *result = NULL;
+    int gai_err = getaddrinfo(host, port, &hints, &result);
+    if (gai_err != 0) {
+        snprintf(error_msg, error_msg_size, "Resolve failed: %s", gai_strerror(gai_err));
+        return -1;
+    }
+
+    int sock = -1;
+    int last_error = 0;
+    for (struct addrinfo *ai = result; ai != NULL; ai = ai->ai_next) {
+        int candidate = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (candidate < 0) {
+            last_error = errno;
+            continue;
+        }
+
+        if (!set_socket_nonblocking(candidate)) {
+            last_error = errno;
+            close(candidate);
+            continue;
+        }
+
+        int connect_rc = connect(candidate, ai->ai_addr, ai->ai_addrlen);
+        if (connect_rc < 0 && errno != EINPROGRESS && errno != EWOULDBLOCK) {
+            last_error = errno;
+            close(candidate);
+            continue;
+        }
+
+        fd_set write_fds;
+        FD_ZERO(&write_fds);
+        FD_SET(candidate, &write_fds);
+
+        struct timeval timeout;
+        timeout.tv_sec = 2;
+        timeout.tv_usec = 0;
+
+        int select_rc = select(candidate + 1, NULL, &write_fds, NULL, &timeout);
+        if (select_rc <= 0) {
+            if (select_rc < 0) {
+                last_error = errno;
+            }
+            close(candidate);
+            continue;
+        }
+
+        int socket_error = 0;
+        socklen_t len = sizeof(socket_error);
+        if (getsockopt(candidate, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0) {
+            last_error = errno;
+            close(candidate);
+            continue;
+        }
+        if (socket_error != 0) {
+            last_error = socket_error;
+            close(candidate);
+            continue;
+        }
+
+        sock = candidate;
+        break;
+    }
+
+    freeaddrinfo(result);
+
+    if (sock < 0) {
+        if (last_error != 0) {
+            snprintf(error_msg, error_msg_size, "%s", strerror(last_error));
+        } else {
+            snprintf(error_msg, error_msg_size, "Connection failed");
+        }
+        return -1;
+    }
+
+    return sock;
+}
+
+static bool menu_receive_server_welcome(int sock, char *world_name, size_t world_name_size, char *error_msg, size_t error_msg_size) {
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(sock, &read_fds);
+
+    struct timeval timeout;
+    timeout.tv_sec = 2;
+    timeout.tv_usec = 0;
+
+    int select_rc = select(sock + 1, &read_fds, NULL, NULL, &timeout);
+    if (select_rc <= 0) {
+        snprintf(error_msg, error_msg_size, "Handshake timed out");
+        return false;
+    }
+
+    char buffer[512] = {0};
+    ssize_t bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
+    if (bytes <= 0) {
+        snprintf(error_msg, error_msg_size, "Handshake failed");
+        return false;
+    }
+
+    buffer[bytes] = '\0';
+    char *line_end = strchr(buffer, '\n');
+    if (line_end) {
+        *line_end = '\0';
+    }
+
+    if (strncmp(buffer, "WELCOME ", 8) != 0) {
+        snprintf(error_msg, error_msg_size, "Unexpected server response");
+        return false;
+    }
+
+    const char *world = buffer + 8;
+    if (world[0] == '\0') {
+        snprintf(error_msg, error_msg_size, "Server did not provide a world name");
+        return false;
+    }
+
+    strncpy(world_name, world, world_name_size - 1);
+    world_name[world_name_size - 1] = '\0';
+    return true;
+}
+
+void menu_draw_multiplayer(MenuSystem *menu, Font font) {
+    int screen_width = GetScreenWidth();
+
+    ClearBackground((Color){20, 20, 20, 255});
+
+    const char *title = "Join Multiplayer";
+    Vector2 title_size = MeasureTextEx(font, title, 64, 2);
+    DrawTextExCustom(font, title,
+                     (Vector2){(screen_width - title_size.x) / 2, 40},
+                     64, 2, WHITE);
+
+    const char *subtitle = "Enter server address and port, then press Connect.";
+    Vector2 subtitle_size = MeasureTextEx(font, subtitle, 24, 1);
+    DrawTextExCustom(font, subtitle,
+                     (Vector2){(screen_width - subtitle_size.x) / 2, 120},
+                     24, 1, GRAY);
+
+    int box_width = 600;
+    int box_height = 50;
+    int start_x = (screen_width - box_width) / 2;
+    int address_y = 160;
+    int port_y = address_y + box_height + 100;
+
+    Rectangle address_box = {(float)start_x, (float)address_y, (float)box_width, (float)box_height};
+    Rectangle port_box = {(float)start_x, (float)port_y, 220, (float)box_height};
+
+    Vector2 mouse_pos = GetMousePosition();
+    bool address_hover = CheckCollisionPointRec(mouse_pos, address_box);
+    bool port_hover = CheckCollisionPointRec(mouse_pos, port_box);
+
+    // Draw address label and box
+    DrawTextExCustom(font, "Domain or IP:", (Vector2){(float)start_x, address_y - 35}, 24, 1, WHITE);
+    DrawRectangleRec(address_box, menu->multiplayer_active_field == 0 ? (Color){80, 80, 120, 255} : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(address_box, 2, address_hover ? YELLOW : WHITE);
+    DrawTextExCustom(font,
+                     menu->server_address_len > 0 ? menu->server_address : "Enter domain or IP",
+                     (Vector2){address_box.x + 10, address_box.y + 12},
+                     24, 1, menu->server_address_len > 0 ? WHITE : GRAY);
+
+    // Draw port label and box
+    DrawTextExCustom(font, "Port:", (Vector2){(float)start_x, port_y - 35}, 24, 1, WHITE);
+    DrawRectangleRec(port_box, menu->multiplayer_active_field == 1 ? (Color){80, 80, 120, 255} : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(port_box, 2, port_hover ? YELLOW : WHITE);
+    DrawTextExCustom(font,
+                     menu->server_port_len > 0 ? menu->server_port : "42069",
+                     (Vector2){port_box.x + 10, port_box.y + 12},
+                     24, 1, menu->server_port_len > 0 ? WHITE : GRAY);
+
+    if (menu->multiplayer_active_field == 0) {
+        DrawRectangleLinesEx(address_box, 3, YELLOW);
+    } else if (menu->multiplayer_active_field == 1) {
+        DrawRectangleLinesEx(port_box, 3, YELLOW);
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        if (address_hover) {
+            menu->multiplayer_active_field = 0;
+        } else if (port_hover) {
+            menu->multiplayer_active_field = 1;
+        }
+    }
+
+    if (IsKeyPressed(KEY_TAB)) {
+        menu->multiplayer_active_field = 1 - menu->multiplayer_active_field;
+    }
+
+    int key = GetCharPressed();
+    while (key > 0) {
+        if (key >= 32 && key <= 126) {
+            if (menu->multiplayer_active_field == 0) {
+                if (menu->server_address_len < (int)sizeof(menu->server_address) - 1 && key != ' ') {
+                    menu->server_address[menu->server_address_len++] = (char)key;
+                    menu->server_address[menu->server_address_len] = '\0';
+                }
+            } else {
+                if (menu->server_port_len < (int)sizeof(menu->server_port) - 1 && key >= '0' && key <= '9') {
+                    menu->server_port[menu->server_port_len++] = (char)key;
+                    menu->server_port[menu->server_port_len] = '\0';
+                }
+            }
+        }
+        key = GetCharPressed();
+    }
+
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+        if (menu->multiplayer_active_field == 0 && menu->server_address_len > 0) {
+            menu->server_address_len--;
+            menu->server_address[menu->server_address_len] = '\0';
+        } else if (menu->multiplayer_active_field == 1 && menu->server_port_len > 0) {
+            menu->server_port_len--;
+            menu->server_port[menu->server_port_len] = '\0';
+        }
+    }
+
+    // Buttons
+    int button_width = 180;
+    int button_height = 50;
+    int button_y = port_y + box_height + 80;
+    Rectangle connect_button = {(float)start_x, (float)button_y, (float)button_width, (float)button_height};
+    Rectangle back_button = {(float)(start_x + box_width - button_width), (float)button_y, (float)button_width, (float)button_height};
+    bool connect_hover = CheckCollisionPointRec(mouse_pos, connect_button);
+    bool back_hover = CheckCollisionPointRec(mouse_pos, back_button);
+
+    DrawRectangleRec(connect_button, connect_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(connect_button, 2, WHITE);
+    Vector2 connect_text_size = MeasureTextEx(font, "Connect", 28, 1);
+    DrawTextExCustom(font, "Connect",
+                     (Vector2){connect_button.x + (button_width - connect_text_size.x) / 2, connect_button.y + 10},
+                     28, 1, BLACK);
+
+    DrawRectangleRec(back_button, back_hover ? LIGHTGRAY : (Color){60, 60, 60, 255});
+    DrawRectangleLinesEx(back_button, 2, WHITE);
+    Vector2 back_text_size = MeasureTextEx(font, menu->text_back, 28, 1);
+    DrawTextExCustom(font, menu->text_back,
+                     (Vector2){back_button.x + (button_width - back_text_size.x) / 2, back_button.y + 10},
+                     28, 1, BLACK);
+
+    bool connect_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && connect_hover;
+    if (IsKeyPressed(KEY_ENTER)) {
+        connect_pressed = true;
+    }
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && back_hover) {
+        menu->current_state = MENU_STATE_MAIN;
+        menu->multiplayer_error = false;
+    }
+
+    if (connect_pressed) {
+        menu->multiplayer_error = false;
+        if (menu->server_address_len == 0) {
+            menu->multiplayer_error = true;
+            snprintf(menu->multiplayer_error_msg, sizeof(menu->multiplayer_error_msg), "Server address cannot be empty");
+        } else if (menu->server_port_len == 0) {
+            menu->multiplayer_error = true;
+            snprintf(menu->multiplayer_error_msg, sizeof(menu->multiplayer_error_msg), "Port cannot be empty");
+        } else {
+            int port_value = atoi(menu->server_port);
+            if (port_value <= 0 || port_value > 65535) {
+                menu->multiplayer_error = true;
+                snprintf(menu->multiplayer_error_msg, sizeof(menu->multiplayer_error_msg), "Port must be 1-65535");
+            } else {
+                if (menu->server_socket >= 0) {
+                    close(menu->server_socket);
+                    menu->server_socket = -1;
+                    menu->multiplayer_connected = false;
+                    menu->multiplayer_client = false;
+                }
+
+                int sock = menu_try_connect_server(menu->server_address,
+                                                  menu->server_port,
+                                                  menu->multiplayer_error_msg,
+                                                  sizeof(menu->multiplayer_error_msg));
+                if (sock < 0) {
+                    menu->multiplayer_error = true;
+                } else {
+                    char world_name[256] = {0};
+                    if (!menu_receive_server_welcome(sock, world_name, sizeof(world_name), menu->multiplayer_error_msg, sizeof(menu->multiplayer_error_msg))) {
+                        close(sock);
+                        menu->multiplayer_error = true;
+                    } else {
+                        menu->server_socket = sock;
+                        menu->multiplayer_connected = true;
+                        menu->multiplayer_client = true;
+                        strncpy(menu->server_world_name, world_name, sizeof(menu->server_world_name) - 1);
+                        menu->server_world_name[sizeof(menu->server_world_name) - 1] = '\0';
+                        strncpy(menu->selected_world_name, world_name, sizeof(menu->selected_world_name) - 1);
+                        menu->selected_world_name[sizeof(menu->selected_world_name) - 1] = '\0';
+                        menu->should_start_game = true;
+                        menu->current_state = MENU_STATE_GAME;
+                    }
+                }
+            }
+        }
+    }
+
+    if (menu->multiplayer_error) {
+        Vector2 error_size = MeasureTextEx(font, menu->multiplayer_error_msg, 24, 1);
+        DrawTextExCustom(font, menu->multiplayer_error_msg,
+                         (Vector2){(screen_width - error_size.x) / 2, button_y + button_height + 30},
+                         24, 1, RED);
     }
 }
 
@@ -1011,7 +1389,6 @@ void menu_draw_world_select(MenuSystem *menu, Font font) {
     int button_width = 150;
     int button_height = 50;
     int button_y = list_start_y + list_height + 30;
-    int button_spacing = 20;
 
     // Create World button (left)
     Rectangle create_button = {
@@ -1100,6 +1477,11 @@ void menu_update_input(MenuSystem *menu) {
     // ESC key returns to main menu from settings
     if (menu->current_state == MENU_STATE_SETTINGS && IsKeyPressed(KEY_ESCAPE)) {
         menu->current_state = MENU_STATE_MAIN;
+    }
+    // ESC key cancels multiplayer join
+    if (menu->current_state == MENU_STATE_MULTIPLAYER && IsKeyPressed(KEY_ESCAPE)) {
+        menu->current_state = MENU_STATE_MAIN;
+        menu->multiplayer_error = false;
     }
 }
 

@@ -17,7 +17,7 @@
 #define PATH_SEPARATOR "/"
 #endif
 
-#include "../include/utils.h"
+#include "../../include/utils.h"
 
 // Get current process memory usage in MB
 int get_process_memory_mb(void) {
