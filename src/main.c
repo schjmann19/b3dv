@@ -39,6 +39,22 @@ static int compare_glass_entries(const void *a, const void *b) {
     return 0;
 }
 
+static void draw_player_model(Vector3 position) {
+    const Color model_color = (Color){180, 180, 180, 255};
+    const float model_radius = 0.30f;
+    const float cylinder_height = PLAYER_HEIGHT - 2.0f * model_radius;
+    Vector3 model_center = {
+        position.x,
+        position.y,
+        position.z};
+
+    DrawCylinder(model_center, model_radius, model_radius, cylinder_height, 16, model_color);
+    Vector3 top_sphere = {model_center.x, model_center.y + cylinder_height * 0.5f, model_center.z};
+    Vector3 bottom_sphere = {model_center.x, model_center.y - cylinder_height * 0.5f, model_center.z};
+    DrawSphere(top_sphere, model_radius, model_color);
+    DrawSphere(bottom_sphere, model_radius, model_color);
+}
+
 #if defined(PLATFORM_DESKTOP)
 #define SDF_GLSL_VER 330
 #else
@@ -155,6 +171,7 @@ int b3dv_main(int argc, char **argv) {
 
     // Flight system
     bool flight_enabled = false;
+    bool third_person_camera = false;
 
     // Pause state
     bool paused = false;
@@ -466,12 +483,11 @@ int b3dv_main(int argc, char **argv) {
                 hud_mode = 2; // player
             }
             if (IsKeyPressed(KEY_F5)) {
-                hud_mode = 3; // system info
-                // Fetch system info only when entering this mode
-                if (prev_hud_mode != 3) {
-                    get_cpu_model(cached_cpu, sizeof(cached_cpu));
-                    get_gpu_model(cached_gpu, sizeof(cached_gpu));
-                    get_kernel_info(cached_kernel, sizeof(cached_kernel));
+                third_person_camera = !third_person_camera;
+                if (third_person_camera) {
+                    add_chat_message("Third-person camera enabled");
+                } else {
+                    add_chat_message("First-person camera enabled");
                 }
             }
             if (IsKeyPressed(KEY_F7)) {
@@ -817,15 +833,31 @@ int b3dv_main(int argc, char **argv) {
 
         // update camera to follow player (position it at eye level, slightly above center)
         float eye_height = 0.7f;
-        camera.position = (Vector3){
+        Vector3 player_eye = (Vector3){
             player->position.x,
             player->position.y + eye_height,
             player->position.z};
-        // Use the actual look direction for camera target (includes pitch)
-        camera.target = (Vector3){
-            player->position.x + camera_forward.x,
-            player->position.y + eye_height + camera_forward.y,
-            player->position.z + camera_forward.z};
+
+        if (third_person_camera) {
+            const float tp_distance = 4.0f;
+            const float tp_height = 1.20f;
+            Vector3 backward = (Vector3){
+                -sinf(camera_yaw),
+                0.0f,
+                -cosf(camera_yaw)};
+            camera.position = (Vector3){
+                player_eye.x + backward.x * tp_distance,
+                player_eye.y + tp_height,
+                player_eye.z + backward.z * tp_distance};
+            camera.target = vec3_add(player_eye, vec3_scale(camera_forward, 2.0f));
+        } else {
+            camera.position = player_eye;
+            // Use the actual look direction for camera target (includes pitch)
+            camera.target = (Vector3){
+                player->position.x + camera_forward.x,
+                player->position.y + eye_height + camera_forward.y,
+                player->position.z + camera_forward.z};
+        }
 
         // (mouse look handled earlier in the loop)
 
@@ -1062,6 +1094,14 @@ int b3dv_main(int argc, char **argv) {
             DrawCubeWires(block_pos, 1.0f, 1.0f, 1.0f, YELLOW);
         }
         DrawGrid(30, 1.0f);
+
+        if (third_person_camera && player) {
+            Vector3 player_model_pos = (Vector3){
+                player->position.x - camera_offset.x,
+                player->position.y - camera_offset.y,
+                player->position.z - camera_offset.z};
+            draw_player_model(player_model_pos);
+        }
 
         if (show_chunk_borders) {
             Color border_color = (Color){255, 255, 0, 150};
