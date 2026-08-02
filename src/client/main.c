@@ -71,6 +71,10 @@ static int recv_line_nonblocking(int sock, char *buffer, size_t buffer_size, siz
         return -1;
     }
 
+    if (*buffer_used >= buffer_size) {
+        return -1;
+    }
+
     if (*buffer_used < 1 || buffer[*buffer_used - 1] != '\n') {
         ssize_t bytes = recv(sock, buffer + *buffer_used, buffer_size - *buffer_used, 0);
         if (bytes > 0) {

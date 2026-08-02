@@ -23,6 +23,10 @@ static int set_nonblocking(int fd) {
 }
 
 static bool recv_line_nonblocking(int sock, char *buffer, size_t *used, char *out_line, size_t out_line_size) {
+    if (*used >= 1024) {
+        return false;
+    }
+
     if (*used < 1 || buffer[*used - 1] != '\n') {
         ssize_t bytes = recv(sock, buffer + *used, 1024 - *used, 0);
         if (bytes > 0) {
@@ -167,6 +171,8 @@ int b3dv_main(int argc, char **argv) {
     GameServer srv;
     game_server_init(&srv, world, player);
     Player *server_player = player;
+    Player *client_player = NULL;
+    uint32_t next_client_uid = 0x00000002;
 
     int listen_fd = create_listen_socket(port);
     if (listen_fd < 0) {
@@ -189,6 +195,19 @@ int b3dv_main(int argc, char **argv) {
             int accepted = accept_client_connection(listen_fd, client_addr, sizeof(client_addr));
             if (accepted >= 0) {
                 client_fd = accepted;
+                if (client_player) {
+                    game_server_remove_player(&srv, client_player->uid);
+                    player_free(client_player);
+                }
+                client_player = player_create_with_uid(world->last_player_position.x,
+                                                       world->last_player_position.y + 1.0f,
+                                                       world->last_player_position.z,
+                                                       next_client_uid++,
+                                                       "Client");
+                if (client_player && !game_server_add_player(&srv, client_player)) {
+                    player_free(client_player);
+                    client_player = NULL;
+                }
                 printf("Client connected from %s\n", client_addr);
                 char welcome[256];
                 int welcome_len = snprintf(welcome, sizeof(welcome), "WELCOME %s\n", world_name);
@@ -264,7 +283,7 @@ int b3dv_main(int argc, char **argv) {
                         input_cmd.sprint = sprint != 0;
                         input_cmd.fly_toggle = fly_toggle != 0;
                         input_cmd.selected_slot = selected_slot;
-                        game_server_submit_input(&srv, player->uid, &input_cmd);
+                        game_server_submit_input(&srv, client_player ? client_player->uid : player->uid, &input_cmd);
                     }
                 } else if (strncmp(line, "BLOCKBREAK ", 11) == 0) {
                     int x = 0;
@@ -305,11 +324,21 @@ int b3dv_main(int argc, char **argv) {
             ssize_t bytes = recv(client_fd, client_buffer + client_buffer_used, sizeof(client_buffer) - client_buffer_used, 0);
             if (bytes == 0) {
                 printf("Client disconnected\n");
+                if (client_player) {
+                    game_server_remove_player(&srv, client_player->uid);
+                    player_free(client_player);
+                    client_player = NULL;
+                }
                 close(client_fd);
                 client_fd = -1;
                 client_buffer_used = 0;
             } else if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
                 perror("recv");
+                if (client_player) {
+                    game_server_remove_player(&srv, client_player->uid);
+                    player_free(client_player);
+                    client_player = NULL;
+                }
                 close(client_fd);
                 client_fd = -1;
                 client_buffer_used = 0;

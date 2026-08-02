@@ -10,7 +10,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
+#include <pthread.h>
+#include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
@@ -641,7 +644,10 @@ MenuSystem *menu_system_create(void) {
     menu->multiplayer_client = false;
     menu->multiplayer_connecting = false;
     menu->multiplayer_connected = false;
-    menu->multiplayer_player_uid = 1;
+    menu->multiplayer_player_uid = 0x00000002;
+    menu->multiplayer_connect_thread_active = false;
+    menu->multiplayer_handshake_buffer[0] = '\0';
+    menu->multiplayer_handshake_used = 0;
     strcpy(menu->server_world_name, "");
     menu->multiplayer_active_field = 0;
     menu->multiplayer_error = false;
@@ -657,10 +663,11 @@ MenuSystem *menu_system_create(void) {
     menu->compass_enabled = true;
     // menu->clouds_render_distance = 128.0f; //
 
+    // Initialize multiplayer connect mutex
+    pthread_mutex_init(&menu->multiplayer_connect_mutex, NULL);
+
     // Load random background image from mainmenubackground folder
     menu_load_random_background(menu);
-
-    // Load splash texts and select a random one
     menu_load_splash_text(menu);
 
     // Scan for available languages
@@ -698,6 +705,7 @@ void menu_system_free(MenuSystem *menu) {
         close(menu->server_socket);
         menu->server_socket = -1;
     }
+    pthread_mutex_destroy(&menu->multiplayer_connect_mutex);
     if (menu->available_worlds) {
         free(menu->available_worlds);
     }
@@ -1012,6 +1020,43 @@ static bool set_socket_nonblocking(int fd) {
     return true;
 }
 
+static int menu_try_connect_server(const char *host, const char *port, char *error_msg, size_t error_msg_size);
+
+typedef struct {
+    MenuSystem *menu;
+    char host[256];
+    char port[16];
+} MenuConnectRequest;
+
+static void *menu_connect_thread(void *arg) {
+    MenuConnectRequest *request = (MenuConnectRequest *)arg;
+    MenuSystem *menu = request->menu;
+    char error_msg[256] = {0};
+    int sock = menu_try_connect_server(request->host, request->port, error_msg, sizeof(error_msg));
+
+    pthread_mutex_lock(&menu->multiplayer_connect_mutex);
+    if (!menu->multiplayer_connecting) {
+        if (sock >= 0) {
+            close(sock);
+        }
+    } else if (sock < 0) {
+        menu->multiplayer_error = true;
+        strncpy(menu->multiplayer_error_msg, error_msg, sizeof(menu->multiplayer_error_msg) - 1);
+        menu->multiplayer_error_msg[sizeof(menu->multiplayer_error_msg) - 1] = '\0';
+        menu->server_socket = -1;
+        menu->multiplayer_connecting = false;
+    } else {
+        menu->server_socket = sock;
+        menu->multiplayer_error_msg[0] = '\0';
+        menu->multiplayer_handshake_buffer[0] = '\0';
+        menu->multiplayer_handshake_used = 0;
+    }
+    menu->multiplayer_connect_thread_active = false;
+    pthread_mutex_unlock(&menu->multiplayer_connect_mutex);
+    free(request);
+    return NULL;
+}
+
 static int menu_try_connect_server(const char *host, const char *port, char *error_msg, size_t error_msg_size) {
     struct addrinfo hints = {0};
     hints.ai_family = AF_UNSPEC;
@@ -1046,36 +1091,6 @@ static int menu_try_connect_server(const char *host, const char *port, char *err
             continue;
         }
 
-        fd_set write_fds;
-        FD_ZERO(&write_fds);
-        FD_SET(candidate, &write_fds);
-
-        struct timeval timeout;
-        timeout.tv_sec = 2;
-        timeout.tv_usec = 0;
-
-        int select_rc = select(candidate + 1, NULL, &write_fds, NULL, &timeout);
-        if (select_rc <= 0) {
-            if (select_rc < 0) {
-                last_error = errno;
-            }
-            close(candidate);
-            continue;
-        }
-
-        int socket_error = 0;
-        socklen_t len = sizeof(socket_error);
-        if (getsockopt(candidate, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0) {
-            last_error = errno;
-            close(candidate);
-            continue;
-        }
-        if (socket_error != 0) {
-            last_error = socket_error;
-            close(candidate);
-            continue;
-        }
-
         sock = candidate;
         break;
     }
@@ -1094,48 +1109,96 @@ static int menu_try_connect_server(const char *host, const char *port, char *err
     return sock;
 }
 
-static bool menu_receive_server_welcome(int sock, char *world_name, size_t world_name_size, char *error_msg, size_t error_msg_size) {
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(sock, &read_fds);
+static int menu_poll_server_connect(int sock, char *error_msg, size_t error_msg_size) {
+    if (sock < 0) {
+        snprintf(error_msg, error_msg_size, "No socket available");
+        return -1;
+    }
+
+    fd_set write_fds;
+    FD_ZERO(&write_fds);
+    FD_SET(sock, &write_fds);
 
     struct timeval timeout;
-    timeout.tv_sec = 2;
+    timeout.tv_sec = 0;
     timeout.tv_usec = 0;
 
-    int select_rc = select(sock + 1, &read_fds, NULL, NULL, &timeout);
-    if (select_rc <= 0) {
-        snprintf(error_msg, error_msg_size, "Handshake timed out");
-        return false;
+    int select_rc = select(sock + 1, NULL, &write_fds, NULL, &timeout);
+    if (select_rc < 0) {
+        snprintf(error_msg, error_msg_size, "%s", strerror(errno));
+        return -1;
+    }
+    if (select_rc == 0) {
+        return 0;
     }
 
-    char buffer[512] = {0};
-    ssize_t bytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
-    if (bytes <= 0) {
+    int socket_error = 0;
+    socklen_t len = sizeof(socket_error);
+    if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &socket_error, &len) < 0) {
+        snprintf(error_msg, error_msg_size, "%s", strerror(errno));
+        return -1;
+    }
+    if (socket_error != 0) {
+        snprintf(error_msg, error_msg_size, "%s", strerror(socket_error));
+        return -1;
+    }
+
+    return 1;
+}
+
+static int menu_receive_server_welcome(int sock, char *world_name, size_t world_name_size, char *buffer, size_t buffer_size, size_t *buffer_used, char *error_msg, size_t error_msg_size) {
+    if (*buffer_used >= buffer_size - 1) {
+        snprintf(error_msg, error_msg_size, "Handshake buffer full");
+        return -1;
+    }
+
+    ssize_t bytes = recv(sock, buffer + *buffer_used, buffer_size - *buffer_used - 1, MSG_DONTWAIT);
+    if (bytes > 0) {
+        *buffer_used += (size_t)bytes;
+    } else if (bytes == 0) {
         snprintf(error_msg, error_msg_size, "Handshake failed");
-        return false;
+        return -1;
+    } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        snprintf(error_msg, error_msg_size, "%s", strerror(errno));
+        return -1;
+    } else {
+        return 0;
     }
 
-    buffer[bytes] = '\0';
+    buffer[*buffer_used] = '\0';
     char *line_end = strchr(buffer, '\n');
-    if (line_end) {
-        *line_end = '\0';
+    if (!line_end) {
+        return 0;
     }
 
-    if (strncmp(buffer, "WELCOME ", 8) != 0) {
+    size_t line_len = (size_t)(line_end - buffer);
+    if (line_len >= 512) {
+        line_len = 511;
+    }
+
+    char line[512] = {0};
+    memcpy(line, buffer, line_len);
+    line[line_len] = '\0';
+    if (line_len > 0 && line[line_len - 1] == '\r') {
+        line[line_len - 1] = '\0';
+    }
+
+    if (strncmp(line, "WELCOME ", 8) != 0) {
         snprintf(error_msg, error_msg_size, "Unexpected server response");
-        return false;
+        return -1;
     }
 
-    const char *world = buffer + 8;
+    const char *world = line + 8;
     if (world[0] == '\0') {
         snprintf(error_msg, error_msg_size, "Server did not provide a world name");
-        return false;
+        return -1;
     }
 
     strncpy(world_name, world, world_name_size - 1);
     world_name[world_name_size - 1] = '\0';
-    return true;
+    *buffer_used = 0;
+    buffer[0] = '\0';
+    return 1;
 }
 
 void menu_draw_multiplayer(MenuSystem *menu, Font font) {
@@ -1285,29 +1348,67 @@ void menu_draw_multiplayer(MenuSystem *menu, Font font) {
                     menu->multiplayer_client = false;
                 }
 
-                int sock = menu_try_connect_server(menu->server_address,
-                                                  menu->server_port,
-                                                  menu->multiplayer_error_msg,
-                                                  sizeof(menu->multiplayer_error_msg));
-                if (sock < 0) {
-                    menu->multiplayer_error = true;
-                } else {
-                    char world_name[256] = {0};
-                    if (!menu_receive_server_welcome(sock, world_name, sizeof(world_name), menu->multiplayer_error_msg, sizeof(menu->multiplayer_error_msg))) {
-                        close(sock);
-                        menu->multiplayer_error = true;
+                if (!menu->multiplayer_connect_thread_active) {
+                    MenuConnectRequest *request = malloc(sizeof(MenuConnectRequest));
+                    if (request) {
+                        request->menu = menu;
+                        strncpy(request->host, menu->server_address, sizeof(request->host) - 1);
+                        request->host[sizeof(request->host) - 1] = '\0';
+                        strncpy(request->port, menu->server_port, sizeof(request->port) - 1);
+                        request->port[sizeof(request->port) - 1] = '\0';
+                        menu->multiplayer_connecting = true;
+                        menu->multiplayer_error = false;
+                        menu->server_socket = -1;
+                        menu->multiplayer_connect_thread_active = true;
+                        int create_result = pthread_create(&menu->multiplayer_connect_thread, NULL, menu_connect_thread, request);
+                        if (create_result != 0) {
+                            menu->multiplayer_connect_thread_active = false;
+                            menu->multiplayer_connecting = false;
+                            menu->multiplayer_error = true;
+                            snprintf(menu->multiplayer_error_msg, sizeof(menu->multiplayer_error_msg), "Thread create failed: %s", strerror(create_result));
+                            free(request);
+                        }
                     } else {
-                        menu->server_socket = sock;
-                        menu->multiplayer_connected = true;
-                        menu->multiplayer_client = true;
-                        strncpy(menu->server_world_name, world_name, sizeof(menu->server_world_name) - 1);
-                        menu->server_world_name[sizeof(menu->server_world_name) - 1] = '\0';
-                        strncpy(menu->selected_world_name, world_name, sizeof(menu->selected_world_name) - 1);
-                        menu->selected_world_name[sizeof(menu->selected_world_name) - 1] = '\0';
-                        menu->should_start_game = true;
-                        menu->current_state = MENU_STATE_GAME;
+                        menu->multiplayer_error = true;
+                        snprintf(menu->multiplayer_error_msg, sizeof(menu->multiplayer_error_msg), "Internal allocation failed");
                     }
                 }
+            }
+        }
+    }
+
+    if (menu->multiplayer_connecting && menu->server_socket >= 0) {
+        int connect_state = menu_poll_server_connect(menu->server_socket, menu->multiplayer_error_msg, sizeof(menu->multiplayer_error_msg));
+        if (connect_state < 0) {
+            close(menu->server_socket);
+            menu->server_socket = -1;
+            menu->multiplayer_connecting = false;
+            menu->multiplayer_error = true;
+        } else if (connect_state > 0) {
+            char world_name[256] = {0};
+            int welcome_state = menu_receive_server_welcome(menu->server_socket,
+                                                            world_name,
+                                                            sizeof(world_name),
+                                                            menu->multiplayer_handshake_buffer,
+                                                            sizeof(menu->multiplayer_handshake_buffer),
+                                                            &menu->multiplayer_handshake_used,
+                                                            menu->multiplayer_error_msg,
+                                                            sizeof(menu->multiplayer_error_msg));
+            if (welcome_state < 0) {
+                close(menu->server_socket);
+                menu->server_socket = -1;
+                menu->multiplayer_connecting = false;
+                menu->multiplayer_error = true;
+            } else if (welcome_state > 0) {
+                menu->multiplayer_connecting = false;
+                menu->multiplayer_connected = true;
+                menu->multiplayer_client = true;
+                strncpy(menu->server_world_name, world_name, sizeof(menu->server_world_name) - 1);
+                menu->server_world_name[sizeof(menu->server_world_name) - 1] = '\0';
+                strncpy(menu->selected_world_name, world_name, sizeof(menu->selected_world_name) - 1);
+                menu->selected_world_name[sizeof(menu->selected_world_name) - 1] = '\0';
+                menu->should_start_game = true;
+                menu->current_state = MENU_STATE_GAME;
             }
         }
     }

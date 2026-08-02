@@ -109,6 +109,11 @@ typedef struct {
     bool multiplayer_connecting;
     bool multiplayer_connected;
     uint32_t multiplayer_player_uid;
+    bool multiplayer_connect_thread_active;
+    pthread_t multiplayer_connect_thread;
+    pthread_mutex_t multiplayer_connect_mutex;
+    char multiplayer_handshake_buffer[512];
+    size_t multiplayer_handshake_used;
     char server_world_name[256];
     int multiplayer_active_field; // 0 = address, 1 = port
     bool multiplayer_error;

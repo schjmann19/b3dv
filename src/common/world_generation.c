@@ -1119,26 +1119,61 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
 
     pthread_mutex_unlock(&world->cache_mutex);
 
-    // Queue newly generated chunks for lighting/meshing after releasing cache_mutex
+    // Queue newly generated chunks for lighting/meshing after releasing cache_mutex.
+    // IMPORTANT: queueing jobs while cache_mutex is held can deadlock with the worker thread.
+    struct ChunkQueueEntry {
+        int32_t x;
+        int32_t y;
+        int32_t z;
+    };
+    struct ChunkQueueEntry *pending_mesh = NULL;
+    int pending_mesh_count = 0;
+    int pending_mesh_capacity = 0;
+
     pthread_mutex_lock(&world->cache_mutex);
     for (int cx = player_chunk_x - load_dist; cx <= player_chunk_x + load_dist; cx++) {
         for (int cy = player_chunk_y - load_dist; cy <= player_chunk_y + load_dist; cy++) {
             for (int cz = player_chunk_z - load_dist; cz <= player_chunk_z + load_dist; cz++) {
                 Chunk *chunk = world_get_chunk(world, cx, cy, cz);
                 if (chunk && chunk->generated && chunk->loaded && !chunk->meshed) {
-                    // Queue for worker to mesh this chunk
-                    worker_queue_chunk(world, chunk);
+                    if (pending_mesh_count >= pending_mesh_capacity) {
+                        int new_cap = pending_mesh_capacity == 0 ? 64 : pending_mesh_capacity * 2;
+                        struct ChunkQueueEntry *new_ptr = (struct ChunkQueueEntry *)realloc(pending_mesh, sizeof(struct ChunkQueueEntry) * new_cap);
+                        if (!new_ptr) {
+                            pthread_mutex_unlock(&world->cache_mutex);
+                            free(pending_mesh);
+                            return;
+                        }
+                        pending_mesh = new_ptr;
+                        pending_mesh_capacity = new_cap;
+                    }
+                    pending_mesh[pending_mesh_count].x = cx;
+                    pending_mesh[pending_mesh_count].y = cy;
+                    pending_mesh[pending_mesh_count].z = cz;
+                    pending_mesh_count++;
                 }
             }
         }
     }
     pthread_mutex_unlock(&world->cache_mutex);
 
+    for (int i = 0; i < pending_mesh_count; i++) {
+        Chunk *chunk = world_get_chunk(world, pending_mesh[i].x, pending_mesh[i].y, pending_mesh[i].z);
+        if (chunk && chunk->generated && chunk->loaded && !chunk->meshed) {
+            worker_queue_chunk(world, chunk);
+        }
+    }
+    free(pending_mesh);
+
     // Invalidate neighboring chunk meshes after loading new chunks.
     // This ensures adjacent chunks update their faces when chunk load state changes.
     {
         const int neighbor_offsets[6][3] = {
             {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+
+        struct ChunkQueueEntry *pending_neighbors = NULL;
+        int pending_neighbor_count = 0;
+        int pending_neighbor_capacity = 0;
 
         pthread_mutex_lock(&world->cache_mutex);
         for (int cx = player_chunk_x - load_dist; cx <= player_chunk_x + load_dist; cx++) {
@@ -1168,13 +1203,35 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
                         pthread_mutex_unlock(&neighbor->mutex);
 
                         if (was_meshed) {
-                            worker_queue_chunk(world, neighbor);
+                            if (pending_neighbor_count >= pending_neighbor_capacity) {
+                                int new_cap = pending_neighbor_capacity == 0 ? 64 : pending_neighbor_capacity * 2;
+                                struct ChunkQueueEntry *new_ptr = (struct ChunkQueueEntry *)realloc(pending_neighbors, sizeof(struct ChunkQueueEntry) * new_cap);
+                                if (!new_ptr) {
+                                    pthread_mutex_unlock(&world->cache_mutex);
+                                    free(pending_neighbors);
+                                    return;
+                                }
+                                pending_neighbors = new_ptr;
+                                pending_neighbor_capacity = new_cap;
+                            }
+                            pending_neighbors[pending_neighbor_count].x = nx;
+                            pending_neighbors[pending_neighbor_count].y = ny;
+                            pending_neighbors[pending_neighbor_count].z = nz;
+                            pending_neighbor_count++;
                         }
                     }
                 }
             }
         }
         pthread_mutex_unlock(&world->cache_mutex);
+
+        for (int i = 0; i < pending_neighbor_count; i++) {
+            Chunk *neighbor = world_get_chunk(world, pending_neighbors[i].x, pending_neighbors[i].y, pending_neighbors[i].z);
+            if (neighbor && neighbor->loaded && neighbor->generated && !neighbor->meshed) {
+                worker_queue_chunk(world, neighbor);
+            }
+        }
+        free(pending_neighbors);
     }
 
     // Note: We no longer flush the worker queue here to avoid stalling the main thread.
@@ -1187,6 +1244,7 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
     // Unload chunks that are too far away or behind the player
     int unload_dist = load_dist + 1;
     int i = 0;
+    Chunk *chunk_to_save = NULL;
 
     // Throttle unloads to avoid stuttering when crossing chunk boundaries.
     // We only unload a small number of chunks per frame, spreading work across frames.
@@ -1226,18 +1284,18 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
                 i++;
                 continue;
             }
-//also make sure the chunk we're about to swap INTO this slot
-    // isn't being concurrently processed by the worker thread. Copying
-    // its struct (pointers + mutexes) while it's mid-update is what
-    // causes the aliased-pointer double-free.
-    if (i < world->chunk_cache.chunk_count - 1) {
-        Chunk *last_chunk = &world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
-        if (__atomic_load_n(&last_chunk->in_use_count, __ATOMIC_ACQUIRE) > 0) {
-            // Can't safely swap right now — try this slot again on a later update
-            i++;
-            continue;
-        }
-    }
+            // also make sure the chunk we're about to swap INTO this slot
+            // isn't being concurrently processed by the worker thread. Copying
+            // its struct (pointers + mutexes) while it's mid-update is what
+            // causes the aliased-pointer double-free.
+            if (i < world->chunk_cache.chunk_count - 1) {
+                Chunk *last_chunk = &world->chunk_cache.chunks[world->chunk_cache.chunk_count - 1];
+                if (__atomic_load_n(&last_chunk->in_use_count, __ATOMIC_ACQUIRE) > 0) {
+                    // Can't safely swap right now — try this slot again on a later update
+                    i++;
+                    continue;
+                }
+            }
             // Invalidate neighbor meshes before unloading this chunk.
             // Neighbors may now need to update faces that were previously against this chunk.
             {
@@ -1274,7 +1332,7 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
                 // We can mark the chunk as unloaded for rendering purposes while we save it.
                 // This keeps it in memory until save completes, but removes it from active rendering.
                 chunk->loaded = false;
-                worker_queue_chunk_save(world, chunk);
+                chunk_to_save = chunk;
             }
 
             // If chunk is not pending save, we can unload it immediately
@@ -1295,6 +1353,10 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
                 }
                 world->chunk_cache.chunk_count--;
                 unloads_this_frame++;
+                // Advance to the next slot after removal. If we leave i unchanged,
+                // the swapped-in last chunk can be reprocessed forever and lock up
+                // the main thread during world loading.
+                i++;
             } else {
                 // Skip this chunk for now; it will be removed once the save completes
                 i++;
@@ -1305,6 +1367,10 @@ void world_update_chunks(World *world, Vector3 player_pos, Vector3 camera_forwar
     }
 
     pthread_mutex_unlock(&world->cache_mutex);
+
+    if (chunk_to_save) {
+        worker_queue_chunk_save(world, chunk_to_save);
+    }
 }
 
 // Chunk file format header

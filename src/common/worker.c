@@ -80,6 +80,7 @@ static void *worker_thread_main(void *arg) {
             pthread_mutex_lock(&queue->mutex);
             queue->jobs_in_progress--;
             pthread_mutex_unlock(&queue->mutex);
+            __atomic_sub_fetch(&chunk->in_use_count, 1, __ATOMIC_ACQ_REL);
             continue; // Different chunk now at this address, skip
         }
 
@@ -90,6 +91,7 @@ static void *worker_thread_main(void *arg) {
             pthread_mutex_lock(&queue->mutex);
             queue->jobs_in_progress--;
             pthread_mutex_unlock(&queue->mutex);
+            __atomic_sub_fetch(&chunk->in_use_count, 1, __ATOMIC_ACQ_REL);
             continue;
         }
 
@@ -112,6 +114,7 @@ static void *worker_thread_main(void *arg) {
             pthread_mutex_lock(&queue->mutex);
             queue->jobs_in_progress--;
             pthread_mutex_unlock(&queue->mutex);
+            __atomic_sub_fetch(&chunk->in_use_count, 1, __ATOMIC_ACQ_REL);
             continue;
         }
 
@@ -121,6 +124,7 @@ static void *worker_thread_main(void *arg) {
             pthread_mutex_lock(&queue->mutex);
             queue->jobs_in_progress--;
             pthread_mutex_unlock(&queue->mutex);
+            __atomic_sub_fetch(&chunk->in_use_count, 1, __ATOMIC_ACQ_REL);
             continue;
         }
 
