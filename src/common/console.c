@@ -5,7 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "../../common_utils/simple_strings.h"
+#include "../../external/common_utils/simple_strings.h"
 #include "../../include/console.h"
 
 // Command queue

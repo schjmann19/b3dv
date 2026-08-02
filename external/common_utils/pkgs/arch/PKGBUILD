@@ -1,0 +1,39 @@
+pkgname=common_utils
+pkgver=1.0
+pkgrel=1
+pkgdesc="Common C utilities library and optional HTTP server"
+arch=('x86_64')
+license=('Unlicense')
+
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+makedepends=(gcc)
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  make
+  # ensure standalone httpsrv binary is built
+  make httpsrv || true
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  # ---- headers ----
+  install -d "$pkgdir/usr/include/common_utils"
+
+  # install ONLY headers (exclude anything windows-related if present)
+  find . -maxdepth 1 -name "*.h" \
+    ! -name "*windows*" \
+    -exec install -m644 {} "$pkgdir/usr/include/common_utils/" \;
+
+  # install shared library
+  install -d "$pkgdir/usr/lib"
+  install -m755 libcommon_utils.so "$pkgdir/usr/lib/" || true
+
+  # ---- binary ----
+  if [ -f httpsrv ]; then
+    install -Dm755 httpsrv "$pkgdir/usr/bin/httpsrv"
+  fi
+}

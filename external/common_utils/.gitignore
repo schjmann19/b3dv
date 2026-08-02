@@ -1,0 +1,5 @@
+*.out
+*.txt
+*.md
+others/
+pkgs/arch/pkg

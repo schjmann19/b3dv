@@ -1,2 +1,4 @@
 # Documentation, not implementation
 *.html linguist-documentation
+
+external/ linguist-vendored

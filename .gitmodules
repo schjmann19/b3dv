@@ -2,5 +2,5 @@
 	path = external/raylib
 	url = https://github.com/raysan5/raylib.git
 [submodule "common_utils"]
-	path = common_utils
+	path = external/common_utils
 	url = https://github.com/texturawasd/common_utils

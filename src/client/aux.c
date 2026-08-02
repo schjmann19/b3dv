@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../../common_utils/args.h"
+#include "../../external/common_utils/args.h"
 
 #include "../../include/aux.h"
 

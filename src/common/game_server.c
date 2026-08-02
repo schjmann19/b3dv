@@ -4,7 +4,7 @@
 #include <strings.h>
 #include <time.h>
 
-#include "../../common_utils/simple_strings.h"
+#include "../../external/common_utils/simple_strings.h"
 #include "../../include/console.h"
 #include "../../include/world.h"
 #include "../../include/game_server.h"
