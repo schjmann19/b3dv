@@ -42,8 +42,8 @@ pub fn build(b: *std.Build) void {
         "src/common/console.c",
         "src/common/vec_math.c",
         "src/common/utils.c",
-        "common_utils/src/args.c",
-        "common_utils/src/strings.c",
+        "external/common_utils/src/args.c",
+        "external/common_utils/src/strings.c",
     };
 
     const server_sources = &.{
@@ -55,8 +55,8 @@ pub fn build(b: *std.Build) void {
         "src/common/console.c",
         "src/common/vec_math.c",
         "src/common/utils.c",
-        "common_utils/src/args.c",
-        "common_utils/src/strings.c",
+        "external/common_utils/src/args.c",
+        "external/common_utils/src/strings.c",
     };
 
     client_mod.addCSourceFiles(.{
